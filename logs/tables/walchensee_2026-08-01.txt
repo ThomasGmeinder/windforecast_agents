@@ -6,20 +6,20 @@ Walchensee — 2026-08-01
   02   | S    |     5.3 (2) |  10.1   | gradient | med  | raw (no local calib yet)
   03   | SSW  |     4.3 (2) |  10.5   | gradient | med  | raw (no local calib yet)
   04   | SSE  |     2.9 (1) |   7.2   | gradient | med  | raw (no local calib yet)
-  05   | NNE  |     1.6 (1) |   3.5   | calm     | med  | cold-pool capped Δθ+1.6
+  05   | NNE  |     1.6 (1) |   3.5   | calm     | med  | glassy
   06   | NE   |     2.8 (1) |   6.4   | gradient | med  | raw (no local calib yet)
   07   | S    |     2.4 (1) |   3.7   | gradient | med  | raw (no local calib yet)
   08   | SE   |     2.2 (1) |   4.5   | gradient | med  | raw (no local calib yet)
-  09   | SE   |     0.7 (0) |   4.1   | thermal  | med  | raw (no local calib yet) Δθ+0.1
-  10   | S    |     0.4 (0) |   2.9   | thermal  | med  | raw (no local calib yet) Δθ+0.9
-  11   | NE   |     1.2 (1) |   5.8   | calm     | med  | glassy Δθ-0.0
-  12   | N    |     4.9 (2) |  10.3   | thermal  | med  | raw (no local calib yet) Δθ-0.2
+  09   | SE   |     0.7 (0) |   4.1   | thermal  | med  | raw (no local calib yet)
+  10   | S    |     0.4 (0) |   2.9   | thermal  | med  | raw (no local calib yet)
+  11   | NE   |     1.2 (1) |   5.8   | calm     | med  | glassy
+  12   | N    |     4.9 (2) |  10.3   | thermal  | med  | raw (no local calib yet)
   13   | N    |     5.2 (2) |  11.3   | gradient | med  | raw (no local calib yet)
   14   | S    |     7.6 (3) |  14.4   | gradient | med  | raw (no local calib yet)
   15   | S    |     4.1 (2) |  12.6   | gradient | med  | raw (no local calib yet)
-  16   | NNW  |     0.4 (0) |   6.8   | thermal  | med  | raw (no local calib yet) Δθ-2.4
-  17   | NNW  |     1.4 (1) |   3.7   | calm     | med  | glassy Δθ-1.3
-  18   | SE   |     1.7 (1) |   4.1   | calm     | med  | glassy Δθ-1.4
+  16   | NNW  |     0.4 (0) |   6.8   | thermal  | med  | raw (no local calib yet)
+  17   | NNW  |     1.4 (1) |   3.7   | calm     | med  | glassy
+  18   | SE   |     1.7 (1) |   4.1   | calm     | med  | glassy
   19   | SW   |     2.4 (1) |   3.9   | gradient | med  | raw (no local calib yet)
   20   | N    |     6.9 (2) |  15.4   | gradient | med  | raw (no local calib yet)
   21   | NNE  |     2.2 (1) |   8.6   | gradient | med  | raw (no local calib yet)
