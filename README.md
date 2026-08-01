@@ -188,13 +188,13 @@ journalctl --user -u wind-agents-daily.service -n 40
 
 ## 6b. Web report
 
-The report is rendered as styled HTML and served locally, split into a top-level
-index and one dedicated page per lake group:
+The report is published as a static site to **GitHub Pages** (rebuilt each morning
+by the daily workflow), split into a top-level index and one dedicated page per lake
+group:
 
-- **http://localhost:8092/** (also `http://wind.localhost:8092/`) — landing page
-  with two clickable tiles (live peak teasers): **Kochelsee & Walchensee** and
-  **Ammersee**.
-- **/kochel-walchensee** and **/ammersee** — each page separates
+- **Live: https://thomasgmeinder.github.io/windforecast_agents/** — landing page with
+  two clickable tiles (live peak teasers): **Kochelsee & Walchensee** and **Ammersee**.
+- **`kochel-walchensee.html`** and **`ammersee.html`** — each page separates
   **Predicted — today** (the forecast card(s), blue "forecast" chip) from
   **Observed — yesterday** (a distinct "measured" card per lake, grey left-border
   accent, showing the actual measured wind, its source, the regime inferred from the
@@ -210,9 +210,10 @@ index and one dedicated page per lake group:
   weak→strong, Beaufort inline), rotated direction arrows, **regime badges**
   (blue=gradient, green=thermal, red=föhn, grey=calm — CVD-checked), confidence,
   Δθ/föhn-gradient notes. Light/dark via `prefers-color-scheme`.
-- `serve.py` is a stdlib HTTP server (no extra deps), run by the systemd user
-  service **`wind-agents-web.service`** (`Restart=on-failure`). It re-renders each
-  request, so it reflects the latest 05:00 run with no rebuild step.
+- `build_site.py` renders the static pages the Pages workflow publishes.
+- **Local preview (optional):** `serve.py` serves the same pages at
+  `http://localhost:8092/` for development — run directly, or via the systemd user
+  service `wind-agents-web.service`. Not used by the public deployment.
 
 ```
 systemctl --user status wind-agents-web.service

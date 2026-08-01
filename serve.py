@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 """
-serve.py — tiny web server for the daily wind report.
+serve.py — LOCAL preview server for the daily wind report (development only).
 
-Renders lib/render.page_html() on each request from the latest logs (no network),
-so it always reflects the most recent 5 a.m. run and stays fast/offline.
+The PUBLIC report is the static GitHub Pages site
+(https://thomasgmeinder.github.io/windforecast_agents/), built by build_site.py in
+the daily workflow. This server just renders the same pages on the fly from the
+latest local logs for local development at http://localhost:8092/ — it is not part
+of the public deployment.
 
-    http://localhost:8092/           the report
-    http://wind.localhost:8092/      (also works; *.localhost -> 127.0.0.1)
-
-Run:      .venv/bin/python serve.py
-Service:  systemd user unit wind-agents-web.service (see README).
+Run:  .venv/bin/python serve.py
 """
 import os, sys, traceback
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
