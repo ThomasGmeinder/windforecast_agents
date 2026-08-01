@@ -28,8 +28,11 @@ GROUPS = {
     },
 }
 
-_WIND_RAMP = [(2, "#cde2fb"), (4, "#9ec5f4"), (7, "#6da7ec"), (11, "#3987e5"),
-              (16, "#256abf"), (22, "#184f95"), (999, "#0d366b")]
+# mean-wind sequential ramp: single-hue VIOLET (light→dark = weak→strong), chosen to
+# be distinct from every legend hue (thermal=green, föhn=red, gradient=blue, calm=grey).
+_WIND_RAMP = [(2, "#efe6fb"), (4, "#dcc7f4"), (7, "#c3a1ea"), (11, "#a678dd"),
+              (16, "#8a52cc"), (22, "#6c34ab"), (999, "#4d1f80")]
+_WIND_DARKTEXT = {"#efe6fb", "#dcc7f4", "#c3a1ea", "#a678dd"}
 
 
 def _wind_cell_style(kn):
@@ -38,8 +41,7 @@ def _wind_cell_style(kn):
         if kn < ub:
             hexc = hx
             break
-    darktext = hexc in ("#cde2fb", "#9ec5f4", "#6da7ec")
-    return f"background:{hexc};color:{'#0b0b0b' if darktext else '#fff'}"
+    return f"background:{hexc};color:{'#0b0b0b' if hexc in _WIND_DARKTEXT else '#fff'}"
 
 
 def _latest_forecast(lake):
