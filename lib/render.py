@@ -28,11 +28,11 @@ GROUPS = {
     },
 }
 
-# mean-wind sequential ramp: single-hue VIOLET (light→dark = weak→strong), chosen to
-# be distinct from every legend hue (thermal=green, föhn=red, gradient=blue, calm=grey).
-_WIND_RAMP = [(2, "#efe6fb"), (4, "#dcc7f4"), (7, "#c3a1ea"), (11, "#a678dd"),
-              (16, "#8a52cc"), (22, "#6c34ab"), (999, "#4d1f80")]
-_WIND_DARKTEXT = {"#efe6fb", "#dcc7f4", "#c3a1ea", "#a678dd"}
+# mean-wind "heat" ramp: white → yellow → orange → red (weak → strong wind).
+# föhn is recoloured to violet (below) so no legend hue falls inside this warm range.
+_WIND_RAMP = [(2, "#fff7e0"), (4, "#ffe89a"), (7, "#ffd24d"), (11, "#ffab3d"),
+              (16, "#fb7e2e"), (22, "#ea4a26"), (999, "#c81e1e")]
+_WIND_DARKTEXT = {"#fff7e0", "#ffe89a", "#ffd24d", "#ffab3d", "#fb7e2e"}
 
 
 def _wind_cell_style(kn):
@@ -365,10 +365,10 @@ def _css():
     return """
 :root{--surface:#fcfcfb;--plane:#f9f9f7;--ink:#0b0b0b;--ink2:#52514e;--muted:#898781;
  --grid:#e1e0d9;--ring:rgba(11,11,11,.10);--link:#2a78d6;
- --g:#2a78d6;--t:#008300;--f:#e34948;--c:#898781;}
+ --g:#2a78d6;--t:#008300;--f:#7c3aed;--c:#898781;}
 @media(prefers-color-scheme:dark){:root{--surface:#1a1a19;--plane:#0d0d0d;--ink:#fff;
  --ink2:#c3c2b7;--muted:#898781;--grid:#2c2c2a;--ring:rgba(255,255,255,.10);--link:#3987e5;
- --g:#3987e5;--t:#008300;--f:#e66767;}}
+ --g:#3987e5;--t:#008300;--f:#8b5cf6;}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--plane);color:var(--ink);
  font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
