@@ -19,7 +19,7 @@ Design mirrors CarClaw's cloud_agent.py:
 """
 import os, sys, json, ssl, socket, urllib.request, urllib.error
 
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")  # verified on the free tier
 _ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 ANALYST_TIMEOUT_S = 30.0
 _CA = "/etc/ssl/certs/ca-certificates.crt"
