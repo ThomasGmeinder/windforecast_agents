@@ -1,4 +1,4 @@
-Ammersee (Herrsching) — 2026-08-01
+Ammersee — 2026-08-01
   dominant gradient; peak 8 kn (3 Bft) NW ~19h
   Hour | Dir  | Mean kn (Bft) | Gust kn | Regime   | Conf | Note
   00   | SE   |     4.7 (2) |  16.1   | gradient | med  | raw (no local calib yet)

@@ -1,4 +1,4 @@
-Kochelsee (Trimini) — 2026-08-01
+Kochelsee — 2026-08-01
   dominant gradient; peak 10 kn (3 Bft) SSE ~15h
   Hour | Dir  | Mean kn (Bft) | Gust kn | Regime   | Conf | Note
   00   | S    |     2.1 (1) |   5.1   | gradient | med  | raw (no local calib yet)

@@ -1,4 +1,4 @@
-Walchensee (Urfeld) — 2026-08-01
+Walchensee — 2026-08-01
   dominant thermal; peak 8 kn (3 Bft) S ~14h
   Hour | Dir  | Mean kn (Bft) | Gust kn | Regime   | Conf | Note
   00   | S    |     4.9 (2) |   9.9   | gradient | med  | raw (no local calib yet)

@@ -1,4 +1,4 @@
-=== Bavarian lake wind — daily run 2026-08-01 15:06  ===
+=== Bavarian lake wind — daily run 2026-08-01 15:16  ===
 forecast day: 2026-08-01   |   learning from: 2026-07-31
 
 ========================================================================
@@ -14,7 +14,7 @@ STEP 1 — SELF-LEARNING FROM YESTERDAY  (runs before any new forecast)
 STEP 2 — NEW FORECASTS  (built from the just-updated model)
 ========================================================================
 
-Ammersee (Herrsching) — 2026-08-01
+Ammersee — 2026-08-01
   dominant gradient; peak 8 kn (3 Bft) NW ~19h
   Hour | Dir  | Mean kn (Bft) | Gust kn | Regime   | Conf | Note
   00   | SE   |     4.7 (2) |  16.1   | gradient | med  | raw (no local calib yet)
@@ -42,7 +42,7 @@ Ammersee (Herrsching) — 2026-08-01
   22   | SE   |     3.3 (1) |   6.6   | gradient | med  | raw (no local calib yet)
   23   | SE   |     2.9 (1) |   6.4   | gradient | med  | raw (no local calib yet)
 
-Kochelsee (Trimini) — 2026-08-01
+Kochelsee — 2026-08-01
   dominant gradient; peak 10 kn (3 Bft) SSE ~15h
   Hour | Dir  | Mean kn (Bft) | Gust kn | Regime   | Conf | Note
   00   | S    |     2.1 (1) |   5.1   | gradient | med  | raw (no local calib yet)
@@ -70,7 +70,7 @@ Kochelsee (Trimini) — 2026-08-01
   22   | S    |     1.6 (1) |   9.3   | calm     | med  | glassy
   23   | SSE  |     0.6 (0) |   1.7   | calm     | med  | glassy
 
-Walchensee (Urfeld) — 2026-08-01
+Walchensee — 2026-08-01
   dominant thermal; peak 8 kn (3 Bft) S ~14h
   Hour | Dir  | Mean kn (Bft) | Gust kn | Regime   | Conf | Note
   00   | S    |     4.9 (2) |   9.9   | gradient | med  | raw (no local calib yet)
