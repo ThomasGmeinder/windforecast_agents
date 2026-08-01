@@ -1,4 +1,4 @@
-=== Bavarian lake wind — daily run 2026-08-01 16:51  ===
+=== Bavarian lake wind — daily run 2026-08-01 15:06  ===
 forecast day: 2026-08-01   |   learning from: 2026-07-31
 
 ========================================================================
@@ -52,23 +52,23 @@ Kochelsee (Trimini) — 2026-08-01
   04   | SE   |     4.2 (2) |  10.3   | gradient | med  | raw (no local calib yet)
   05   | SE   |     4.2 (2) |   7.6   | gradient | med  | raw (no local calib yet)
   06   | ESE  |     4.3 (2) |   8.2   | gradient | med  | raw (no local calib yet)
-  07   | ESE  |     1.4 (1) |   7.6   | calm     | med  | cold-pool capped Δθ+1.9
-  08   | NNE  |     0.8 (0) |   5.8   | calm     | med  | glassy Δθ+1.5
+  07   | ESE  |     1.4 (1) |   7.6   | calm     | med  | glassy
+  08   | NNE  |     0.8 (0) |   5.8   | calm     | med  | glassy
   09   | W    |     2.2 (1) |   4.7   | gradient | med  | raw (no local calib yet)
-  10   | N    |     3.3 (1) |   7.2   | thermal  | med  | raw (no local calib yet) Δθ+0.9
+  10   | N    |     3.3 (1) |   7.2   | thermal  | med  | raw (no local calib yet)
   11   | N    |     2.7 (1) |   7.8   | gradient | med  | raw (no local calib yet)
   12   | N    |     2.3 (1) |   7.4   | gradient | med  | raw (no local calib yet)
   13   | NNW  |     3.4 (1) |   8.0   | gradient | med  | raw (no local calib yet)
   14   | WNW  |     3.6 (1) |  10.7   | gradient | med  | raw (no local calib yet)
   15   | SSE  |     9.5 (3) |  14.8   | gradient | med  | raw (no local calib yet)
-  16   | S    |     5.6 (2) |  15.0   | thermal  | med  | raw (no local calib yet) Δθ-2.4
+  16   | S    |     5.6 (2) |  15.0   | thermal  | med  | raw (no local calib yet)
   17   | SSW  |     5.0 (2) |  11.1   | gradient | med  | raw (no local calib yet)
   18   | SSW  |     3.0 (1) |   8.6   | gradient | med  | raw (no local calib yet)
   19   | SW   |     3.3 (1) |   7.8   | gradient | low  | raw (no local calib yet)
-  20   | SSW  |     0.9 (0) |  19.0   | calm     | med  | glassy Δθ+0.3
+  20   | SSW  |     0.9 (0) |  19.0   | calm     | med  | glassy
   21   | SSW  |     3.0 (1) |  13.4   | gradient | med  | raw (no local calib yet)
-  22   | S    |     1.6 (1) |   9.3   | calm     | med  | glassy Δθ+0.7
-  23   | SSE  |     0.6 (0) |   1.7   | calm     | med  | glassy Δθ+0.5
+  22   | S    |     1.6 (1) |   9.3   | calm     | med  | glassy
+  23   | SSE  |     0.6 (0) |   1.7   | calm     | med  | glassy
 
 Walchensee (Urfeld) — 2026-08-01
   dominant thermal; peak 8 kn (3 Bft) S ~14h
