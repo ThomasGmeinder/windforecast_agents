@@ -1,0 +1,62 @@
+name: daily wind forecast + self-learning
+
+# Runs the whole loop once a day, commits the learned state back to the repo
+# (git = the persistent store on ephemeral runners), and publishes the report to
+# GitHub Pages. Manual runs via the "Run workflow" button too.
+on:
+  schedule:
+    - cron: "3 5 * * *"        # ~05:00 Europe/Berlin (timezone: supported since Mar 2026)
+      timezone: "Europe/Berlin"
+  workflow_dispatch:
+
+permissions:
+  contents: write              # commit the learned state back to main
+  pages: write                 # publish the report
+  id-token: write              # required by deploy-pages
+
+concurrency:
+  group: daily
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4          # brings in yesterday's committed state
+
+      - name: Set up Python + uv
+        uses: astral-sh/setup-uv@v3
+      - run: uv venv
+      - run: uv pip install --python .venv cfgrib eccodes xarray numpy pandas
+
+      - name: Daily run (learn from yesterday -> forecast today)
+        env:
+          # analyst is advisory + guarded: without this secret it cleanly skips.
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          # GEMINI_MODEL: gemini-3-flash   # pin once confirmed via AI Studio
+        run: .venv/bin/python daily_run.py
+
+      - name: Build static report
+        run: .venv/bin/python build_site.py
+
+      - name: Commit learned state
+        run: |
+          git config user.name  "wind-bot"
+          git config user.email "wind-bot@users.noreply.github.com"
+          git add models logs
+          git commit -m "daily: forecast + learning $(date -u +%F)" || echo "nothing to commit"
+          git push
+        # NOTE: state is committed to the default branch (main) — simplest, small repo.
+        # To keep main code-only instead, push models/ + logs/ to a dedicated `data`
+        # branch here and have this job checkout/restore it at the start.
+
+      - name: Publish report to Pages
+        uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4

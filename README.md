@@ -1,0 +1,312 @@
+# Kochelsee / Walchensee wind-prediction agent
+
+Hourly, next-day surface-wind forecasting for two windsurf lakes at the northern
+Alpine rim in Bavaria — **Kochelsee** (~604 m) and **Walchensee** (~800 m) — with a
+deterministic forecast engine, a self-learning bias correction that updates every
+morning from measured wind, and an on-demand LLM agent that narrates the result.
+
+Kochelsee and Walchensee are **analysed together** (their winds are physically
+coupled through the Kesselberg) but **always reported separately**, because under
+föhn they behave in opposite ways (see below). A sibling agent handles Ammersee.
+
+---
+
+## 1. The meteorology (why this is hard)
+
+Raw numerical-weather-prediction (NWP) wind is a *first guess, not truth*: the best
+freely-available high-res model here (ICON-D2, 2.2 km) sits right at the edge of
+resolving valley/thermal winds and systematically **under-plays** them, and handles
+föhn and thermals worst of all. So the engine classifies the **regime** each hour
+and corrects toward measured on-lake wind.
+
+Three regimes plus fall-winds, and telling them apart is the whole game:
+
+| Regime | What it is | Effect on the two lakes |
+|---|---|---|
+| **South föhn** | warm, dry, gusty S down-slope wind when pressure is higher S of the Alps | pours **down the Kesselberg → Kochelsee turns strong**; **suppresses the Walchensee NE thermal** (the anti-correlation). Often an early Kochelsee burst that dies ~09:00 |
+| **Thermal ("Walchenseewind")** | NE nozzle wind between Jochberg & Herzogstand, sunny weak-gradient days | Walchensee's reliable summer wind, ~11:00–evening, N–NE; killed by any south föhn |
+| **Gradient** | frontal / pressure-driven flow | both lakes feel it; terrain still channels it |
+| **Non-föhn fall-winds** | cold-night N-slope drainage off Herzogstand/Heimgarten | up to ~8 Bft into the morning; must not be mislabelled föhn |
+
+**The single most important call** this agent makes is the föhn/thermal split,
+because it means *Kochelsee strong / Walchensee thermal dead* — opposite forecasts.
+
+---
+
+## 2. Topography findings (terrain locks the wind)
+
+From the topographic map (Kochel am See district):
+
+- **Kochelsee ≈ 604 m**, at the very edge where terrain drops to the flat foreland
+  (~590–670 m) → it is the **cold-air drainage collection basin**, and where föhn
+  first breaks through to the flatland.
+- **Walchensee ≈ 800 m**, an **enclosed basin** ringed by 1500–1800 m peaks
+  (Herzogstand/Heimgarten NW, Jochberg N, Karwendel foothills S) with cold deep
+  water → strong diurnal decoupling = the reliable thermal engine.
+- **Elevation gap ≈ 200 m** → the dry-adiabatic temperature offset is ~2.0 K
+  (basis of the stability index in §4).
+- **Kesselberg** (B11) is the funnel between the lakes; **Jachenau** opens east.
+
+Because the surface wind is **channelled by terrain**, the raw model's free-flow
+direction is unreliable at the lake — real directions quantise into conduits. This
+sector map (direction the wind comes **from**, at Urfeld; confirmed locally) is the
+regime discriminator:
+
+| Wind from | Conduit | Regime |
+|---|---|---|
+| **N–NE** (≈340–70°) | Jochberg↔Herzogstand nozzle | **thermal** |
+| **S–SE** (≈120–210°) | down the Kesselberg | **föhn / fall-wind** |
+| **W–NW** (≈250–335°) | Herzogstand-ridge spillover | **gradient** |
+| **E** (≈70–120°) | Jachenau valley | drainage / gradient |
+| SW (≈210–250°) | — | transition / uncertain |
+
+Kochelsee currently **inherits** Urfeld's sectors (PROVISIONAL — its thermal is
+weaker and its föhn comes over the pass more from the SW; to be calibrated).
+
+---
+
+## 3. Data sources and the role of each
+
+Sources are **tiered, not averaged** — one tier constrains/corrects the next.
+
+### Forecast (the backbone)
+- **ICON-D2** (DWD, 2.2 km, hourly, 48 h). Two access paths, both verified live:
+  raw GRIB decoded locally (`winddata.icon_d2_grib_point`, best, cached) and
+  Open-Meteo point (`openmeteo_point(models="icon_d2")`, fast, also serves 850/925
+  hPa levels).
+- **ICON-D2 ensemble** (20 members) via `openmeteo_ensemble` → per-hour spread =
+  confidence (P10/P50/P90, gust probability).
+- **ICON-EU** (`models="icon_eu"`) as an independent coarser cross-check.
+
+### Föhn diagnosis
+- **DWD MOSMIX** cross-Alpine pressure difference **Δp = Bozen − München**
+  (`winddata.foehn_delta_p`): ≥4 hPa noticeable, ≥8 hPa reaches the lake surfaces.
+- **addicted-sports drivers** (`winddata.addicted_drivers`, same feed as the
+  measured wind): hourly `foehn_gradient_hpa`, 850 hPa wind speed/direction,
+  `lapse_2m_850`, radiation, thermal gradient.
+
+### Measured "ground truth" (for bias correction + learning)
+- **On-lake Urfeld anemometer** via the reverse-engineered addicted-sports JSON
+  endpoint
+  `https://www.addicted-sports.com/forecast/walchensee/urfeld/?json=wind&from=YYYY-MM-DD`
+  → hourly `mavg` (measured avg kn), `mmax` (gust), `dir`, webcam images, and the
+  site's own `mae`/`guete`. `winddata.addicted_measured_hourly`. Daylight hours
+  only. **Far better than any DWD station** — it captures the NE nozzle thermal a
+  valley station misses.
+- **DWD 10-min obs** (`winddata.dwd_obs_hourly`) as fallback: Garmisch 01550
+  (valley proxy) for the southern lakes, Wielenbach 05538 for Ammersee.
+- `winddata.actual_hourly(lake, date)` picks on-lake first, DWD as fallback, and
+  reports which source it used.
+
+### Stability (the thermal/föhn master switch)
+- **Kochel–Walchensee Δθ** (`winddata.stability_dtheta`): the two-lake
+  potential-temperature difference,
+  `Δθ = (T_Walchensee − T_Kochelsee) + 9.8·Δz/1000`, from Open-Meteo T2m.
+  Δθ≈0 neutral / föhn-mixed; **Δθ > ~1.5 K = stable cold-air pool → thermal capped**
+  (the dead-Kochelsee-morning signature); Δθ < 0 = unstable → thermal favoured.
+
+---
+
+## 4. The forecast engine (`lib/forecast.py`) — single source of truth
+
+`build_table(lake, date)` produces the hourly table; both the automated 6 a.m. job
+and the LLM agent call it, so numbers never disagree. Per hour it:
+
+1. Pulls ICON-D2 (raw GRIB / Open-Meteo point) for the lake gridpoint.
+2. Attaches augmentation features: MOSMIX Δp, addicted föhn drivers, and the Δθ
+   stability index.
+3. **Classifies the regime** (`classify_regime`):
+   - **föhn** if Δp ≥ threshold **and** 850 hPa southerly (120–240°) **and** ≥ ~7 kn;
+   - **gradient** if 925 hPa flow ≥ ~12 kn;
+   - **thermal** if daytime + low cloud + weak gradient **and not** a cold pool —
+     if Δθ ≥ `COLD_POOL_DTHETA` (1.5 K) and model wind is light it is downgraded to
+     **"cold-pool capped"** calm;
+   - else calm.
+4. **Applies the learned bias** for that (regime × hour-of-day) bucket to the raw
+   model wind (`apply_bias`); rows before any calibration are flagged
+   "raw (no local calib yet)".
+5. **Confidence** from ensemble spread + calibration state; föhn capped at "med".
+6. Surfaces the drivers in the table Note column (`Δθ±x.x`, `fg±x.x`).
+
+Regime thresholds (`FOEHN_DP_*`, `FOEHN_850_KN`, `GRADIENT_925_KN`,
+`THERMAL_CLOUD_MAX`, `SW_SECTOR`, `COLD_POOL_DTHETA`) start from published
+(Swiss-calibrated) values and are recalibrated over time by the learning loop.
+
+Output is knots with Beaufort in brackets, e.g. `9.2 (3)`, and gusts in knots.
+
+---
+
+## 5. The self-learning mechanism (`lib/learn.py`)
+
+Every morning, **before** the new forecast, for each lake:
+
+1. **Compares** yesterday's logged forecast (issued *and* raw model) to yesterday's
+   **measured** wind, hour by hour.
+2. **Logs the diffs** — machine-readable `logs/<lake>_diffs.jsonl` and a
+   human-readable report `logs/learning/<lake>_<date>.md`.
+3. **Explains** — an accuracy summary (MAE issued vs raw, signed bias, per-regime,
+   direction error, gust ratio), plus auto-derived plain-language **lessons**.
+4. **Regime validation** — classifies the *true* regime of each measured hour from
+   its **measured direction** (terrain sector) + wind, and reports predicted-vs-
+   measured **regime accuracy + confusion matrix**, flagging the föhn/thermal
+   **anti-correlation** when it is missed.
+5. **Updates the mechanism** — an exponentially-weighted moving average (EWMA,
+   α=0.3) of the **raw-model error** (`actual − raw`) per (regime × hour-of-day),
+   plus a gust ratio; the report shows the exact **bias before → after** for every
+   bucket touched.
+
+Learning on *raw* error (not the corrected value) makes it converge instead of
+chasing itself. Idempotent: each date is learned at most once per lake. The
+forecast reads the just-updated model in the same run, so today benefits
+immediately.
+
+**Bias buckets are keyed by the *forecast* regime** (so the correction that gets
+applied matches how the forecast is made); the regime-validation section separately
+tells us how often the regime *call itself* was right.
+
+---
+
+## 6. Daily automation (`daily_run.py` + systemd)
+
+`daily_run.py`:
+1. STEP 1 — learn from yesterday (writes the detailed reports above);
+2. STEP 2 — build today's tables from the just-updated model, print them, write
+   `logs/tables/<lake>_<date>.txt` and `logs/latest_report.txt`, and log the
+   forecast (with raw values + features) for tomorrow to learn from.
+
+Idempotent (one forecast record per date). Scheduled by a **systemd user timer**
+`wind-agents-daily.timer` at **06:04 local**, `Persistent=true` so a run missed
+while the laptop is asleep fires on next wake. No lingering enabled → runs during
+the login session; `sudo loginctl enable-linger` for always-on.
+
+```
+systemctl --user list-timers wind-agents-daily.timer
+journalctl --user -u wind-agents-daily.service -n 40
+```
+
+---
+
+## 6b. Web report
+
+The report is rendered as styled HTML and served locally, split into a top-level
+index and one dedicated page per lake group:
+
+- **http://localhost:8092/** (also `http://wind.localhost:8092/`) — landing page
+  with two clickable tiles (live peak teasers): **Kochelsee & Walchensee** and
+  **Ammersee**.
+- **/kochel-walchensee** and **/ammersee** — each page separates
+  **Predicted — today** (the forecast card(s), blue "forecast" chip) from
+  **Observed — yesterday** (a distinct "measured" card per lake, grey left-border
+  accent, showing the actual measured wind, its source, the regime inferred from the
+  measured direction, and a *vs fc* = measured − forecast column). Below those: a
+  **Prediction & learning methodology** section, a **Data sources & how they're
+  accessed** section — split into **Prediction inputs (today)** and **Measured inputs
+  (yesterday)** with source · role · access-endpoint per lake group — the self-learning
+  reports (collapsible), and back/cross nav.
+  The measured card reads from `logs/<lake>_diffs.jsonl` and populates after the
+  first morning learning run.
+- `lib/render.py` builds pages from the latest logs (offline, no API calls):
+  **wind cells colour-coded** by the validated blue sequential ramp (light→dark =
+  weak→strong, Beaufort inline), rotated direction arrows, **regime badges**
+  (blue=gradient, green=thermal, red=föhn, grey=calm — CVD-checked), confidence,
+  Δθ/föhn-gradient notes. Light/dark via `prefers-color-scheme`.
+- `serve.py` is a stdlib HTTP server (no extra deps), run by the systemd user
+  service **`wind-agents-web.service`** (`Restart=on-failure`). It re-renders each
+  request, so it reflects the latest 05:00 run with no rebuild step.
+
+```
+systemctl --user status wind-agents-web.service
+```
+
+## 7. Layout
+
+```
+wind-agents/
+├── README.md                     ← this file
+├── .venv/                        cfgrib + eccodes + xarray (no apt needed)
+├── daily_run.py                  05:00 entrypoint (learn → forecast → log)
+├── serve.py                      web server for the HTML report (port 8092)
+├── lib/
+│   ├── winddata.py               data access (forecast, obs, föhn, drivers, Δθ)
+│   ├── forecast.py               deterministic engine (regime, bias, terrain, output)
+│   ├── learn.py                  self-learning + detailed morning audit
+│   └── render.py                 HTML rendering of the report
+├── models/<lake>_bias.json       learned EWMA bias per regime×hour (+ processed dates)
+├── logs/
+│   ├── <lake>_forecast.jsonl     issued forecasts (1/day, with raw + features)
+│   ├── <lake>_diffs.jsonl        per-hour prediction-vs-measured diffs
+│   ├── learning/<lake>_<date>.md detailed morning learning report
+│   ├── tables/<lake>_<date>.txt  the hourly table
+│   └── latest_report.txt         full morning output (learning + forecasts)
+├── cache/                        decoded ICON-D2 GRIB
+└── .claude/agents/kochel-walchensee-wind.md   the LLM agent definition
+```
+
+---
+
+## 8. Running it
+
+```bash
+# environment (Zscaler: curl is sandbox-blocked; helpers use urllib + system CA)
+export SSL_CERT_FILE=REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+
+# full daily cycle (learn yesterday → forecast today)
+.venv/bin/python daily_run.py
+
+# a single lake's table for a date
+.venv/bin/python lib/forecast.py walchensee 2026-08-02
+
+# force a learning update for one past day
+.venv/bin/python lib/learn.py walchensee 2026-08-01
+```
+
+The LLM agent (`kochel-walchensee-wind`) is project-scoped: run it from within this
+directory. It calls `build_table()` for the numbers, then adds narrative and
+caveats.
+
+---
+
+## 9. Data-access notes (this machine)
+
+- **`curl` is sandbox-blocked**; all fetching uses Python `urllib` with the system
+  CA bundle `/etc/ssl/certs/ca-certificates.crt`, which verifies cleanly through the
+  Zscaler proxy.
+- The GRIB stack (`cfgrib`, `eccodes` via bundled `eccodeslib`) installed into
+  `.venv` with **no apt/sudo**.
+- DWD Open Data keeps only a ~24 h rolling window per model run → GRIB is cached on
+  fetch. Licence CC BY 4.0.
+
+---
+
+## 10. Honest limitations
+
+- **Bias correction starts empty**; rows read "raw (no local calib yet)" until
+  history accrues. It improves a little each morning.
+- **Δθ uses model (Open-Meteo) T2m** — captures the diurnal stability swing well but
+  smooths absolute values; `COLD_POOL_DTHETA` is a provisional pivot for the
+  learning loop to recalibrate. The model also flattens the true summit (Herzogstand
+  1731 m → ~1456 m grid cell).
+- **`foehn_gradient_hpa` is logged and displayed but not yet a hard regime trigger**
+  (MOSMIX Δp remains primary) until the learning calibrates it.
+- **Kochelsee actuals**: the on-lake `kochelsee/trimini` feed may lack a measured
+  station → falls back to DWD Garmisch (a distant valley proxy). Walchensee/Urfeld is
+  genuine on-lake truth.
+- **Kochelsee terrain sectors** are inherited from Urfeld (provisional).
+- Residual error even after correction is ~1.0 m/s (valley) to ~1.5 m/s (ridge),
+  worst in stable/thermal regimes — the forecast states confidence honestly and does
+  not imply spurious precision.
+- The addicted-sports JSON endpoint is undocumented; `actual_hourly` falls back to
+  DWD automatically and every report names the source actually used.
+
+---
+
+## 11. Roadmap
+
+- Have the learning **use** the logged features: recalibrate `COLD_POOL_DTHETA` and
+  a `foehn_gradient_hpa` threshold from what actually happened, then let them drive
+  classification.
+- Give **Kochelsee its own terrain sectors** and an on-lake measured feed.
+- Add the **observed** (not forecast) cross-Alpine Δp (Bozen−Innsbruck) as an
+  independent föhn cross-check.
+- Fold the measured **lake water temperature** (thermal-engine cold source) into the
+  stability feature.
