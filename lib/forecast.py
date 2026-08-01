@@ -19,9 +19,9 @@ os.makedirs(MODELS_DIR, exist_ok=True)
 
 # lake -> (lat, lon, label, is_alpine_rim)
 LAKES = {
-    "ammersee":   (47.98, 11.13, "Ammersee (Herrsching)", False),
-    "kochelsee":  (47.65, 11.35, "Kochelsee (Trimini)",    True),
-    "walchensee": (47.58, 11.33, "Walchensee (Urfeld)",    True),
+    "ammersee":   (47.98, 11.13, "Ammersee",   False),
+    "kochelsee":  (47.65, 11.35, "Kochelsee",  True),
+    "walchensee": (47.58, 11.33, "Walchensee", True),
 }
 
 OM_VARS = ["wind_speed_10m", "wind_gusts_10m", "wind_direction_10m",
