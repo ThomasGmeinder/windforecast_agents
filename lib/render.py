@@ -432,6 +432,8 @@ pre{white-space:pre-wrap;font:12px/1.4 ui-monospace,Menlo,Consolas,monospace;
 .tscale{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--muted)}
 .tsbar{width:120px;height:11px;border-radius:3px;border:1px solid var(--ring)}
 .tsend{font-size:11px;color:var(--muted)}
+.reghint{margin-top:8px;font-size:12px;line-height:1.5;color:var(--ink2);max-width:1000px}
+.reghint b{color:var(--ink)}
 footer{padding:16px 24px;color:var(--muted);font-size:12px;max-width:1200px;margin:0 auto}
 """
 
@@ -450,7 +452,10 @@ def _legend():
       <span class="tsbar" style="background:linear-gradient(to right,{grad})"></span>
       <span class="tsend">strong</span>
     </div>
-  </div>"""
+  </div>
+  <div class="reghint"><b>Regime</b> — which wind dominates that hour:
+    <b>thermal</b> sun-driven lake/valley breeze · <b>föhn</b> warm, gusty south fall-wind ·
+    <b>gradient</b> frontal / pressure-driven flow · <b>calm</b> little or no wind.</div>"""
 
 
 def index_html(static=False):
