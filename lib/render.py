@@ -440,6 +440,8 @@ footer{padding:16px 24px;color:var(--muted);font-size:12px;max-width:1200px;marg
 
 def _legend():
     grad = ",".join(hx for _, hx in _WIND_RAMP)  # same ramp used for the cells
+    cmin = 0                       # calm end of the scale (kn)
+    cmax = _WIND_RAMP[-2][0]       # strong end = where the top (red) band starts (kn)
     return f"""<div class="legendrow">
     <div class="legend">
       <span><i class="sw" style="background:var(--t)"></i>thermal</span>
@@ -448,9 +450,9 @@ def _legend():
       <span><i class="sw" style="background:var(--c)"></i>calm</span>
     </div>
     <div class="tscale"><span>mean &amp; gust (kn):</span>
-      <span class="tsend">calm</span>
+      <span class="tsend">calm {cmin}</span>
       <span class="tsbar" style="background:linear-gradient(to right,{grad})"></span>
-      <span class="tsend">strong</span>
+      <span class="tsend">{cmax}+ strong</span>
     </div>
   </div>
   <div class="reghint"><b>Regime</b> — which wind dominates that hour:
