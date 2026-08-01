@@ -17,8 +17,8 @@ import forecast as fc
 
 GROUPS = {
     "kochel-walchensee": {
-        "title": "Kochelsee & Walchensee",
-        "lakes": ["kochelsee", "walchensee"],
+        "title": "Walchensee & Kochelsee",
+        "lakes": ["walchensee", "kochelsee"],
         "blurb": "Alpine-rim lakes — föhn vs thermal, coupled through the Kesselberg",
     },
     "ammersee": {
@@ -129,7 +129,8 @@ def _measured_card(lake):
             f'<td class="dir">{_dir_arrow(r.get("dir_actual"))} {fc.compass(r.get("dir_actual"))}</td>'
             f'<td class="wind" style="{_wind_cell_style(kn)}">{kn:.1f}'
             f'<span class="bft">{fc.beaufort(kn)}</span></td>'
-            f'<td class="gust">{(r.get("actual_gust_kn") or 0):.0f}</td>'
+            f'<td class="gust" style="{_wind_cell_style(r.get("actual_gust_kn") or 0)}">'
+            f'{(r.get("actual_gust_kn") or 0):.0f}</td>'
             f'<td>{badge}</td><td class="note">{note}</td></tr>')
     return f"""
     <section class="card measured">
@@ -162,7 +163,8 @@ def _forecast_card(rec):
             f'<td class="dir">{_dir_arrow(r.get("dir"))} {fc.compass(r.get("dir"))}</td>'
             f'<td class="wind" style="{_wind_cell_style(kn)}">{kn:.1f}'
             f'<span class="bft">{fc.beaufort(kn)}</span></td>'
-            f'<td class="gust">{(r.get("gust_kn") or 0):.0f}</td>'
+            f'<td class="gust" style="{_wind_cell_style(r.get("gust_kn") or 0)}">'
+            f'{(r.get("gust_kn") or 0):.0f}</td>'
             f'<td><span class="badge {reg}">{reg}</span></td>'
             f'<td class="conf c-{r.get("conf","med")}">{r.get("conf","")}</td>'
             f'<td class="note">{html.escape(" ".join(note))}</td></tr>')
@@ -389,7 +391,7 @@ td{padding:3px 8px;border-bottom:1px solid var(--grid);font-size:13.5px}
 .arr{display:inline-block}
 .wind{font-weight:600;border-radius:4px;width:96px;text-align:left}
 .wind .bft{opacity:.8;font-weight:400;font-size:11px;margin-left:6px}
-.gust{color:var(--ink2);width:48px}
+.gust{width:48px;border-radius:4px;text-align:center;font-weight:500}
 .badge{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:600;color:#fff}
 .badge.gradient{background:var(--g)}.badge.thermal{background:var(--t)}
 .badge.foehn{background:var(--f)}.badge.calm{background:var(--c)}
@@ -423,19 +425,32 @@ pre{white-space:pre-wrap;font:12px/1.4 ui-monospace,Menlo,Consolas,monospace;
 .analyst{margin:8px 0;padding:10px 12px;border-left:3px solid var(--g);background:var(--plane);
  border-radius:8px;font-size:13px;color:var(--ink2)} .analyst b{color:var(--ink)}
 .analyst ul{margin:6px 0 0 18px;padding:0}
-.legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:6px}
+.legendrow{display:flex;gap:24px;flex-wrap:wrap;align-items:center;margin-top:6px}
+.legend{display:flex;gap:14px;flex-wrap:wrap}
 .legend span{display:inline-flex;align-items:center;gap:5px}
 .sw{width:11px;height:11px;border-radius:3px;display:inline-block}
+.tscale{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--muted)}
+.tsbar{width:120px;height:11px;border-radius:3px;border:1px solid var(--ring)}
+.tsend{font-size:11px;color:var(--muted)}
 footer{padding:16px 24px;color:var(--muted);font-size:12px;max-width:1200px;margin:0 auto}
 """
 
 
 def _legend():
-    return """<div class="legend">
-    <span><i class="sw" style="background:var(--t)"></i>thermal</span>
-    <span><i class="sw" style="background:var(--f)"></i>föhn</span>
-    <span><i class="sw" style="background:var(--g)"></i>gradient</span>
-    <span><i class="sw" style="background:var(--c)"></i>calm</span></div>"""
+    grad = ",".join(hx for _, hx in _WIND_RAMP)  # same ramp used for the cells
+    return f"""<div class="legendrow">
+    <div class="legend">
+      <span><i class="sw" style="background:var(--t)"></i>thermal</span>
+      <span><i class="sw" style="background:var(--f)"></i>föhn</span>
+      <span><i class="sw" style="background:var(--g)"></i>gradient</span>
+      <span><i class="sw" style="background:var(--c)"></i>calm</span>
+    </div>
+    <div class="tscale"><span>mean &amp; gust (kn):</span>
+      <span class="tsend">calm</span>
+      <span class="tsbar" style="background:linear-gradient(to right,{grad})"></span>
+      <span class="tsend">strong</span>
+    </div>
+  </div>"""
 
 
 def index_html(static=False):
