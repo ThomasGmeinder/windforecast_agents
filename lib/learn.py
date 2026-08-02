@@ -28,6 +28,8 @@ import forecast as fc
 LEARN_DIR = os.path.join(wd.LOG_DIR, "learning")
 os.makedirs(LEARN_DIR, exist_ok=True)
 
+LARGE_ERR_KN = 5.0  # |forecast − measured| above this = a "large miss" worth explaining
+
 
 def _dir_err(a, b):
     if a is None or b is None:
@@ -202,6 +204,30 @@ def update_from_day(lake, date):
            "worst": worst}
     lessons = _lessons(agg, bucket_updates)
 
+    # Large-miss table: hours where |forecast − measured| exceeded the threshold,
+    # each with the difference explained, the lesson, and how the fix is applied.
+    bmap = {u["key"]: u for u in bucket_updates}
+    large_misses = []
+    for d in diffs:
+        if abs(d["err_issued_kn"]) < LARGE_ERR_KN:
+            continue
+        under = d["err_issued_kn"] < 0  # err = forecast − measured; <0 ⇒ under-predicted
+        bu = bmap.get(fc._bucket_key(d["regime"], d["hour"]), {})
+        after = bu.get("bias_after")
+        explanation = (f"{'under' if under else 'over'}-predicted — forecast "
+                       f"{d['issued_kn']} kn vs measured {d['actual_kn']} kn ({d['err_issued_kn']:+} kn)")
+        lesson = (f"the model {'underplays' if under else 'overplays'} the "
+                  f"'{d['regime']}' regime around {d['hour']:02d}:00")
+        if after is None:
+            how = "recorded; a per-(regime×hour) bias bucket is now seeded and will correct future runs"
+        else:
+            how = (f"the (regime × hour) bias bucket moved {bu.get('bias_before')}→{after} kn, so "
+                   f"future '{d['regime']}' forecasts at {d['hour']:02d}:00 are nudged "
+                   f"{'up' if after > 0 else 'down'} ~{abs(after):.1f} kn")
+        large_misses.append({"hour": d["hour"], "regime": d["regime"], "issued_kn": d["issued_kn"],
+                             "actual_kn": d["actual_kn"], "err_kn": d["err_issued_kn"],
+                             "explanation": explanation, "lesson": lesson, "how_applied": how})
+
     bias.setdefault("processed_dates", []).append(date)
     bias["processed_dates"] = bias["processed_dates"][-400:]
     with open(fc.bias_path(lake), "w") as f:
@@ -209,6 +235,7 @@ def update_from_day(lake, date):
 
     return {"lake": lake, "date": date, "source": source, "agg": agg,
             "diffs": diffs, "bucket_updates": bucket_updates, "lessons": lessons,
+            "large_misses": large_misses, "large_err_kn": LARGE_ERR_KN,
             "buckets_total": len(buckets)}
 
 
@@ -230,6 +257,22 @@ def format_report(res):
                  f"{d['err_raw_kn']:>+4.1f} | {fc.compass(d['dir_pred']):>4} {fc.compass(d['dir_actual']):>4} "
                  f"{('' if d['dir_err_deg'] is None else str(d['dir_err_deg'])):>3}")
     L.append("```")
+    lm = res.get("large_misses", [])
+    thr = res.get("large_err_kn", LARGE_ERR_KN)
+    L += ["", f"**Large misses (|Δ| > {thr:g} kn) — difference, lesson & fix applied**"]
+    if not lm:
+        L.append(f"- none: every matched hour was within {thr:g} kn.")
+    else:
+        L += ["```", " Hr | Regime   | Pred | Meas |   Δ  ",
+              " ---|----------|------|------|------"]
+        for m in lm:
+            L.append(f" {m['hour']:02d} | {m['regime']:<8} | {m['issued_kn']:>4.1f} | "
+                     f"{m['actual_kn']:>4.1f} | {m['err_kn']:>+5.1f}")
+        L.append("```")
+        for m in lm:
+            L.append(f"- **{m['hour']:02d}:00 ({m['regime']})** — {m['explanation']}. "
+                     f"*Lesson:* {m['lesson']}. *Fix:* {m['how_applied']}.")
+
     L += ["", "**2. Accuracy summary**",
           f"- Mean abs error: issued forecast **{a['mae_issued_kn']} kn** vs raw model {a['mae_raw_kn']} kn",
           f"- Mean signed error (bias): {a['mbe_issued_kn']:+} kn "
