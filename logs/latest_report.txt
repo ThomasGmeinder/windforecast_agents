@@ -1,4 +1,4 @@
-=== Bavarian lake wind — daily run 2026-08-02 04:16  ===
+=== Bavarian lake wind — daily run 2026-08-02 10:40  ===
 forecast day: 2026-08-02   |   learning from: 2026-08-01
 
 ========================================================================
@@ -15,86 +15,86 @@ STEP 2 — NEW FORECASTS  (built from the just-updated model)
 ========================================================================
 
 Ammersee — 2026-08-02
-  dominant gradient; peak 7 kn (2 Bft) E ~15h
+  dominant gradient; peak 6 kn (2 Bft) ENE ~16h
   Hour | Dir  | Mean kn (Bft) | Gust kn | Regime   | Conf | Note
   00   | SSE  |     2.6 (1) |   6.1   | gradient | med  | raw (no local calib yet)
   01   | ESE  |     2.9 (1) |   5.4   | gradient | med  | raw (no local calib yet)
   02   | NE   |     2.8 (1) |   6.0   | gradient | med  | raw (no local calib yet)
   03   | E    |     2.9 (1) |   6.0   | gradient | med  | raw (no local calib yet)
   04   | NE   |     4.1 (2) |   8.2   | gradient | med  | raw (no local calib yet)
-  05   | ENE  |     4.6 (2) |   9.2   | gradient | med  | raw (no local calib yet)
-  06   | NE   |     4.2 (2) |   9.8   | gradient | med  | raw (no local calib yet)
-  07   | ENE  |     4.1 (2) |   8.4   | gradient | med  | raw (no local calib yet)
-  08   | ENE  |     2.9 (1) |  10.0   | gradient | med  | raw (no local calib yet)
-  09   | ENE  |     4.4 (2) |   9.2   | gradient | med  | raw (no local calib yet)
-  10   | ENE  |     4.7 (2) |  10.0   | gradient | med  | raw (no local calib yet)
-  11   | ENE  |     5.4 (2) |  11.9   | gradient | med  | raw (no local calib yet)
-  12   | ENE  |     5.4 (2) |  12.3   | gradient | med  | raw (no local calib yet)
-  13   | E    |     5.5 (2) |  11.9   | gradient | med  | raw (no local calib yet)
-  14   | E    |     5.7 (2) |  11.6   | gradient | med  | raw (no local calib yet)
-  15   | E    |     6.7 (2) |  15.2   | thermal  | med  | raw (no local calib yet)
-  16   | E    |     6.3 (2) |  14.6   | thermal  | med  | raw (no local calib yet)
-  17   | E    |     5.3 (2) |  13.0   | thermal  | med  | raw (no local calib yet)
-  18   | E    |     4.7 (2) |  12.2   | gradient | med  | raw (no local calib yet)
-  19   | SE   |     4.1 (2) |  10.5   | gradient | med  | raw (no local calib yet)
-  20   | SSE  |     4.3 (2) |  12.4   | gradient | med  | raw (no local calib yet)
-  21   | SE   |     3.8 (1) |   7.8   | gradient | med  | raw (no local calib yet)
-  22   | ESE  |     3.5 (1) |   6.8   | gradient | med  | raw (no local calib yet)
-  23   | ESE  |     3.6 (1) |   8.4   | gradient | med  | raw (no local calib yet)
+  05   | ENE  |     5.4 (2) |   9.2   | gradient | med  | raw (no local calib yet)
+  06   | NE   |     4.1 (2) |  10.5   | gradient | med  | raw (no local calib yet)
+  07   | ENE  |     4.1 (2) |   8.2   | gradient | med  | raw (no local calib yet)
+  08   | E    |     3.4 (1) |   9.8   | gradient | med  | raw (no local calib yet)
+  09   | ENE  |     3.3 (1) |   7.7   | gradient | med  | raw (no local calib yet)
+  10   | ENE  |     5.1 (2) |  10.7   | gradient | med  | raw (no local calib yet)
+  11   | ENE  |     4.7 (2) |  13.2   | gradient | med  | raw (no local calib yet)
+  12   | ENE  |     5.8 (2) |  12.0   | gradient | med  | raw (no local calib yet)
+  13   | ENE  |     5.8 (2) |  13.8   | thermal  | med  | raw (no local calib yet)
+  14   | ENE  |     5.0 (2) |  13.2   | thermal  | med  | raw (no local calib yet)
+  15   | ENE  |     6.1 (2) |  12.1   | thermal  | med  | raw (no local calib yet)
+  16   | ENE  |     6.5 (2) |  14.2   | thermal  | med  | raw (no local calib yet)
+  17   | ENE  |     5.2 (2) |  13.6   | thermal  | med  | raw (no local calib yet)
+  18   | ESE  |     4.1 (2) |  12.2   | gradient | med  | raw (no local calib yet)
+  19   | SE   |     3.6 (1) |  11.0   | gradient | med  | raw (no local calib yet)
+  20   | SE   |     2.9 (1) |  17.7   | gradient | med  | raw (no local calib yet)
+  21   | ESE  |     4.3 (2) |   9.5   | gradient | med  | raw (no local calib yet)
+  22   | ESE  |     3.4 (1) |   8.2   | gradient | med  | raw (no local calib yet)
+  23   | ESE  |     3.7 (1) |   7.2   | gradient | med  | raw (no local calib yet)
 
 Kochelsee — 2026-08-02
-  dominant thermal; peak 14 kn (4 Bft) SSW ~18h
+  dominant thermal; peak 12 kn (4 Bft) SSE ~19h
   Hour | Dir  | Mean kn (Bft) | Gust kn | Regime   | Conf | Note
   00   | SE   |     3.4 (1) |   5.0   | gradient | med  | raw (no local calib yet)
   01   | NNE  |     1.8 (1) |   3.5   | calm     | med  | cold-pool capped Δθ+2.5
   02   | ENE  |     3.2 (1) |   4.9   | gradient | med  | raw (no local calib yet)
   03   | ENE  |     1.9 (1) |   3.6   | gradient | med  | raw (no local calib yet)
   04   | NE   |     1.4 (1) |   3.7   | calm     | med  | cold-pool capped Δθ+3.3
-  05   | E    |     1.2 (1) |   4.7   | calm     | med  | cold-pool capped Δθ+3.1
-  06   | SSE  |     1.2 (1) |   2.3   | calm     | med  | cold-pool capped Δθ+3.0
-  07   | N    |     1.8 (1) |   3.8   | calm     | med  | cold-pool capped Δθ+4.0
-  08   | N    |     1.4 (1) |   3.4   | calm     | med  | cold-pool capped Δθ+3.5
-  09   | NNW  |     1.4 (1) |   4.1   | calm     | med  | cold-pool capped Δθ+2.4
-  10   | N    |     1.4 (1) |   4.8   | thermal  | med  | raw (no local calib yet) Δθ+1.5
-  11   | N    |     2.0 (1) |   5.8   | thermal  | med  | raw (no local calib yet) Δθ+0.7
-  12   | N    |     4.2 (2) |   8.7   | gradient | med  | raw (no local calib yet)
-  13   | N    |     5.6 (2) |  10.8   | gradient | med  | raw (no local calib yet)
-  14   | NNE  |     7.0 (3) |  10.1   | thermal  | med  | raw (no local calib yet) Δθ-0.7
-  15   | NE   |     8.5 (3) |  12.1   | thermal  | med  | raw (no local calib yet) Δθ-0.7
-  16   | NE   |     8.2 (3) |  12.2   | thermal  | med  | raw (no local calib yet) Δθ-0.7
-  17   | NE   |     7.3 (3) |  13.2   | gradient | med  | raw (no local calib yet)
-  18   | SSW  |    14.5 (4) |  23.7   | gradient | low  | raw (no local calib yet)
-  19   | SSE  |     6.8 (2) |  33.8   | gradient | low  | raw (no local calib yet)
-  20   | S    |     5.7 (2) |  12.8   | gradient | med  | raw (no local calib yet)
-  21   | S    |     2.8 (1) |   8.0   | gradient | med  | raw (no local calib yet)
-  22   | NE   |     1.0 (1) |   4.9   | calm     | med  | glassy Δθ-0.8
-  23   | NE   |     1.0 (1) |   2.4   | calm     | med  | glassy Δθ+1.2
+  05   | NE   |     0.3 (0) |   4.7   | calm     | med  | cold-pool capped Δθ+3.4
+  06   | SE   |     1.6 (1) |   2.9   | calm     | med  | cold-pool capped Δθ+3.2
+  07   | N    |     1.8 (1) |   3.4   | calm     | med  | cold-pool capped Δθ+3.2
+  08   | N    |     2.2 (1) |   4.1   | gradient | med  | raw (no local calib yet)
+  09   | NNW  |     1.7 (1) |   4.3   | calm     | med  | cold-pool capped Δθ+1.9
+  10   | N    |     2.7 (1) |   6.5   | thermal  | med  | raw (no local calib yet) Δθ+1.2
+  11   | N    |     2.2 (1) |   6.9   | gradient | med  | raw (no local calib yet)
+  12   | N    |     4.4 (2) |   8.9   | gradient | med  | raw (no local calib yet)
+  13   | N    |     5.5 (2) |  10.5   | thermal  | med  | raw (no local calib yet) Δθ-0.7
+  14   | N    |     6.3 (2) |   8.9   | thermal  | med  | raw (no local calib yet) Δθ-0.8
+  15   | NNE  |     8.1 (3) |  11.1   | thermal  | med  | raw (no local calib yet) Δθ-0.7
+  16   | NNE  |     7.8 (3) |  11.1   | thermal  | med  | raw (no local calib yet) Δθ-0.6
+  17   | NE   |     6.9 (2) |  12.2   | gradient | med  | raw (no local calib yet)
+  18   | NE   |     2.3 (1) |  14.0   | gradient | low  | raw (no local calib yet)
+  19   | SSE  |    12.5 (4) |  48.3   | gradient | med  | raw (no local calib yet)
+  20   | S    |     6.3 (2) |  18.7   | gradient | med  | raw (no local calib yet)
+  21   | SE   |     1.1 (1) |  10.1   | calm     | med  | glassy Δθ-0.9
+  22   | NNE  |     1.5 (1) |   2.7   | calm     | med  | cold-pool capped Δθ+1.8
+  23   | NNW  |     1.2 (1) |   2.9   | calm     | med  | cold-pool capped Δθ+2.1
 
 Walchensee — 2026-08-02
-  dominant thermal; peak 17 kn (4 Bft) SSW ~18h
+  dominant thermal; peak 24 kn (6 Bft) SSW ~18h
   Hour | Dir  | Mean kn (Bft) | Gust kn | Regime   | Conf | Note
   00   | SSW  |     3.4 (1) |   7.0   | gradient | med  | raw (no local calib yet)
   01   | SW   |     2.1 (1) |   7.0   | gradient | med  | raw (no local calib yet)
   02   | SSE  |     3.1 (1) |   4.1   | gradient | med  | raw (no local calib yet)
-  03   | SSE  |     1.6 (1) |   5.4   | calm     | med  | glassy
-  04   | S    |     1.0 (1) |   3.1   | calm     | med  | glassy
-  05   | WSW  |     1.3 (1) |   1.9   | calm     | med  | glassy
-  06   | N    |     0.6 (0) |   1.6   | calm     | med  | glassy
-  07   | S    |     1.2 (1) |   1.9   | calm     | med  | glassy
-  08   | NNE  |     1.2 (1) |   2.5   | calm     | med  | glassy
-  09   | N    |     1.0 (1) |   2.9   | calm     | med  | glassy
-  10   | NNE  |     1.4 (1) |   3.9   | calm     | med  | glassy
-  11   | NNE  |     2.2 (1) |   5.1   | thermal  | med  | raw (no local calib yet)
-  12   | N    |     5.0 (2) |   9.6   | thermal  | med  | raw (no local calib yet)
-  13   | N    |     4.5 (2) |   9.3   | thermal  | med  | raw (no local calib yet)
-  14   | N    |     5.1 (2) |  10.3   | thermal  | med  | raw (no local calib yet)
-  15   | N    |     5.9 (2) |   9.5   | thermal  | med  | raw (no local calib yet)
-  16   | N    |     6.2 (2) |   8.1   | thermal  | med  | raw (no local calib yet)
-  17   | NNW  |     4.9 (2) |   8.6   | gradient | low  | raw (no local calib yet)
-  18   | SSW  |    16.9 (4) |  34.0   | gradient | low  | raw (no local calib yet)
-  19   | SSW  |     5.5 (2) |  43.6   | gradient | low  | raw (no local calib yet)
-  20   | ENE  |     1.8 (1) |   7.0   | calm     | med  | glassy
-  21   | SSE  |     2.6 (1) |   3.9   | gradient | med  | raw (no local calib yet)
-  22   | S    |     4.3 (2) |   7.4   | gradient | med  | raw (no local calib yet)
-  23   | S    |     4.3 (2) |   7.6   | gradient | med  | raw (no local calib yet)
+  03   | SSE  |     1.6 (1) |   5.4   | calm     | med  | cold-pool capped Δθ+1.7
+  04   | S    |     1.0 (1) |   3.1   | calm     | med  | cold-pool capped Δθ+3.3
+  05   | WSW  |     1.3 (1) |   1.9   | calm     | med  | cold-pool capped Δθ+3.4
+  06   | SW   |     0.5 (0) |   1.6   | calm     | med  | cold-pool capped Δθ+3.2
+  07   | SSE  |     2.2 (1) |   4.3   | gradient | med  | raw (no local calib yet)
+  08   | NNE  |     1.2 (1) |   3.1   | calm     | med  | cold-pool capped Δθ+3.6
+  09   | NW   |     0.7 (0) |   3.1   | calm     | med  | cold-pool capped Δθ+1.9
+  10   | NNE  |     1.5 (1) |   3.7   | calm     | med  | glassy Δθ+1.2
+  11   | NNE  |     2.5 (1) |   7.2   | thermal  | med  | raw (no local calib yet) Δθ+1.1
+  12   | N    |     4.8 (2) |   9.4   | thermal  | med  | raw (no local calib yet) Δθ-0.0
+  13   | N    |     4.9 (2) |  10.5   | thermal  | med  | raw (no local calib yet) Δθ-0.7
+  14   | N    |     5.5 (2) |  10.3   | thermal  | med  | raw (no local calib yet) Δθ-0.8
+  15   | N    |     6.4 (2) |   8.7   | thermal  | med  | raw (no local calib yet) Δθ-0.7
+  16   | NNW  |     6.9 (2) |   9.3   | thermal  | med  | raw (no local calib yet) Δθ-0.6
+  17   | NNW  |     5.8 (2) |  10.7   | gradient | low  | raw (no local calib yet)
+  18   | SSW  |    24.3 (6) |  37.9   | gradient | low  | raw (no local calib yet)
+  19   | SSW  |     4.3 (2) |  71.3   | gradient | low  | raw (no local calib yet)
+  20   | NNE  |     1.6 (1) |   6.8   | calm     | med  | glassy Δθ-1.9
+  21   | SE   |     2.9 (1) |   5.1   | gradient | med  | raw (no local calib yet)
+  22   | SSE  |     3.4 (1) |   5.6   | gradient | med  | raw (no local calib yet)
+  23   | SSE  |     4.2 (2) |   7.4   | gradient | med  | raw (no local calib yet)
 
