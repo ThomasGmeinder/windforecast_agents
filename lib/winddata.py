@@ -342,15 +342,32 @@ EVENTS_LOG = os.path.join(LOG_DIR, "events.jsonl")
 
 
 def log_event(kind, payload, stamp=None):
-    """Append one notable event to the single events log (logs/events.jsonl).
-    kind ∈ {'blend_disagreement','analyst','diff_table'}. `stamp` is an ISO time
-    supplied by the caller (no Date.now() dependency, so it stays deterministic).
-    This is the single authority for the app's notable-event stream."""
+    """Record one notable event in the single events log (logs/events.jsonl).
+    Idempotent per (kind, lake, date): re-logging the same event (e.g. a same-day
+    workflow re-run) REPLACES the prior record instead of duplicating it, mirroring
+    the forecast log. kind ∈ {'blend_disagreement','analyst','diff_table'}; `stamp`
+    is an ISO time supplied by the caller (no Date.now() dependency, so it stays
+    deterministic). Single authority for the app's notable-event stream."""
     rec = {"kind": kind, **payload}
     if stamp is not None:
         rec["stamp"] = stamp
-    with open(EVENTS_LOG, "a") as f:
-        f.write(json.dumps(rec) + "\n")
+    key = (kind, payload.get("lake"), payload.get("date"))
+    kept = []
+    if os.path.exists(EVENTS_LOG):
+        for line in open(EVENTS_LOG):
+            line = line.rstrip("\n")
+            if not line.strip():
+                continue
+            try:
+                r = json.loads(line)
+            except Exception:
+                kept.append(line)  # preserve anything unparseable rather than lose it
+                continue
+            if (r.get("kind"), r.get("lake"), r.get("date")) != key:
+                kept.append(line)
+    kept.append(json.dumps(rec))
+    with open(EVENTS_LOG, "w") as f:
+        f.write("\n".join(kept) + "\n")
     return EVENTS_LOG
 
 
