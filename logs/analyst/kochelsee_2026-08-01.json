@@ -2,27 +2,27 @@
   "lake": "kochelsee",
   "date": "2026-08-01",
   "result": {
-    "narrative": "The forecaster exhibits very poor regime classification accuracy (23%), leading to significant errors. The most prominent issues are the underprediction of strong winds, particularly during foehn events, and the overprediction of wind speed during calm periods, often misclassified as gradient. Gusts are also consistently underpredicted. These patterns suggest that foehn detection thresholds are too strict and cold pool capping mechanisms are not sufficiently active.",
+    "narrative": "The wind forecaster for Kochelsee exhibited very poor regime classification accuracy (23%), leading to significant overall errors. The most critical issues were the severe underprediction of strong wind events, particularly during early morning hours, which were frequently misclassified as weaker gradient winds instead of foehn. Conversely, the forecaster consistently overpredicted wind speed during calm periods, often by incorrectly assigning the gradient regime. Thermal onset was also missed in one instance.",
     "proposals": [
       {
-        "param": "FOEHN_DP_RIM",
-        "proposed": 3.5,
-        "rationale": "Reduce the pressure difference threshold to allow earlier and more frequent detection of foehn, addressing significant underprediction errors in strong wind events."
+        "param": "FOEHN_850_KN",
+        "proposed": 6.5,
+        "rationale": "To lower the threshold for foehn detection at 850hPa, improving the identification and strength of foehn events that are currently being missed or underestimated."
       },
       {
         "param": "COLD_POOL_DTHETA",
-        "proposed": 1.2,
-        "rationale": "Lower the temperature difference threshold for cold pool capping to more effectively suppress gradient winds during calm periods, reducing overprediction."
+        "proposed": 1.7,
+        "rationale": "To strengthen the cold-pool capping mechanism, preventing gradient wind from being overpredicted during calm, stable periods, especially in the early morning and evening."
       }
     ],
     "diagnosis": [
       {
-        "pattern": "Consistent underprediction of strong winds (up to 14.7 kn error), often misclassified as gradient when actual regime was foehn.",
-        "cause": "Foehn breakthrough not adequately detected due to high thresholds for foehn conditions, leading to misclassification and underestimation of wind speed."
+        "pattern": "Severe underprediction of wind speed (up to -14.7 kn) during early morning hours (0-2) and mid-day (14), often when the actual wind was very strong. The forecaster frequently misclassified these as 'gradient' instead of 'foehn'.",
+        "cause": "Foehn breakthrough is being missed or underestimated. The current thresholds for foehn detection are likely too high, preventing the model from correctly identifying and forecasting strong foehn events."
       },
       {
-        "pattern": "Frequent overprediction of wind speed during calm periods, with the forecaster often classifying these hours as gradient.",
-        "cause": "Insufficient cold-pool capping (Kochel-Walchensee \u0394\u03b8) allowing gradient winds to be forecast when conditions are actually calm, especially during early morning hours."
+        "pattern": "Consistent overprediction of wind speed (up to 3.9 kn) during early morning (3-6) and evening (17, 21) hours, where the forecaster predicted 'gradient' when conditions were actually 'calm'.",
+        "cause": "Cold-pool capping is insufficient, allowing the gradient wind regime to be triggered or persist when a stable cold air mass should be suppressing surface winds. The forecaster fails to correctly identify calm conditions."
       }
     ]
   }

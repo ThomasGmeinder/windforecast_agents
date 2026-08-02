@@ -1,10 +1,103 @@
-=== Bavarian lake wind — daily run 2026-08-02 00:47  ===
+=== Bavarian lake wind — daily run 2026-08-02 01:34  ===
 forecast day: 2026-08-02   |   learning from: 2026-08-01
 
 ========================================================================
 STEP 1 — SELF-LEARNING FROM YESTERDAY  (runs before any new forecast)
 ========================================================================
-### Learning — ammersee (from 2026-08-01): skipped — no actual obs available for that day
+### Learning report — ammersee — learned from 2026-08-01
+Actual source: DWD station 05538 (valley proxy) · matched 24 hours
+
+**1. Prediction vs measured (per hour)** — Δ = prediction − measured (kn)
+```
+ Hr | Regime   | Pred | Raw  | Meas | Δiss | Δraw | Pdir Adir Δ°
+ ---|----------|------|------|------|------|------|-------------
+ 00 | gradient |  4.7 |  4.7 |  2.0 | +2.7 | +2.7 |   SE  NNW 156
+ 01 | calm     |  0.6 |  0.6 |  2.3 | -1.7 | -1.7 |  SSE  SSW  39
+ 02 | gradient |  2.1 |  2.1 |  4.2 | -2.1 | -2.1 |   SE   SW 101
+ 03 | gradient |  2.4 |  2.4 |  1.8 | +0.6 | +0.6 |    W    S  95
+ 04 | gradient |  5.7 |  5.7 |  1.7 | +4.0 | +4.0 |   SW  SSE  78
+ 05 | gradient |  5.8 |  5.8 |  1.4 | +4.4 | +4.4 |  WSW  ESE 143
+ 06 | gradient |  3.4 |  3.4 |  2.6 | +0.8 | +0.8 |  SSW   SE  72
+ 07 | gradient |  5.0 |  5.0 |  1.7 | +3.3 | +3.3 |    S    S   4
+ 08 | gradient |  3.4 |  3.4 |  2.1 | +1.3 | +1.3 |  SSW  WNW  97
+ 09 | gradient |  3.1 |  3.1 |  2.2 | +0.9 | +0.9 |  SSW  ENE 122
+ 10 | gradient |  2.5 |  2.5 |  1.6 | +0.9 | +0.9 |  WNW   SW  57
+ 11 | calm     |  1.7 |  1.7 |  1.1 | +0.6 | +0.6 |   NW  WNW  24
+ 12 | gradient |  2.0 |  2.0 |  2.0 | +0.0 | +0.0 |  WNW   SE 167
+ 13 | gradient |  3.7 |  3.7 |  3.6 | +0.1 | +0.1 |    W    W   2
+ 14 | gradient |  4.4 |  4.4 |  4.0 | +0.4 | +0.4 |  WNW  ESE 172
+ 15 | gradient |  3.6 |  3.6 |  4.8 | -1.2 | -1.2 |  WNW   NE 118
+ 16 | gradient |  6.4 |  6.4 |  7.6 | -1.2 | -1.2 |   NW    N  45
+ 17 | gradient |  4.5 |  4.5 |  2.5 | +2.0 | +2.0 |    W    S  91
+ 18 | gradient |  7.1 |  7.1 |  2.7 | +4.4 | +4.4 |  NNW  SSW 140
+ 19 | gradient |  7.7 |  7.7 |  1.5 | +6.2 | +6.2 |   NW  SSE 166
+ 20 | gradient |  2.7 |  2.7 |  1.2 | +1.5 | +1.5 |    N  ESE 118
+ 21 | calm     |  1.3 |  1.3 |  1.4 | -0.1 | -0.1 |  ENE   SE  80
+ 22 | gradient |  3.3 |  3.3 |  1.6 | +1.7 | +1.7 |   SE    E  48
+ 23 | gradient |  2.9 |  2.9 |  1.1 | +1.8 | +1.8 |   SE    E  48
+```
+
+**Large misses (|Δ| > 5 kn) — difference, lesson & fix applied**
+```
+ Hr | Regime   | Pred | Meas |   Δ  
+ ---|----------|------|------|------
+ 19 | gradient |  7.7 |  1.5 |  +6.2
+```
+- **19:00 (gradient)** — over-predicted — forecast 7.7 kn vs measured 1.5 kn (+6.2 kn). *Lesson:* the model overplays the 'gradient' regime around 19:00. *Fix:* the (regime × hour) bias bucket moved 0.0→-6.2 kn, so future 'gradient' forecasts at 19:00 are nudged down ~6.2 kn.
+
+**2. Accuracy summary**
+- Mean abs error: issued forecast **1.83 kn** vs raw model 1.83 kn
+- Mean signed error (bias): +1.3 kn (under-predicting)
+- Direction mean abs error: 91°
+- Gust ratio (measured/model): 0.39×
+- By regime: calm -0.4 kn (3h); gradient +1.55 kn (21h)
+
+**2b. Regime validation** (predicted regime vs measured wind-direction sector)
+- Regime accuracy: **2/11 hours (18%)**
+- Confusion (predicted→measured): calm->calm ×2; gradient->calm ×9
+- Mismatched hours: 03h gradient→calm (S); 04h gradient→calm (SSE); 05h gradient→calm (ESE); 07h gradient→calm (S); 10h gradient→calm (SW); 19h gradient→calm (SSE); 20h gradient→calm (ESE); 22h gradient→calm (E)
+
+**3. Lessons learned**
+- Correction was roughly neutral (issued 1.83 kn vs raw 1.83 kn).
+- Issued forecast UNDER-predicted by 1.3 kn on average → biases nudged up.
+- 'gradient' hours (21h) under-predicted by 1.55 kn → those regime buckets shifted most.
+- Wind DIRECTION was off by 91° on average (terrain/thermal veer the model misses); direction not yet auto-corrected.
+- Measured gusts ran 0.39× the model (weaker); gust ratio updated.
+- Regime call was right 2/11 hours (18%) vs the measured wind direction.
+- Regime miss: predicted 'gradient', measured 'calm' (9×).
+- Worst hour was 19:00 (gradient): predicted 7.7 kn, measured 1.5 kn (Δ +6.2 kn).
+
+**4. How the prediction mechanism was updated** (EWMA α=0.3, per regime×hour)
+```
+ bucket        | model_err | bias: before -> after | gustR: before -> after | n
+ --------------|-----------|-----------------------|------------------------|--
+ gradient|00   |    -2.70  |  +0.00 ->  -2.70      |  1.00 ->  0.20          | 1
+ calm|01       |    +1.70  |  +0.00 ->  +1.70      |  1.00 ->  0.35          | 1
+ gradient|02   |    +2.10  |  +0.00 ->  +2.10      |  1.00 ->  1.31          | 1
+ gradient|03   |    -0.60  |  +0.00 ->  -0.60      |  1.00 ->  0.64          | 1
+ gradient|04   |    -4.00  |  +0.00 ->  -4.00      |  1.00 ->  0.19          | 1
+ gradient|05   |    -4.40  |  +0.00 ->  -4.40      |  1.00 ->  0.14          | 1
+ gradient|06   |    -0.80  |  +0.00 ->  -0.80      |  1.00 ->  0.32          | 1
+ gradient|07   |    -3.30  |  +0.00 ->  -3.30      |  1.00 ->  0.21          | 1
+ gradient|08   |    -1.30  |  +0.00 ->  -1.30      |  1.00 ->  0.29          | 1
+ gradient|09   |    -0.90  |  +0.00 ->  -0.90      |  1.00 ->  0.35          | 1
+ gradient|10   |    -0.90  |  +0.00 ->  -0.90      |  1.00 ->  0.32          | 1
+ calm|11       |    -0.60  |  +0.00 ->  -0.60      |  1.00 ->  0.18          | 1
+ gradient|12   |    +0.00  |  +0.00 ->  +0.00      |  1.00 ->  0.50          | 1
+ gradient|13   |    -0.10  |  +0.00 ->  -0.10      |  1.00 ->  0.58          | 1
+ gradient|14   |    -0.40  |  +0.00 ->  -0.40      |  1.00 ->  0.38          | 1
+ gradient|15   |    +1.20  |  +0.00 ->  +1.20      |  1.00 ->  0.63          | 1
+ gradient|16   |    +1.20  |  +0.00 ->  +1.20      |  1.00 ->  1.03          | 1
+ gradient|17   |    -2.00  |  +0.00 ->  -2.00      |  1.00 ->  0.28          | 1
+ gradient|18   |    -4.40  |  +0.00 ->  -4.40      |  1.00 ->  0.27          | 1
+ gradient|19   |    -6.20  |  +0.00 ->  -6.20      |  1.00 ->  0.08          | 1
+ gradient|20   |    -1.50  |  +0.00 ->  -1.50      |  1.00 ->  0.12          | 1
+ calm|21       |    +0.10  |  +0.00 ->  +0.10      |  1.00 ->  0.41          | 1
+ gradient|22   |    -1.70  |  +0.00 ->  -1.70      |  1.00 ->  0.41          | 1
+ gradient|23   |    -1.80  |  +0.00 ->  -1.80      |  1.00 ->  0.27          | 1
+```
+_Result: today's forecast adds these per-(regime×hour) biases to the raw model. Model now holds 24 calibrated buckets._
+  analyst: 2 proposal(s) — The forecaster exhibits a strong positive bias, consistently overpredicting wind speeds, particularly during night and l
 
 ### Learning report — kochelsee — learned from 2026-08-01
 Actual source: addicted-sports on-lake (kochelsee/trimini) · matched 24 hours
@@ -38,6 +131,20 @@ Actual source: addicted-sports on-lake (kochelsee/trimini) · matched 24 hours
  22 | calm     |  1.6 |  1.6 |  0.3 | +1.3 | +1.3 |    S    W 103
  23 | calm     |  0.6 |  0.6 |  0.4 | +0.2 | +0.2 |  SSE  WNW 139
 ```
+
+**Large misses (|Δ| > 5 kn) — difference, lesson & fix applied**
+```
+ Hr | Regime   | Pred | Meas |   Δ  
+ ---|----------|------|------|------
+ 00 | gradient |  2.1 | 14.8 | -12.7
+ 01 | gradient |  2.6 | 17.3 | -14.7
+ 02 | gradient |  3.2 | 15.6 | -12.4
+ 14 | gradient |  3.6 | 11.7 |  -8.1
+```
+- **00:00 (gradient)** — under-predicted — forecast 2.1 kn vs measured 14.8 kn (-12.7 kn). *Lesson:* the model underplays the 'gradient' regime around 00:00. *Fix:* the (regime × hour) bias bucket moved 0.0→12.7 kn, so future 'gradient' forecasts at 00:00 are nudged up ~12.7 kn.
+- **01:00 (gradient)** — under-predicted — forecast 2.6 kn vs measured 17.3 kn (-14.7 kn). *Lesson:* the model underplays the 'gradient' regime around 01:00. *Fix:* the (regime × hour) bias bucket moved 0.0→14.7 kn, so future 'gradient' forecasts at 01:00 are nudged up ~14.7 kn.
+- **02:00 (gradient)** — under-predicted — forecast 3.2 kn vs measured 15.6 kn (-12.4 kn). *Lesson:* the model underplays the 'gradient' regime around 02:00. *Fix:* the (regime × hour) bias bucket moved 0.0→12.4 kn, so future 'gradient' forecasts at 02:00 are nudged up ~12.4 kn.
+- **14:00 (gradient)** — under-predicted — forecast 3.6 kn vs measured 11.7 kn (-8.1 kn). *Lesson:* the model underplays the 'gradient' regime around 14:00. *Fix:* the (regime × hour) bias bucket moved 0.0→8.1 kn, so future 'gradient' forecasts at 14:00 are nudged up ~8.1 kn.
 
 **2. Accuracy summary**
 - Mean abs error: issued forecast **3.65 kn** vs raw model 3.65 kn
@@ -94,7 +201,7 @@ Actual source: addicted-sports on-lake (kochelsee/trimini) · matched 24 hours
  calm|23       |    -0.20  |  +0.00 ->  -0.20      |  1.00 ->  2.53          | 1
 ```
 _Result: today's forecast adds these per-(regime×hour) biases to the raw model. Model now holds 24 calibrated buckets._
-  analyst: 2 proposal(s) — The forecaster exhibits very poor regime classification accuracy (23%), leading to significant errors. The most prominen
+  analyst: 2 proposal(s) — The wind forecaster for Kochelsee exhibited very poor regime classification accuracy (23%), leading to significant overa
 
 ### Learning report — walchensee — learned from 2026-08-01
 Actual source: addicted-sports on-lake (walchensee/urfeld) · matched 13 hours
@@ -117,6 +224,16 @@ Actual source: addicted-sports on-lake (walchensee/urfeld) · matched 13 hours
  18 | calm     |  1.7 |  1.7 |  1.4 | +0.3 | +0.3 |   SE   SW  81
  19 | gradient |  2.4 |  2.4 | 14.1 | -11.7 | -11.7 |   SW  SSW   5
 ```
+
+**Large misses (|Δ| > 5 kn) — difference, lesson & fix applied**
+```
+ Hr | Regime   | Pred | Meas |   Δ  
+ ---|----------|------|------|------
+ 12 | thermal  |  4.9 |  9.9 |  -5.0
+ 19 | gradient |  2.4 | 14.1 | -11.7
+```
+- **12:00 (thermal)** — under-predicted — forecast 4.9 kn vs measured 9.9 kn (-5.0 kn). *Lesson:* the model underplays the 'thermal' regime around 12:00. *Fix:* the (regime × hour) bias bucket moved 0.0→5.0 kn, so future 'thermal' forecasts at 12:00 are nudged up ~5.0 kn.
+- **19:00 (gradient)** — under-predicted — forecast 2.4 kn vs measured 14.1 kn (-11.7 kn). *Lesson:* the model underplays the 'gradient' regime around 19:00. *Fix:* the (regime × hour) bias bucket moved 0.0→11.7 kn, so future 'gradient' forecasts at 19:00 are nudged up ~11.7 kn.
 
 **2. Accuracy summary**
 - Mean abs error: issued forecast **2.75 kn** vs raw model 2.75 kn
@@ -161,39 +278,39 @@ Actual source: addicted-sports on-lake (walchensee/urfeld) · matched 13 hours
  gradient|19   |   +11.70  |  +0.00 -> +11.70      |  1.00 ->  5.67          | 1
 ```
 _Result: today's forecast adds these per-(regime×hour) biases to the raw model. Model now holds 13 calibrated buckets._
-  analyst: 2 proposal(s) — The forecaster for Walchensee on 2026-08-01 exhibited very low regime classification accuracy (25%) and a significant ov
+  analyst: skipped — gemini call failed: The read operation timed out
 
 ========================================================================
 STEP 2 — NEW FORECASTS  (built from the just-updated model)
 ========================================================================
 
 Ammersee — 2026-08-02
-  dominant gradient; peak 6 kn (2 Bft) E ~16h
+  dominant gradient; peak 7 kn (3 Bft) ENE ~15h
   Hour | Dir  | Mean kn (Bft) | Gust kn | Regime   | Conf | Note
-  00   | SSE  |     2.9 (1) |   6.6   | gradient | med  | raw (no local calib yet)
+  00   | SSE  |     0.2 (0) |   1.4   | gradient | high | 
   01   | ESE  |     2.9 (1) |   5.4   | gradient | med  | raw (no local calib yet)
-  02   | NE   |     2.7 (1) |   5.8   | gradient | med  | raw (no local calib yet)
-  03   | ENE  |     3.2 (1) |   6.4   | gradient | med  | raw (no local calib yet)
-  04   | ENE  |     5.2 (2) |  10.7   | gradient | med  | raw (no local calib yet)
-  05   | ENE  |     5.2 (2) |  11.5   | gradient | med  | raw (no local calib yet)
-  06   | NE   |     4.4 (2) |  10.9   | gradient | med  | raw (no local calib yet)
-  07   | ENE  |     4.4 (2) |   9.3   | gradient | med  | raw (no local calib yet)
-  08   | ENE  |     3.7 (1) |   9.5   | gradient | med  | raw (no local calib yet)
-  09   | E    |     4.5 (2) |  10.1   | gradient | med  | raw (no local calib yet)
-  10   | E    |     5.5 (2) |  12.1   | gradient | med  | raw (no local calib yet)
+  02   | NE   |     4.8 (2) |   7.6   | gradient | high | 
+  03   | ENE  |     2.6 (1) |   4.1   | gradient | high | 
+  04   | ENE  |     1.2 (1) |   2.0   | gradient | high | 
+  05   | ENE  |     0.8 (0) |   1.7   | gradient | high | 
+  06   | NE   |     3.6 (1) |   3.6   | gradient | high | 
+  07   | ENE  |     1.1 (1) |   2.0   | gradient | high | 
+  08   | ENE  |     2.4 (1) |   2.8   | gradient | high | 
+  09   | E    |     3.6 (1) |   3.6   | gradient | high | 
+  10   | E    |     4.6 (2) |   4.6   | gradient | high | 
   11   | ENE  |     5.7 (2) |  12.8   | gradient | med  | raw (no local calib yet)
-  12   | ENE  |     5.8 (2) |  14.0   | gradient | med  | raw (no local calib yet)
-  13   | E    |     6.1 (2) |  13.6   | gradient | med  | raw (no local calib yet)
-  14   | E    |     5.7 (2) |  13.0   | gradient | med  | raw (no local calib yet)
-  15   | ENE  |     6.2 (2) |  13.8   | gradient | med  | raw (no local calib yet)
+  12   | ENE  |     5.8 (2) |   7.0   | gradient | high | 
+  13   | E    |     6.0 (2) |   7.9   | gradient | high | 
+  14   | E    |     5.3 (2) |   5.3   | gradient | high | 
+  15   | ENE  |     7.4 (3) |   8.7   | gradient | high | 
   16   | E    |     6.3 (2) |  13.2   | thermal  | med  | raw (no local calib yet)
-  17   | E    |     6.3 (2) |  14.0   | gradient | med  | raw (no local calib yet)
-  18   | ESE  |     4.9 (2) |  12.8   | gradient | med  | raw (no local calib yet)
-  19   | ESE  |     5.3 (2) |  11.3   | gradient | med  | raw (no local calib yet)
-  20   | SE   |     4.9 (2) |  11.7   | gradient | med  | raw (no local calib yet)
+  17   | E    |     4.3 (2) |   4.3   | gradient | high | 
+  18   | ESE  |     0.5 (0) |   3.5   | gradient | high | 
+  19   | ESE  |     0.0 (0) |   0.9   | gradient | high | 
+  20   | SE   |     3.4 (1) |   3.4   | gradient | high | 
   21   | ESE  |     4.2 (2) |   8.6   | gradient | med  | raw (no local calib yet)
-  22   | ESE  |     3.2 (1) |   7.8   | gradient | med  | raw (no local calib yet)
-  23   | ESE  |     3.9 (1) |   8.0   | gradient | med  | raw (no local calib yet)
+  22   | ESE  |     1.5 (1) |   3.2   | gradient | high | 
+  23   | ESE  |     2.1 (1) |   2.1   | gradient | high | 
 
 Kochelsee — 2026-08-02
   dominant thermal; peak 11 kn (4 Bft) SSE ~18h
