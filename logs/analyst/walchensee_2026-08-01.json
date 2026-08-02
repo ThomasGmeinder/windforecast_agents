@@ -2,27 +2,27 @@
   "lake": "walchensee",
   "date": "2026-08-01",
   "result": {
-    "narrative": "The forecaster for Walchensee on 2026-08-01 exhibited a significant overall under-prediction of wind speeds, with a Mean Bias Error (MBE) of -2.2 kn and a very low regime accuracy of 0.25. The most severe error occurred at hour 19, where a strong actual wind of 14.1 kn (with a southerly direction) was forecast as a mere 2.4 kn, resulting in an -11.7 kn error. This strong southerly wind, misclassified as 'gradient', is highly indicative of a missed foehn event. The confusion matrix further supports this, showing 3 instances of 'gradient' being forecast when 'foehn' was the actual regime. Additionally, there's a general underestimation of wind speeds in both gradient (-2.88 kn MBE) and thermal (-2.62 kn MBE) regimes, and frequent misclassifications between thermal, gradient, and calm conditions, often with large directional errors.",
+    "narrative": "The forecaster for Walchensee on 2026-08-01 showed significant underprediction of wind speeds, with an overall Mean Bias Error of -2.2 kn and a very low regime accuracy of 0.25. Strong wind events, particularly those indicative of Foehn, were frequently misclassified as Gradient, leading to severe underestimations, including a -11.7 kn error at hour 19. Additionally, the model incorrectly predicted thermal winds during calm periods, suggesting issues with cold pool detection.",
     "proposals": [
       {
-        "param": "FOEHN_850_KN",
-        "proposed": 6.5,
-        "rationale": "Reduce the 850 hPa wind speed threshold to improve foehn detection, especially for strong southerly winds currently misclassified as gradient."
+        "param": "FOEHN_DP_RIM",
+        "proposed": 3.5,
+        "rationale": "Lowering this threshold will make the model more sensitive to foehn conditions, improving detection and reducing underprediction of strong foehn events."
       },
       {
-        "param": "GRADIENT_925_KN",
-        "proposed": 12.5,
-        "rationale": "Slightly increase the base strength for gradient winds to reduce the overall under-prediction bias observed across multiple regimes."
+        "param": "COLD_POOL_DTHETA",
+        "proposed": 1.3,
+        "rationale": "Decreasing this threshold will make cold pool detection more sensitive, suppressing false thermal predictions when conditions are actually calm."
       }
     ],
     "diagnosis": [
       {
-        "pattern": "Significant under-prediction of strong southerly winds, often misclassified as weaker gradient conditions.",
-        "cause": "Foehn breakthrough is likely being missed or its strength severely underestimated due to conservative detection thresholds."
+        "pattern": "Consistent and severe underprediction of strong wind events, often misclassified as 'gradient' when actual conditions were 'foehn' (e.g., hours 7, 8, 14, and the worst error at hour 19).",
+        "cause": "Foehn breakthrough is not being detected effectively, likely due to high thresholds for foehn conditions, leading to significant underprediction."
       },
       {
-        "pattern": "General under-prediction of wind speeds across multiple regimes, particularly gradient and thermal.",
-        "cause": "The model's baseline wind speed calculations for gradient and thermal regimes appear to be too low, contributing to a consistent negative bias."
+        "pattern": "Misclassification of 'thermal' regime as 'calm' (hours 10, 16), indicating false thermal predictions.",
+        "cause": "Cold-pool capping is not adequately detected, allowing the model to predict thermal winds when the atmosphere near the lake surface is stable and calm."
       }
     ]
   }

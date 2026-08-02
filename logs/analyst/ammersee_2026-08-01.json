@@ -2,27 +2,27 @@
   "lake": "ammersee",
   "date": "2026-08-01",
   "result": {
-    "narrative": "The wind forecaster for the Bavarian lakes is currently exhibiting a significant positive bias in wind speed, primarily driven by the frequent misclassification of calm conditions as a 'gradient' regime. This leads to substantial overforecasting of wind speed and gusts, particularly during the night and early morning hours, and contributes to very high directional errors. The model struggles to correctly identify periods where local effects, such as cold pools, suppress the influence of the synoptic pressure gradient.",
+    "narrative": "The forecaster for Ammersee exhibits a strong positive bias in wind speed prediction (MBE 1.3 kn), primarily due to frequently misclassifying calm conditions as 'gradient' (9 instances of gradient->calm confusion). This leads to significant overprediction of wind speeds and very low regime accuracy (18%). Additionally, wind direction predictions are poor, with a mean absolute error of 91 degrees, likely exacerbated by incorrect regime assignments.",
     "proposals": [
       {
         "param": "GRADIENT_925_KN",
-        "proposed": 13.0,
-        "rationale": "To reduce the frequent misclassification of calm conditions as gradient, increasing this threshold will require a stronger 925 hPa gradient to trigger the gradient regime, leading to fewer overforecasts."
+        "proposed": 14.0,
+        "rationale": "Increase the threshold for classifying gradient winds to reduce overprediction and misclassification of calm conditions as gradient."
       },
       {
         "param": "COLD_POOL_DTHETA",
         "proposed": 1.3,
-        "rationale": "To improve the detection of cold pool capping, which can suppress surface winds despite a synoptic gradient, lowering this threshold will make it easier to identify stable cold pools and thus prevent overforecasting in calm conditions."
+        "rationale": "Lowering this threshold will make the forecaster more sensitive to cold pool formation, which can cap the atmosphere and lead to calm surface conditions, thus reducing incorrect gradient classifications."
       }
     ],
     "diagnosis": [
       {
-        "pattern": "Consistent overforecasting of wind speed and gusts, particularly when the forecaster predicts a 'gradient' regime but actual conditions are 'calm'. This is reflected in the high positive mean bias (1.3 kn overall, 1.55 kn for gradient regime) and the 'gradient->calm' confusion (9 instances).",
-        "cause": "The forecaster's threshold for identifying a 'gradient' regime (GRADIENT_925_KN) appears too low, causing it to trigger gradient wind predictions when the actual synoptic gradient is too weak to overcome local effects or when local conditions (like cold pools) are suppressing surface wind."
+        "pattern": "Persistent overprediction of wind speed, particularly when classifying conditions as 'gradient' that were actually 'calm'.",
+        "cause": "The threshold for identifying gradient wind conditions is too low, leading to an over-sensitivity to weak large-scale pressure gradients, or insufficient consideration of local effects that suppress surface winds."
       },
       {
-        "pattern": "High mean absolute directional error (91 degrees), especially during periods of misclassified 'gradient' when actual conditions are calm or uncertain.",
-        "cause": "This is largely a consequence of the primary misclassification. When the forecaster incorrectly predicts a 'gradient' regime, it assigns a direction based on the synoptic gradient, which often diverges significantly from the light and variable directions observed during actual calm conditions."
+        "pattern": "Very high mean absolute error in wind direction (91 degrees).",
+        "cause": "Incorrect regime classification (e.g., predicting a gradient wind direction when conditions are calm or dominated by local, non-gradient flows) leads to large directional discrepancies, indicating issues with terrain-channelled wind direction modeling."
       }
     ]
   }
