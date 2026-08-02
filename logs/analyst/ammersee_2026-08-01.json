@@ -2,27 +2,27 @@
   "lake": "ammersee",
   "date": "2026-08-01",
   "result": {
-    "narrative": "The forecaster exhibits a strong positive bias, consistently overpredicting wind speeds, particularly during night and late evening hours. This is primarily due to misclassifying actual calm conditions as 'gradient' wind regimes, leading to very low regime accuracy. Additionally, wind direction predictions are highly inaccurate across the day, indicating a fundamental mismatch between predicted and actual flow patterns.",
+    "narrative": "The wind forecaster for the Bavarian lakes is currently exhibiting a significant positive bias in wind speed, primarily driven by the frequent misclassification of calm conditions as a 'gradient' regime. This leads to substantial overforecasting of wind speed and gusts, particularly during the night and early morning hours, and contributes to very high directional errors. The model struggles to correctly identify periods where local effects, such as cold pools, suppress the influence of the synoptic pressure gradient.",
     "proposals": [
-      {
-        "param": "COLD_POOL_DTHETA",
-        "proposed": 1.3,
-        "rationale": "Lowering this threshold will make the model more sensitive to cold pool formation, reducing misclassifications of calm conditions as gradient and thus decreasing overprediction."
-      },
       {
         "param": "GRADIENT_925_KN",
         "proposed": 13.0,
-        "rationale": "Increasing this threshold will make it harder for the model to activate the gradient regime, reducing overprediction during calm periods and potentially improving overall regime classification."
+        "rationale": "To reduce the frequent misclassification of calm conditions as gradient, increasing this threshold will require a stronger 925 hPa gradient to trigger the gradient regime, leading to fewer overforecasts."
+      },
+      {
+        "param": "COLD_POOL_DTHETA",
+        "proposed": 1.3,
+        "rationale": "To improve the detection of cold pool capping, which can suppress surface winds despite a synoptic gradient, lowering this threshold will make it easier to identify stable cold pools and thus prevent overforecasting in calm conditions."
       }
     ],
     "diagnosis": [
       {
-        "pattern": "Consistent overprediction of wind speed, especially during night and late evening hours, due to misclassification of calm conditions as 'gradient' regime.",
-        "cause": "Cold-pool capping: The model is likely failing to adequately detect and account for stable atmospheric conditions that decouple surface winds from stronger gradient flows aloft."
+        "pattern": "Consistent overforecasting of wind speed and gusts, particularly when the forecaster predicts a 'gradient' regime but actual conditions are 'calm'. This is reflected in the high positive mean bias (1.3 kn overall, 1.55 kn for gradient regime) and the 'gradient->calm' confusion (9 instances).",
+        "cause": "The forecaster's threshold for identifying a 'gradient' regime (GRADIENT_925_KN) appears too low, causing it to trigger gradient wind predictions when the actual synoptic gradient is too weak to overcome local effects or when local conditions (like cold pools) are suppressing surface wind."
       },
       {
-        "pattern": "Extremely high mean absolute error in wind direction (91 degrees), indicating a fundamental mismatch between predicted and actual wind directions across various hours.",
-        "cause": "Terrain-channelled wind direction: The model's representation of local steering effects by terrain is likely insufficient, leading to poor local wind direction forecasts."
+        "pattern": "High mean absolute directional error (91 degrees), especially during periods of misclassified 'gradient' when actual conditions are calm or uncertain.",
+        "cause": "This is largely a consequence of the primary misclassification. When the forecaster incorrectly predicts a 'gradient' regime, it assigns a direction based on the synoptic gradient, which often diverges significantly from the light and variable directions observed during actual calm conditions."
       }
     ]
   }
