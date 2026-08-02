@@ -286,6 +286,29 @@ def _methodology(group):
         <li>Measured truth: the <b>on-lake Urfeld anemometer</b> (addicted-sports, daylight hours);
             Kochelsee falls back to DWD Garmisch (a distant valley proxy).</li>
       </ul>
+      <h3>Prediction algorithm</h3>
+      <p>For each hour of the target day, per lake:</p>
+      <ol>
+        <li><b>Dynamical first guess.</b> Take ICON-D2 (2.2 km, hourly) 10 m wind, gusts and
+            direction at the lake grid point (raw DWD GRIB, cached; Open-Meteo point as the fast
+            path), plus 850/925 hPa flow, cloud cover and radiation.</li>
+        <li><b>Diagnose the drivers.</b> Cross-Alpine pressure difference (MOSMIX Bozen−München Δp),
+            the addicted-sports föhn/thermal drivers (föhn gradient, 850 hPa wind, lapse, radiation),
+            and the Kochel−Walchensee <b>Δθ</b> stability index.</li>
+        <li><b>Classify the dominant regime</b> (winner-take-all cascade): <b>föhn</b> if
+            Δp ≥ 4 hPa and 850 hPa is southerly (120–240°) and ≥ 7 kn → else <b>gradient</b> if
+            925 hPa ≥ 12 kn → else <b>thermal</b> if it is daytime, low-cloud and no cold pool
+            (Δθ &lt; 1.5 K) → else <b>calm</b>.</li>
+        <li><b>Bias-correct.</b> Adjust the raw model wind by the <i>learned</i> correction for that
+            (regime × hour-of-day) bucket — adaptive, evidence-gated and capped, toward the measured
+            on-lake wind: one day barely moves it, full weight after ~3 matching days.</li>
+        <li><b>Uncertainty &amp; direction.</b> The ICON-D2 20-member ensemble spread sets the
+            confidence; the surface direction is snapped to the terrain sector; gusts carry the
+            learned gust factor.</li>
+      </ol>
+      <p class="muted">Honest status: this is a deterministic model + rule-based regime + additive
+      adaptive bias — a first, interpretable version. The roadmap replaces the additive bias with
+      predictor-conditioned <i>probabilistic</i> post-processing (see <code>docs/IMPROVEMENT_PLAN.md</code>).</p>
       <h3>How it learns</h3>
       <p>Every morning <b>before</b> forecasting, yesterday's forecast is compared hour-by-hour to
       the measured wind: it logs the diffs, derives plain-language lessons, updates an
@@ -319,6 +342,23 @@ def _methodology(group):
       <i>same</i> pier sensor (not independent votes) and under-read easterlies; the learning
       currently uses DWD Wielenbach as the measured actual. Ammersee does not use the Kesselberg
       Δθ or föhn-driver features — those are specific to the Alpine-rim pair.</p>
+      <h3>Prediction algorithm</h3>
+      <p>For each hour of the target day:</p>
+      <ol>
+        <li><b>Dynamical first guess.</b> ICON-D2 (2.2 km, hourly) 10 m wind, gusts and direction at
+            the Herrsching point, with <b>ICON-EU</b> as an independent cross-check and the 20-member
+            ensemble for spread; plus 925/850 hPa flow, cloud and radiation.</li>
+        <li><b>Classify the regime</b> — <b>gradient</b> if the 925/850 hPa flow is strong; else
+            <b>thermal</b> on sunny, weak-gradient afternoons; <b>föhn</b> only on a strong
+            Bozen−München Δp + southerly 850 hPa signal (rare here); else <b>calm</b>.</li>
+        <li><b>Bias-correct</b> with the learned (regime × hour-of-day) correction toward the measured
+            wind (DWD Wielenbach; Herrsching on-water as reference) — adaptive, evidence-gated, capped.</li>
+        <li><b>Uncertainty &amp; direction.</b> Ensemble spread → confidence; gusts carry the learned
+            gust factor.</li>
+      </ol>
+      <p class="muted">Honest status: deterministic model + rule-based regime + additive adaptive bias;
+      the roadmap upgrades this to predictor-conditioned <i>probabilistic</i> post-processing
+      (see <code>docs/IMPROVEMENT_PLAN.md</code>).</p>
       <h3>How it learns</h3>
       <p>Same mechanism as the other lakes: each morning it compares yesterday's forecast to the
       measured wind and updates an EWMA bias per (regime × hour-of-day) before building today's
@@ -427,7 +467,8 @@ td{padding:3px 8px;border-bottom:1px solid var(--grid);font-size:13.5px}
 .conf.c-high{color:var(--ink)} .conf.c-low{opacity:.7}
 .note{color:var(--ink2);font-size:12px}
 .method p,.method li{color:var(--ink2);font-size:13.5px} .method b{color:var(--ink)}
-.method ul{margin:4px 0 4px 18px;padding:0}
+.method ul,.method ol{margin:4px 0 4px 20px;padding:0}
+.method ol li{margin:3px 0}
 .srctbl{margin-top:8px} .srctbl th{width:auto}
 .srctbl td{vertical-align:top;width:auto;color:var(--ink2);font-size:13px}
 .srctbl td:first-child{white-space:nowrap;font-weight:600;color:var(--ink)}
