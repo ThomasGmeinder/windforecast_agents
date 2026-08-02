@@ -14,6 +14,7 @@ import os, sys, json, glob, html, datetime
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import winddata as wd
 import forecast as fc
+import learn  # for the shared large-miss threshold (LARGE_ERR_KN)
 
 GROUPS = {
     "kochel-walchensee": {
@@ -108,14 +109,40 @@ def _measured_rows(lake):
     return date, src, rows
 
 
+def _bigdiff_card(lake):
+    """PROMINENT table: only the hours where |forecast − measured| exceeded the
+    threshold — the difference table, filtered by a defined absolute value."""
+    label = html.escape(_lake_label(lake))
+    date, src, rows = _measured_rows(lake)
+    thr = learn.LARGE_ERR_KN
+    if not rows:
+        return (f'<section class="card"><h2>{label} — big misses</h2>'
+                f'<p class="muted">No measured day yet — appears after the next morning run.</p></section>')
+    big = [r for r in rows if r.get("err_issued_kn") is not None and abs(r["err_issued_kn"]) > thr]
+    if not big:
+        inner = f'<p class="muted">🎯 No hour differed from the forecast by more than {thr:g} kn on {date}.</p>'
+    else:
+        trs = "".join(
+            f'<tr><td class="hr">{r["hour"]:02d}</td>'
+            f'<td class="gust">{r.get("issued_kn")}</td>'
+            f'<td class="gust" style="{_wind_cell_style(r.get("actual_kn") or 0)}">{r.get("actual_kn")}</td>'
+            f'<td class="wind" style="{_wind_cell_style(abs(r["err_issued_kn"]))}">{r["err_issued_kn"]:+.1f}</td>'
+            f'<td><span class="badge {r.get("actual_regime","calm")}">{r.get("actual_regime","")}</span></td></tr>'
+            for r in big)
+        inner = (f'<table><thead><tr><th>h</th><th>forecast</th><th>measured</th>'
+                 f'<th>Δ = fc−meas</th><th>measured regime</th></tr></thead><tbody>{trs}</tbody></table>')
+    return (f'<section class="card"><h2>{label} '
+            f'<span class="chip meas">|Δ| &gt; {thr:g} kn · {date}</span></h2>'
+            f'<p class="summary">Hours where the forecast missed the measured wind by more than '
+            f'{thr:g} kn (measured: {html.escape(src)}). The morning learning report explains each '
+            f'miss and the fix applied.</p>{inner}</section>')
+
+
 def _measured_card(lake):
     label = html.escape(_lake_label(lake))
     date, src, rows = _measured_rows(lake)
     if not rows:
-        return (f'<section class="card"><h2>{label} <span class="chip meas">measured</span></h2>'
-                f'<p class="muted">No measurements shown yet — the measured day appears after the '
-                f'next morning run, which compares the previous day\'s forecast to what was '
-                f'actually measured on the lake.</p></section>')
+        return ""  # the big-miss card already shows the "no measured day yet" note
     trs = []
     for r in rows:
         kn = r.get("actual_kn") or 0
@@ -134,11 +161,12 @@ def _measured_card(lake):
             f'<td>{badge}</td><td class="note">{note}</td></tr>')
     return f"""
     <section class="card measured">
-      <h2>{label} <span class="chip meas">measured · {date}</span></h2>
+      <details><summary>{label} — all measured hours · {date}</summary>
       <p class="summary">Observed wind from {html.escape(src)}. Regime inferred from the measured
        direction; "vs fc" = measured − that day's forecast (kn). Daylight hours where a station reported.</p>
       <table><thead><tr><th>h</th><th>dir</th><th>mean kn (Bft)</th><th>gust</th>
         <th>regime</th><th>vs&nbsp;fc</th></tr></thead><tbody>{''.join(trs)}</tbody></table>
+      </details>
     </section>"""
 
 
@@ -489,6 +517,7 @@ def report_html(group, static=False):
            + "".join(f' &nbsp;·&nbsp; <a href="{_href(k, static)}">{html.escape(GROUPS[k]["title"])}</a>'
                      for k in other) + "</div>")
     fcards = "".join(_forecast_card(_latest_forecast(l)) for l in g["lakes"])
+    bigcards = "".join(_bigdiff_card(l) for l in g["lakes"])
     mcards = "".join(_measured_card(l) for l in g["lakes"])
     date = next((r["date"] for r in (_latest_forecast(l) for l in g["lakes"]) if r), "—")
     return f"""<!doctype html><html lang="en"><head>
@@ -502,7 +531,8 @@ def report_html(group, static=False):
 <main>
   <div class="sec"><span class="chip fc">forecast</span> Predicted — today ({date})</div>
   {fcards or '<p class="muted">No forecast logged yet — run daily_run.py.</p>'}
-  <div class="sec"><span class="chip meas">measured</span> Observed — yesterday</div>
+  <div class="sec"><span class="chip meas">measured</span> Yesterday: forecast vs measured — big misses</div>
+  {bigcards}
   {mcards}
   {_methodology(group)}
   {_data_sources(group)}
