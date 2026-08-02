@@ -1,0 +1,27 @@
+Walchensee — 2026-08-02
+  dominant thermal; peak 9 kn (3 Bft) N ~12h
+  Hour | Dir  | Mean kn (Bft) | Gust kn | Regime   | Conf | Note
+  00   | SSW  |     3.4 (1) |   7.0   | gradient | med  | raw (no local calib yet)
+  01   | SW   |     2.1 (1) |   7.0   | gradient | med  | raw (no local calib yet)
+  02   | SE   |     2.8 (1) |   4.1   | gradient | med  | raw (no local calib yet)
+  03   | SW   |     1.4 (1) |   5.1   | calm     | med  | glassy Δθ+1.1
+  04   | W    |     0.2 (0) |   1.7   | calm     | med  | cold-pool capped Δθ+2.8
+  05   | E    |     0.2 (0) |   1.2   | calm     | med  | cold-pool capped Δθ+3.5
+  06   | NW   |     1.2 (1) |   1.6   | calm     | med  | cold-pool capped Δθ+3.2
+  07   | SSE  |     1.7 (1) |   2.1   | calm     | med  | cold-pool capped Δθ+3.5
+  08   | N    |     1.2 (1) |   2.5   | calm     | med  | cold-pool capped Δθ+3.5
+  09   | NNE  |     1.6 (1) |   5.1   | calm     | med  | cold-pool capped Δθ+2.3
+  10   | NNE  |     1.2 (1) |   3.7   | calm     | med  | glassy Δθ+1.4
+  11   | N    |     2.0 (1) |   4.7   | thermal  | med  | raw (no local calib yet) Δθ+0.5
+  12   | N    |     9.3 (3) |  14.3   | thermal  | high | Δθ-0.6
+  13   | N    |     4.5 (2) |   9.3   | thermal  | med  | raw (no local calib yet) Δθ-0.6
+  14   | N    |     5.4 (2) |  10.5   | thermal  | med  | raw (no local calib yet) Δθ-1.0
+  15   | NNW  |     5.8 (2) |   9.1   | thermal  | med  | raw (no local calib yet) Δθ-0.9
+  16   | NNW  |     5.9 (2) |   8.6   | gradient | med  | raw (no local calib yet)
+  17   | NW   |     5.2 (2) |   9.7   | gradient | low  | raw (no local calib yet)
+  18   | SW   |     6.3 (2) |  30.1   | gradient | low  | raw (no local calib yet)
+  19   | SSE  |     0.6 (0) |  10.3   | calm     | med  | glassy Δθ-1.2
+  20   | SE   |     1.9 (1) |   3.1   | calm     | med  | glassy Δθ-2.4
+  21   | S    |     2.0 (1) |   5.2   | gradient | med  | raw (no local calib yet)
+  22   | SSE  |     4.1 (2) |   7.0   | gradient | med  | raw (no local calib yet)
+  23   | SSE  |     4.3 (2) |   7.8   | gradient | med  | raw (no local calib yet)
