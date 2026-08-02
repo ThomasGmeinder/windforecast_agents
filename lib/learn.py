@@ -166,16 +166,16 @@ def update_from_day(lake, date):
         b = buckets.setdefault(key, {"n": 0, "bias_kn": 0.0, "gust_ratio": 1.0, "mae_kn": 0.0})
         before = dict(b)
         model_err = act - raw
-        if b["n"] == 0:
-            b["bias_kn"] = model_err
-            b["mae_kn"] = abs(model_err)
-        else:
-            b["bias_kn"] = (1 - alpha) * b["bias_kn"] + alpha * model_err
-            resid = abs(act - (raw + before["bias_kn"]))
-            b["mae_kn"] = (1 - alpha) * b["mae_kn"] + alpha * resid
+        # EWMA toward the day's error, ALWAYS starting from 0 (no full-error jump on
+        # day 1) and capped — so the bias converges to the AVERAGE systematic error
+        # over many days and a single outlier day moves it only ~alpha of the error.
+        b["bias_kn"] = round((1 - alpha) * before["bias_kn"] + alpha * model_err, 2)
+        b["bias_kn"] = max(-fc.BIAS_CAP_KN, min(fc.BIAS_CAP_KN, b["bias_kn"]))
+        resid = abs(act - (raw + before["bias_kn"]))
+        b["mae_kn"] = round(abs(model_err) if before["n"] == 0
+                            else (1 - alpha) * before["mae_kn"] + alpha * resid, 2)
         if rg and rg > 0:
-            ratio = actg / rg
-            b["gust_ratio"] = ratio if before["n"] == 0 else (1 - alpha) * b["gust_ratio"] + alpha * ratio
+            b["gust_ratio"] = round((1 - alpha) * before["gust_ratio"] + alpha * (actg / rg), 2)
         b["n"] += 1
         bucket_updates.append({
             "key": key, "regime": regime, "hour": hour,
@@ -214,16 +214,20 @@ def update_from_day(lake, date):
         under = d["err_issued_kn"] < 0  # err = forecast − measured; <0 ⇒ under-predicted
         bu = bmap.get(fc._bucket_key(d["regime"], d["hour"]), {})
         after = bu.get("bias_after")
+        n_after = bu.get("n_after") or 0
         explanation = (f"{'under' if under else 'over'}-predicted — forecast "
                        f"{d['issued_kn']} kn vs measured {d['actual_kn']} kn ({d['err_issued_kn']:+} kn)")
-        lesson = (f"the model {'underplays' if under else 'overplays'} the "
-                  f"'{d['regime']}' regime around {d['hour']:02d}:00")
+        lesson = (f"the model may {'underplay' if under else 'overplay'} the "
+                  f"'{d['regime']}' regime around {d['hour']:02d}:00 — one day is weak evidence")
         if after is None:
-            how = "recorded; a per-(regime×hour) bias bucket is now seeded and will correct future runs"
+            how = "logged as a single observation; corrections only build from repeated days"
         else:
-            how = (f"the (regime × hour) bias bucket moved {bu.get('bias_before')}→{after} kn, so "
-                   f"future '{d['regime']}' forecasts at {d['hour']:02d}:00 are nudged "
-                   f"{'up' if after > 0 else 'down'} ~{abs(after):.1f} kn")
+            applied = int(100 * min(1.0, n_after / fc.N_MIN_OBS))
+            how = (f"the (regime×hour) bias moved {bu.get('bias_before')}→{after} kn — a "
+                   f"{int(alpha*100)}% EWMA step toward this day's error (capped ±{fc.BIAS_CAP_KN:g}), "
+                   f"converging to the AVERAGE error over days, not this one day. Only ~{applied}% applied "
+                   f"so far ({n_after} obs; full weight after {fc.N_MIN_OBS}), so one outlier barely shifts "
+                   f"the forecast")
         large_misses.append({"hour": d["hour"], "regime": d["regime"], "issued_kn": d["issued_kn"],
                              "actual_kn": d["actual_kn"], "err_kn": d["err_issued_kn"],
                              "explanation": explanation, "lesson": lesson, "how_applied": how})

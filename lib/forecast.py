@@ -39,6 +39,8 @@ THERMAL_CLOUD_MAX = 45  # % total cloud
 SW_SECTOR = (120, 240)  # southerly 850 hPa sector for foehn
 COLD_POOL_DTHETA = 1.5  # K; Kochel-Walchensee dtheta above this = stable cold pool caps the thermal
                         # (provisional pivot ~ dry-adiabatic 2.0 K minus margin; recalibrated by learn.py)
+N_MIN_OBS = 3           # matching days before a (regime×hour) correction is fully trusted/applied
+BIAS_CAP_KN = 8.0       # clamp on the learned bias so one anomalous day can't swing it
 
 
 def beaufort(kn):
@@ -126,13 +128,19 @@ def _bucket_key(regime, hour):
 
 
 def apply_bias(bias, regime, hour, speed_kn, gust_kn):
-    """Return (corrected_speed, corrected_gust, learned_flag)."""
+    """Return (corrected_speed, corrected_gust, learned_flag). The correction is
+    ramped in over N_MIN_OBS observations (a single day barely moves it) and the
+    bias is capped, so one anomalous day can't poison future forecasts."""
     b = bias.get("buckets", {}).get(_bucket_key(regime, hour))
-    if not b or b.get("n", 0) < 1:
+    n = (b or {}).get("n", 0)
+    if not b or n < 1:
         return speed_kn, gust_kn, False
-    cs = max(0.0, speed_kn + b.get("bias_kn", 0.0))
-    cg = max(cs, gust_kn * b.get("gust_ratio", 1.0))
-    return round(cs, 1), round(cg, 1), True
+    conf = min(1.0, n / N_MIN_OBS)                                  # evidence ramp
+    bkn = max(-BIAS_CAP_KN, min(BIAS_CAP_KN, b.get("bias_kn", 0.0)))
+    cs = max(0.0, speed_kn + bkn * conf)
+    gr = 1.0 + (b.get("gust_ratio", 1.0) - 1.0) * conf
+    cg = max(cs, gust_kn * gr)
+    return round(cs, 1), round(cg, 1), n >= N_MIN_OBS              # "calibrated" only once trusted
 
 
 # ------------------------------------------------------------- build a table
