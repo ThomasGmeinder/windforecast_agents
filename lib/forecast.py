@@ -199,6 +199,13 @@ def build_table(lake, target_date, run_stamp=None):
             stab = wd.stability_dtheta(target_date)
         except Exception:
             stab = {}
+    ads_fc = {}
+    if lake in wd.ADS_SPOT:                       # addicted-sports' own spot forecast (extra member)
+        try:
+            ads_fc = wd.addicted_forecast(wd.ADS_SPOT[lake], target_date)
+        except Exception:
+            ads_fc = {}
+    peiss = wd.hohenpeissenberg_now() if lake in ("kochelsee", "walchensee") else None  # föhn nowcast
 
     bias = load_bias(lake)
     rows = []
@@ -209,28 +216,43 @@ def build_table(lake, target_date, run_stamp=None):
         row = {v: h[v][i] for v in OM_VARS}
         dp = dp_series.get(t[:13])
         feat = {**drivers.get(hour, {}), **stab.get(hour, {})}
-        # forecast VALUE = mean of all members (ICON-D2 EPS + deterministic + ICON-EU)
+        af = ads_fc.get(hour, {})
+        # forecast VALUE = mean of SOURCES (equal weight): ICON-D2 EPS mean, ICON-D2
+        # deterministic, ICON-EU, addicted-sports spot forecast.
         ens_s = [eh[m][i] for m in smembers if eh[m][i] is not None] if eh else []
-        sv = list(ens_s)
+        srcs = ([sum(ens_s) / len(ens_s)] if ens_s else [])
         if row.get("wind_speed_10m") is not None:
-            sv.append(row["wind_speed_10m"])                    # ICON-D2 deterministic
+            srcs.append(row["wind_speed_10m"])
         if euh and euh["wind_speed_10m"][i] is not None:
-            sv.append(euh["wind_speed_10m"][i])                 # ICON-EU
-        raw_s = sum(sv) / len(sv) if sv else (row.get("wind_speed_10m") or 0.0)
-        gv = [eh[m][i] for m in gmembers if eh[m][i] is not None] if eh else []
+            srcs.append(euh["wind_speed_10m"][i])
+        if af.get("avg_kn") is not None:
+            srcs.append(af["avg_kn"])
+        raw_s = sum(srcs) / len(srcs) if srcs else (row.get("wind_speed_10m") or 0.0)
+        ens_g = [eh[m][i] for m in gmembers if eh[m][i] is not None] if eh else []
+        gsrcs = ([sum(ens_g) / len(ens_g)] if ens_g else [])
         if row.get("wind_gusts_10m") is not None:
-            gv.append(row["wind_gusts_10m"])
+            gsrcs.append(row["wind_gusts_10m"])
         if euh and euh["wind_gusts_10m"][i] is not None:
-            gv.append(euh["wind_gusts_10m"][i])
-        raw_g = sum(gv) / len(gv) if gv else (row.get("wind_gusts_10m") or raw_s)
-        row["wind_speed_10m"] = raw_s   # regime's calm/cold-pool check uses the blended value
+            gsrcs.append(euh["wind_gusts_10m"][i])
+        if af.get("boe_kn") is not None:
+            gsrcs.append(af["boe_kn"])
+        raw_g = sum(gsrcs) / len(gsrcs) if gsrcs else (row.get("wind_gusts_10m") or raw_s)
+        row["wind_speed_10m"] = raw_s
         regime = classify_regime(lake, hour, row, dp, feat)
         cs, cg, learned = apply_bias(bias, regime, hour, raw_s, raw_g)
-        # ensemble spread (uncertainty) from the EPS members only
         spread = None
         if len(ens_s) > 2:
             m_ = sum(ens_s) / len(ens_s)
             spread = (sum((x - m_) ** 2 for x in ens_s) / len(ens_s)) ** 0.5
+        conf = _confidence(regime, spread, learned)
+        foehn_note = None
+        if regime == "foehn":                       # föhn: SE reliable, SW weak; confirm at Peißenberg
+            d850 = row.get("wind_direction_850hPa")
+            if d850 is not None and 200 <= d850 <= 240:
+                foehn_note = "SW föhn — often unreliable"
+            if peiss is not None and not peiss["southerly"]:
+                foehn_note = f"unconfirmed @Peißenberg ({compass(peiss['dir'])} {peiss['kn']:.0f}kn)"
+                conf = "low"
         rows.append({
             "hour": hour, "dir": row["wind_direction_10m"],
             "raw_kn": round(raw_s, 1), "raw_gust_kn": round(raw_g, 1),
@@ -238,14 +260,14 @@ def build_table(lake, target_date, run_stamp=None):
             "bft": beaufort(cs), "regime": regime, "learned": learned,
             "dp": None if dp is None else round(dp, 1),
             "spread_kn": None if spread is None else round(spread, 1),
-            "conf": _confidence(regime, spread, learned),
+            "conf": conf, "foehn_note": foehn_note,
             "dtheta": feat.get("dtheta"),
             "foehn_grad": feat.get("foehn_gradient_hpa"),
             "lapse": feat.get("lapse_2m_850"),
         })
     summary = _summary(lake, rows)
-    return {"lake": lake, "label": label, "date": target_date,
-            "run_stamp": run_stamp, "rows": rows, "summary": summary}
+    return {"lake": lake, "label": label, "date": target_date, "run_stamp": run_stamp,
+            "rows": rows, "summary": summary, "peiss": peiss}
 
 
 def _summary(lake, rows):
@@ -285,6 +307,8 @@ def format_table(res):
             extra.append(f"Δθ{r['dtheta']:+.1f}")
         if r["regime"] == "foehn" and r.get("foehn_grad") is not None:
             extra.append(f"fg{r['foehn_grad']:+.1f}")
+        if r.get("foehn_note"):
+            extra.append(r["foehn_note"])
         note = " ".join(([note] if note else []) + extra)
         mean = f"{r['mean_kn']:.1f} ({r['bft']})"
         lines.append(

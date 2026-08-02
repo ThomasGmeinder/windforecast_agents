@@ -220,6 +220,55 @@ def addicted_measured_hourly(spot, yyyy_mm_dd):
     return out
 
 
+def addicted_forecast(spot, yyyy_mm_dd):
+    """addicted-sports' OWN spot-tuned forecast (knots) for one date — hourly avg + gust.
+    A strong extra 'member' for the blend since it is tuned to the local thermal/föhn."""
+    url = f"https://www.addicted-sports.com/forecast/{spot}/?json=wind&from={yyyy_mm_dd}"
+    d = json.loads(_get(url))
+    t, avg, boe = d.get("time", []), d.get("avg", []), d.get("boe", [])
+    dd, mm = yyyy_mm_dd[8:10], yyyy_mm_dd[5:7]
+    out = {}
+    for i, label in enumerate(t):
+        m = re.search(r'(\d{2})\.(\d{2})\.\s+(\d{2}):', label or "")
+        if not m or m.group(1) != dd or m.group(2) != mm:
+            continue
+        a = avg[i] if i < len(avg) else None
+        if a is None:
+            continue
+        out[int(m.group(3))] = {"avg_kn": a, "boe_kn": (boe[i] if i < len(boe) else None)}
+    return out
+
+
+def hohenpeissenberg_now():
+    """Latest Hohenpeißenberg (DWD 02290) 10-min wind — the classic föhn nowcast: S/SE
+    wind here in the morning is the precondition for Kochelsee/Walchensee föhn.
+    Returns {'time','dir','kn','southerly'} or None."""
+    base = "https://opendata.dwd.de/climate_environment/CDC/observations_germany/climate/10_minutes/wind/now/"
+    try:
+        html = _get(base).decode("latin-1", "replace")
+        fn = re.findall(r'10minutenwerte_wind_02290[^"]*\.zip', html)
+        if not fn:
+            return None
+        z = zipfile.ZipFile(io.BytesIO(_get(base + fn[0])))
+        name = [n for n in z.namelist() if n.startswith("produkt")][0]
+        last = None
+        for line in z.read(name).decode("latin-1").splitlines()[1:]:
+            p = [x.strip() for x in line.split(";")]
+            if len(p) < 5:
+                continue
+            ff, dd = float(p[3]), float(p[4])
+            if ff <= -999 or dd <= -999:
+                continue
+            last = (p[1], ff, dd)
+        if not last:
+            return None
+        t, ff, dd = last
+        return {"time": t, "dir": round(dd), "kn": round(ff * MS_TO_KN, 1),
+                "southerly": 120 <= dd <= 210}   # SE–S = reliable föhn sector (SW excluded)
+    except Exception:
+        return None
+
+
 def actual_hourly(lake, yyyy_mm_dd):
     """Preferred measured actuals for a lake/date. Uses the on-lake addicted-sports
     station where available, else falls back to DWD 10-min obs. Returns (data, source)."""

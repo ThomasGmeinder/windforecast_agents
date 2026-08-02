@@ -69,21 +69,21 @@ weaker and its föhn comes over the pass more from the SW; to be calibrated).
 
 Sources are **tiered, not averaged** — one tier constrains/corrects the next.
 
-### Forecast (the backbone)
-- **ICON-D2** (DWD, 2.2 km, hourly, 48 h). Two access paths, both verified live:
-  raw GRIB decoded locally (`winddata.icon_d2_grib_point`, best, cached) and
-  Open-Meteo point (`openmeteo_point(models="icon_d2")`, fast, also serves 850/925
-  hPa levels).
-- **ICON-D2 ensemble** (20 members) via `openmeteo_ensemble` → per-hour spread =
-  confidence (P10/P50/P90, gust probability).
-- **ICON-EU** (`models="icon_eu"`) as an independent coarser cross-check.
+### Forecast (the backbone) — an average of multiple predictions
+The forecast VALUE is the **equal-weight mean of several sources**, not one run:
+- **ICON-D2 ensemble** mean (20 members) + **ICON-D2 deterministic** + **ICON-EU** +
+  the **addicted-sports spot forecast** (`winddata.addicted_forecast`, tuned to the
+  local thermal). ICON-D2 access: raw GRIB (`icon_d2_grib_point`, cached) or
+  Open-Meteo point. The ensemble **spread** sets the confidence band.
 
 ### Föhn diagnosis
-- **DWD MOSMIX** cross-Alpine pressure difference **Δp = Bozen − München**
-  (`winddata.foehn_delta_p`): ≥4 hPa noticeable, ≥8 hPa reaches the lake surfaces.
-- **addicted-sports drivers** (`winddata.addicted_drivers`, same feed as the
-  measured wind): hourly `foehn_gradient_hpa`, 850 hPa wind speed/direction,
-  `lapse_2m_850`, radiation, thermal gradient.
+- **DWD MOSMIX** cross-Alpine **Δp = Bozen − München** (`foehn_delta_p`): ≥4 hPa
+  noticeable, ≥8 hPa reaches the surface. Best föhn direction is **SE**; SW is flagged
+  unreliable.
+- **Hohenpeißenberg nowcast** (`winddata.hohenpeissenberg_now`, DWD 02290): S/SE wind
+  there in the morning is the precondition — föhn is flagged *unconfirmed* until it shows.
+- **addicted-sports drivers** (`winddata.addicted_drivers`): `foehn_gradient_hpa`,
+  850 hPa wind, `lapse_2m_850`, radiation.
 
 ### Measured "ground truth" (for bias correction + learning)
 - **On-lake Urfeld anemometer** via the reverse-engineered addicted-sports JSON
@@ -122,8 +122,9 @@ and the LLM agent call it, so numbers never disagree. Per hour it:
      if Δθ ≥ `COLD_POOL_DTHETA` (1.5 K) and model wind is light it is downgraded to
      **"cold-pool capped"** calm;
    - else calm.
-4. **Applies the learned bias** for that (regime × hour-of-day) bucket to the raw
-   model wind (`apply_bias`); rows before any calibration are flagged
+4. **Applies the learned regression** `corrected = a + b·model` for that
+   (regime × hour-of-day) bucket (`apply_bias` → `postproc`), which **scales with**
+   the model so it can't double-count föhn; rows before calibration are flagged
    "raw (no local calib yet)".
 5. **Confidence** from ensemble spread + calibration state; föhn capped at "med".
 6. Surfaces the drivers in the table Note column (`Δθ±x.x`, `fg±x.x`).
@@ -150,13 +151,14 @@ Every morning, **before** the new forecast, for each lake:
    its **measured direction** (terrain sector) + wind, and reports predicted-vs-
    measured **regime accuracy + confusion matrix**, flagging the föhn/thermal
    **anti-correlation** when it is missed.
-5. **Updates the mechanism** — an exponentially-weighted moving average (EWMA,
-   α=0.3) of the **raw-model error** (`actual − raw`) per (regime × hour-of-day),
-   plus a gust ratio; the report shows the exact **bias before → after** for every
-   bucket touched.
+5. **Updates the mechanism** — a **recursive-least-squares regression**
+   `corrected = a + b·model` per (regime × hour-of-day) (`postproc`), with a prior
+   of (a=0, b=1) = "trust the model", a forgetting factor, and a cap; plus a gust
+   factor. The report shows the exact **a/b before → after** for every bucket.
 
-Learning on *raw* error (not the corrected value) makes it converge instead of
-chasing itself. Idempotent: each date is learned at most once per lake. The
+The regression **scales with** the model (so it neither double-counts föhn nor blindly
+adds a fixed offset), converges to the systematic bias, and is evidence-gated (one day
+barely moves the applied correction). Idempotent: each date is learned once per lake. The
 forecast reads the just-updated model in the same run, so today benefits
 immediately.
 
@@ -229,10 +231,11 @@ wind-agents/
 ├── serve.py                      web server for the HTML report (port 8092)
 ├── lib/
 │   ├── winddata.py               data access (forecast, obs, föhn, drivers, Δθ)
-│   ├── forecast.py               deterministic engine (regime, bias, terrain, output)
+│   ├── forecast.py               engine (ensemble-mean blend, regime, terrain, output)
+│   ├── postproc.py               RLS regression correction (corrected = a + b·model)
 │   ├── learn.py                  self-learning + detailed morning audit
 │   └── render.py                 HTML rendering of the report
-├── models/<lake>_bias.json       learned EWMA bias per regime×hour (+ processed dates)
+├── models/<lake>_bias.json       learned regression (a,b) per regime×hour (+ processed dates)
 ├── logs/
 │   ├── <lake>_forecast.jsonl     issued forecasts (1/day, with raw + features)
 │   ├── <lake>_diffs.jsonl        per-hour prediction-vs-measured diffs

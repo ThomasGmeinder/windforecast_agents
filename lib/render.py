@@ -184,6 +184,8 @@ def _forecast_card(rec):
             note.append(f"Δθ{r['dtheta']:+.1f}")
         if reg == "foehn" and r.get("foehn_grad") is not None:
             note.append(f"fg{r['foehn_grad']:+.1f}")
+        if r.get("foehn_note"):
+            note.append(r["foehn_note"])
         if not r.get("mean_kn") and reg == "calm":
             note.append("glassy")
         rows.append(
@@ -254,117 +256,53 @@ def _methodology(group):
     if group == "kochel-walchensee":
         return """
     <section class="card method">
-      <h2>Prediction &amp; learning methodology</h2>
-      <p>Kochelsee (~604 m) and Walchensee (~800 m) share one wind system through the
-      Kesselberg but are reported separately, because under <b>south föhn</b> they behave
-      oppositely: föhn pours down the Kesselberg so <b>Kochelsee turns strong</b> while it
-      <b>suppresses the Walchensee NE thermal</b>. Getting that split right is the whole game.</p>
-      <h3>Regime, classified each hour</h3>
-      <ul>
-        <li><b>South föhn</b> — cross-Alpine pressure gap Bozen−München (DWD MOSMIX) ≥ 4–8 hPa
-            + southerly 850 hPa wind + the addicted-sports föhn-gradient driver.</li>
-        <li><b>Thermal (Walchenseewind)</b> — the NE nozzle between Jochberg &amp; Herzogstand;
-            needs sun + weak gradient + no föhn, and is <b>capped when a cold-air pool</b>
-            sits in the basin (see stability).</li>
-        <li><b>Gradient</b> — frontal / pressure-driven flow (925 hPa).</li>
-        <li><b>Fall-winds</b> — cold-night drainage off the north slopes, distinguished from föhn.</li>
-      </ul>
-      <h3>Terrain locks the wind</h3>
-      <p>The basin channels surface wind into fixed sectors (direction it comes <i>from</i> at
-      Urfeld): <b>N–NE → thermal</b>, <b>S–SE → föhn/Kesselberg</b>, <b>W–NW → gradient</b>,
-      E → Jachenau drainage. The raw model's free-flow direction is treated as unreliable; the
-      <i>measured</i> direction is used to validate the regime call.</p>
-      <h3>Stability — the master switch</h3>
-      <p>The Kochelsee−Walchensee air-temperature difference over the ~200 m gap gives a
-      potential-temperature index Δθ. Δθ ≈ 0 = neutral / föhn-mixed; <b>Δθ &gt; ~1.5 K = stable
-      cold pool → thermal capped</b> (the dead-Kochelsee-morning); Δθ &lt; 0 = unstable → thermal
-      likely. Shown per hour in the <i>note</i> column.</p>
-      <h3>Data</h3>
-      <ul>
-        <li>Forecast backbone: <b>ICON-D2</b> (2.2 km) + 20-member ensemble for confidence.</li>
-        <li>Föhn: DWD MOSMIX Bozen−München Δp + addicted-sports drivers (föhn gradient, 850 hPa, lapse).</li>
-        <li>Measured truth: the <b>on-lake Urfeld anemometer</b> (addicted-sports, daylight hours);
-            Kochelsee falls back to DWD Garmisch (a distant valley proxy).</li>
-      </ul>
-      <h3>Prediction algorithm</h3>
-      <p>For each hour of the target day, per lake:</p>
+      <h2>How it's predicted</h2>
+      <p>Kochelsee and Walchensee share one wind system but are reported separately: under
+      <b>south föhn</b> the Kesselberg fall-wind makes <b>Kochelsee strong</b> while it kills the
+      <b>Walchensee NE thermal</b> — getting that split right is the job.</p>
+      <h3>Prediction algorithm (per hour)</h3>
       <ol>
-        <li><b>Dynamical first guess.</b> The wind value is the <b>mean of multiple predictions</b> —
-            the ICON-D2 20-member ensemble + the ICON-D2 deterministic run + ICON-EU — at the lake
-            grid point; plus 850/925 hPa flow, cloud cover and radiation (ensemble spread → confidence).</li>
-        <li><b>Diagnose the drivers.</b> Cross-Alpine pressure difference (MOSMIX Bozen−München Δp),
-            the addicted-sports föhn/thermal drivers (föhn gradient, 850 hPa wind, lapse, radiation),
-            and the Kochel−Walchensee <b>Δθ</b> stability index.</li>
-        <li><b>Classify the dominant regime</b> (winner-take-all cascade): <b>föhn</b> if
-            Δp ≥ 4 hPa and 850 hPa is southerly (120–240°) and ≥ 7 kn → else <b>gradient</b> if
-            925 hPa ≥ 12 kn → else <b>thermal</b> if it is daytime, low-cloud and no cold pool
-            (Δθ &lt; 1.5 K) → else <b>calm</b>.</li>
-        <li><b>Correct with a learned regression.</b> Per (regime × hour-of-day),
-            <b>corrected = a + b·model</b> — a recursive least-squares fit that <b>scales with</b> the
-            model's own wind, so it can't double-count the föhn already in the forecast nor blindly add a
-            fixed offset; evidence-gated (one day barely moves it, full weight after ~3 days) and capped.</li>
-        <li><b>Uncertainty &amp; direction.</b> The ICON-D2 20-member ensemble spread sets the
-            confidence; the surface direction is snapped to the terrain sector; gusts carry the
-            learned gust factor.</li>
+        <li><b>Blend the models.</b> Value = mean of ICON-D2 ensemble + ICON-D2 deterministic +
+            ICON-EU + addicted-sports' spot forecast; ensemble spread → confidence.</li>
+        <li><b>Diagnose drivers.</b> Cross-Alpine Δp (Bozen−München), 850 hPa wind, föhn-gradient,
+            radiation, and the Kochel−Walchensee <b>Δθ</b> stability index.</li>
+        <li><b>Classify the regime</b> — terrain then fixes direction (N–NE thermal · S–SE föhn ·
+            W–NW gradient): <b>föhn</b> (Δp ≥ 4 hPa + SE–S 850 wind; confirmed by morning S/SE at
+            Hohenpeißenberg) → <b>gradient</b> (925 hPa ≥ 12 kn) → <b>thermal</b> (sun + weak gradient
+            + no cold pool, Δθ &lt; 1.5 K) → <b>calm</b>.</li>
+        <li><b>Correct.</b> A learned regression <b>corrected = a + b·model</b> that scales with the
+            model (no föhn double-count), evidence-gated and capped.</li>
       </ol>
-      <p class="muted">Honest status: ensemble-mean model + rule-based regime + a recursive regression
-      correction (a + b·model). Next on the roadmap: predictor-conditioned <i>probabilistic</i>
-      post-processing scored by CRPS (see <code>docs/IMPROVEMENT_PLAN.md</code>).</p>
+      <p class="muted"><b>Föhn caveat:</b> its strength/timing isn't reliably predictable (often blows
+      only till ~09:00); flagged "unconfirmed" until Hohenpeißenberg shows S/SE. Next on the roadmap:
+      CRPS-scored probabilistic post-processing (<code>docs/IMPROVEMENT_PLAN.md</code>).</p>
       <h3>How it learns</h3>
-      <p>Every morning <b>before</b> forecasting, yesterday's forecast is compared hour-by-hour to
-      the measured wind: it logs the diffs, derives plain-language lessons, updates an
-      <b>EWMA bias per (regime × hour-of-day)</b>, and <b>validates the predicted regime</b> against
-      the measured wind-direction sector (accuracy + confusion, flagging the föhn/thermal
-      anti-correlation). Today's forecast uses the just-updated correction.</p>
-      <p class="muted">Thresholds start from published (Swiss-calibrated) föhn values and the ~2 K
-      dry-adiabatic Δθ pivot, recalibrated over time from local data. Until history accrues, hours
-      read "raw (no local calib yet)" and confidence is capped.</p>
+      <p>Each morning it compares yesterday's forecast to the measured wind (on-lake Urfeld;
+      Kochelsee via DWD Garmisch), updates the per-(regime×hour) regression, and validates the regime
+      against the measured direction. Until history builds, hours read "raw (no local calib yet)".</p>
     </section>"""
     return """
     <section class="card method">
-      <h2>Prediction &amp; learning methodology</h2>
-      <p>Ammersee (~533 m) is an open pre-Alpine foreland lake with long N–S fetch. Its wind is
-      mostly <b>synoptic gradient flow</b> plus a <b>summer thermal (lake breeze)</b>; south föhn
-      is rare and weak this far north.</p>
-      <h3>Regime, classified each hour</h3>
-      <ul>
-        <li><b>Gradient</b> — the dominant driver (925 / 850 hPa flow + pressure gradient).</li>
-        <li><b>Thermal</b> — sunny, weak-gradient days; builds late morning, peaks mid-afternoon,
-            dies at sunset.</li>
-        <li><b>Föhn</b> — flagged only on a strong Bozen−München Δp + southerly 850 hPa signal.</li>
-      </ul>
-      <h3>Data</h3>
-      <ul>
-        <li>Forecast: <b>ICON-D2</b> + <b>ICON-EU</b> cross-check + 20-member ensemble.</li>
-        <li>Measured truth: the <b>Herrsching sailing-club anemometer</b> (on the water) with
-            <b>DWD Wielenbach</b> (lake-level, ~11 km S) as the independent anchor.</li>
-      </ul>
-      <p class="muted">Caveat: the Windfinder / addicted-sports Herrsching feeds are often the
-      <i>same</i> pier sensor (not independent votes) and under-read easterlies; the learning
-      currently uses DWD Wielenbach as the measured actual. Ammersee does not use the Kesselberg
-      Δθ or föhn-driver features — those are specific to the Alpine-rim pair.</p>
-      <h3>Prediction algorithm</h3>
-      <p>For each hour of the target day:</p>
+      <h2>How it's predicted</h2>
+      <p>Ammersee (~533 m) is an open foreland lake: wind is mostly <b>synoptic gradient</b> plus a
+      <b>summer thermal (lake breeze)</b>; south föhn is rare here.</p>
+      <h3>Prediction algorithm (per hour)</h3>
       <ol>
-        <li><b>Dynamical first guess.</b> The wind value is the <b>mean of multiple predictions</b> —
-            ICON-D2 ensemble + ICON-D2 deterministic + ICON-EU — at the Herrsching point; plus
-            925/850 hPa flow, cloud and radiation (ensemble spread → confidence).</li>
-        <li><b>Classify the regime</b> — <b>gradient</b> if the 925/850 hPa flow is strong; else
-            <b>thermal</b> on sunny, weak-gradient afternoons; <b>föhn</b> only on a strong
-            Bozen−München Δp + southerly 850 hPa signal (rare here); else <b>calm</b>.</li>
-        <li><b>Correct with a learned regression</b> per (regime × hour-of-day),
-            <b>corrected = a + b·model</b> (scales with the model), toward the measured wind
-            (DWD Wielenbach; Herrsching on-water as reference) — evidence-gated and capped.</li>
-        <li><b>Uncertainty &amp; direction.</b> Ensemble spread → confidence; gusts carry the learned
-            gust factor.</li>
+        <li><b>Blend the models.</b> Value = mean of ICON-D2 ensemble + ICON-D2 deterministic +
+            ICON-EU at the Herrsching point; ensemble spread → confidence.</li>
+        <li><b>Classify the regime:</b> <b>gradient</b> (strong 925/850 hPa flow) → <b>thermal</b>
+            (sunny, weak-gradient afternoons) → <b>föhn</b> (only on strong Δp + southerly 850, rare)
+            → <b>calm</b>.</li>
+        <li><b>Correct.</b> A learned regression <b>corrected = a + b·model</b> (scales with the
+            model), evidence-gated and capped.</li>
       </ol>
-      <p class="muted">Honest status: ensemble-mean model + rule-based regime + a recursive regression
-      correction (a + b·model). Next: predictor-conditioned <i>probabilistic</i> post-processing
-      scored by CRPS (see <code>docs/IMPROVEMENT_PLAN.md</code>).</p>
+      <p class="muted">Measured truth: DWD Wielenbach (lake-level, ~11 km); the Herrsching on-water
+      station is the reference but its Windfinder/addicted feeds are often the same sensor. No
+      Kesselberg Δθ / föhn drivers here (Alpine-rim only). Next: CRPS-scored probabilistic
+      post-processing.</p>
       <h3>How it learns</h3>
-      <p>Same mechanism as the other lakes: each morning it compares yesterday's forecast to the
-      measured wind and updates an EWMA bias per (regime × hour-of-day) before building today's
-      forecast.</p>
+      <p>Each morning it compares yesterday's forecast to the measured wind and updates the
+      per-(regime×hour) regression before today's forecast.</p>
     </section>"""
 
 

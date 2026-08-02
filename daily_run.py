@@ -110,7 +110,7 @@ def main():
             "hourly": [{"hour": r["hour"], "regime": r["regime"],
                         "raw_kn": r["raw_kn"], "raw_gust_kn": r["raw_gust_kn"],
                         "mean_kn": r["mean_kn"], "gust_kn": r["gust_kn"],
-                        "dir": r["dir"], "conf": r["conf"],
+                        "dir": r["dir"], "conf": r["conf"], "foehn_note": r.get("foehn_note"),
                         "dtheta": r.get("dtheta"), "foehn_grad": r.get("foehn_grad"),
                         "lapse": r.get("lapse")} for r in res["rows"]],
         })
