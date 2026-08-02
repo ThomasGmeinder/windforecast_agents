@@ -226,9 +226,10 @@ A self-learning bias correction improves the engine every morning:
 - **Actuals source:** Walchensee learns against **real on-lake measured wind from
   addicted-sports Urfeld** (`/forecast/walchensee/urfeld/?json=wind&from=DATE` →
   `mavg`/`mmax`/`dir`, knots, daylight hours) — genuine lake truth that captures the
-  NE nozzle thermal a valley station misses. Kochelsee still uses DWD Garmisch (a
-  distant valley proxy) until an on-lake Kochelsee feed is added — state this for
-  Kochelsee. Source used is named in each morning's learning report.
+  NE nozzle thermal a valley station misses. **Kochelsee** learns against the on-lake
+  **addicted-sports Trimini** feed (`/forecast/kochelsee/trimini/?json=wind&from=DATE`
+  → `mavg`/`mmax`/`dir`); DWD Garmisch (a distant valley proxy) is only a fallback if
+  that feed is unavailable. Source used is named in each morning's learning report.
 
 ## Method (each run)
 

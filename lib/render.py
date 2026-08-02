@@ -118,7 +118,7 @@ def _bigdiff_card(lake):
     if not rows:
         return (f'<section class="card"><h2>{label} — big misses</h2>'
                 f'<p class="muted">No measured day yet — appears after the next morning run.</p></section>')
-    big = [r for r in rows if r.get("err_issued_kn") is not None and abs(r["err_issued_kn"]) > thr]
+    big = [r for r in rows if learn.is_large_miss(r.get("err_issued_kn"))]
     if not big:
         inner = f'<p class="muted">🎯 No hour differed from the forecast by more than {thr:g} kn on {date}.</p>'
     else:
@@ -277,9 +277,10 @@ def _methodology(group):
       only till ~09:00); flagged "unconfirmed" until Hohenpeißenberg shows S/SE. Next on the roadmap:
       CRPS-scored probabilistic post-processing (<code>docs/IMPROVEMENT_PLAN.md</code>).</p>
       <h3>How it learns</h3>
-      <p>Each morning it compares yesterday's forecast to the measured wind (on-lake Urfeld;
-      Kochelsee via DWD Garmisch), updates the per-(regime×hour) regression, and validates the regime
-      against the measured direction. Until history builds, hours read "raw (no local calib yet)".</p>
+      <p>Each morning it compares yesterday's forecast to the measured wind (on-lake Urfeld for
+      Walchensee, on-lake Trimini for Kochelsee), updates the per-(regime×hour) regression, and
+      validates the regime against the measured direction. Until history builds, hours read
+      "raw (no local calib yet)".</p>
     </section>"""
     return """
     <section class="card method">
@@ -323,9 +324,14 @@ def _data_sources(group):
             ("DWD MOSMIX", "föhn trigger — cross-Alpine Δp (Bozen − München)",
              "KML/KMZ from <code>opendata.dwd.de/…/MOSMIX_L/single_stations/{16020,10865}/kml/</code>, "
              "parsed for the <code>PPPP</code> pressure series"),
+            ("addicted-sports spot forecast", "blend member — each lake's own on-spot forecast",
+             "the <code>avg</code>/<code>boe</code> series, per lake: "
+             "<code>…/forecast/walchensee/urfeld/?json=wind&amp;from=DATE</code> for Walchensee, "
+             "<code>…/forecast/kochelsee/trimini/?json=wind&amp;from=DATE</code> for Kochelsee"),
             ("addicted-sports drivers", "föhn/thermal cause (foehn gradient, 850 hPa, lapse, radiation)",
-             "the <code>drivers</code> block of the same JSON feed "
-             "<code>addicted-sports.com/forecast/walchensee/urfeld/?json=wind&amp;from=DATE</code>"),
+             "the <code>drivers</code> block of the same per-lake feed "
+             "(<code>…/walchensee/urfeld/…</code> for Walchensee, "
+             "<code>…/kochelsee/trimini/…</code> for Kochelsee)"),
             ("Open-Meteo T2m", "Kochel−Walchensee Δθ stability index",
              "<code>api.open-meteo.com/v1/forecast?hourly=temperature_2m</code> at both lake points"),
         ]
@@ -333,9 +339,12 @@ def _data_sources(group):
             ("addicted-sports Urfeld", "on-lake measured wind (Walchensee truth)",
              "<code>mavg</code>/<code>mmax</code>/<code>dir</code> from the same JSON feed "
              "<code>…/forecast/walchensee/urfeld/?json=wind&amp;from=DATE</code> (daylight hours)"),
-            ("DWD 10-min obs", "Kochelsee measured wind (valley proxy: Garmisch 01550)",
-             "zipped 10-min FF/DD from "
-             "<code>opendata.dwd.de/climate_environment/CDC/…/10_minutes/wind/recent/</code>"),
+            ("addicted-sports Trimini", "on-lake measured wind (Kochelsee truth)",
+             "<code>mavg</code>/<code>mmax</code>/<code>dir</code> from "
+             "<code>…/forecast/kochelsee/trimini/?json=wind&amp;from=DATE</code> — the station at the "
+             "Kristall Therme Trimini on Kochelsee's south shore (~629 m; a genuinely separate sensor "
+             "from Urfeld, verified hour-by-hour), daylight hours; DWD Garmisch 01550 only as a "
+             "fallback if the on-lake feed is unavailable"),
         ]
     else:
         pred = [

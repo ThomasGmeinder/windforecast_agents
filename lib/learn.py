@@ -16,9 +16,10 @@ forecast benefits from what was learned minutes earlier in the same run.
 Learning is on RAW model error (actual - raw) so the correction converges instead
 of chasing its own tail. Idempotent: each date is learned at most once per lake.
 
-Honest limits: Kochelsee/Walchensee "actuals" are DWD Garmisch (a distant valley
-station), not on-lake; Ammersee uses Wielenbach (lake-level, ~11 km, sheltered).
-Direction is compared and logged but not yet used to correct the forecast.
+Actuals: Walchensee and Kochelsee use the on-lake addicted-sports feeds (Urfeld and
+Trimini respectively; DWD Garmisch only as a fallback); Ammersee uses DWD Wielenbach
+(lake-level, ~11 km, sheltered). Direction is compared and logged but not yet used to
+correct the forecast.
 """
 import os, sys, json, datetime
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -30,6 +31,13 @@ LEARN_DIR = os.path.join(wd.LOG_DIR, "learning")
 os.makedirs(LEARN_DIR, exist_ok=True)
 
 LARGE_ERR_KN = 5.0  # |forecast − measured| above this = a "large miss" worth explaining
+
+
+def is_large_miss(err_kn):
+    """Single authority for the big-miss / diff-table predicate: strictly LARGER
+    than the threshold (matches "difference larger than a defined value"). Used by
+    both this module and render.py so the logged/displayed tables never drift."""
+    return err_kn is not None and abs(err_kn) > LARGE_ERR_KN
 
 
 def _dir_err(a, b):
@@ -202,7 +210,7 @@ def update_from_day(lake, date):
     bmap = {u["key"]: u for u in bucket_updates}
     large_misses = []
     for d in diffs:
-        if abs(d["err_issued_kn"]) < LARGE_ERR_KN:
+        if not is_large_miss(d["err_issued_kn"]):
             continue
         under = d["err_issued_kn"] < 0  # err = forecast − measured; <0 ⇒ under-predicted
         bu = bmap.get(fc._bucket_key(d["regime"], d["hour"]), {})
@@ -311,6 +319,11 @@ def run_and_log(lake, date):
             for d in res["diffs"]:
                 f.write(json.dumps({"date": date, "lake": lake,
                                     "source": res.get("source"), **d}) + "\n")
+        # durable record of the exact big-miss diff table shown in the HTML for this day
+        wd.log_event("diff_table", {
+            "lake": lake, "date": date, "source": res.get("source"),
+            "threshold_kn": LARGE_ERR_KN, "n_misses": len(res["large_misses"]),
+            "misses": res["large_misses"]}, stamp=date)
     return res
 
 

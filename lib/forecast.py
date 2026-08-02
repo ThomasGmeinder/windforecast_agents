@@ -42,6 +42,7 @@ COLD_POOL_DTHETA = 1.5  # K; Kochel-Walchensee dtheta above this = stable cold p
                         # (provisional pivot ~ dry-adiabatic 2.0 K minus margin; recalibrated by learn.py)
 N_MIN_OBS = 3           # matching days before a (regime×hour) correction is fully trusted/applied
 BIAS_CAP_KN = 8.0       # clamp on the learned bias so one anomalous day can't swing it
+BLEND_DISAGREE_KN = 6.0 # kn; range (max−min) across blend sources above this = notable disagreement
 
 
 def beaufort(kn):
@@ -220,14 +221,19 @@ def build_table(lake, target_date, run_stamp=None):
         # forecast VALUE = mean of SOURCES (equal weight): ICON-D2 EPS mean, ICON-D2
         # deterministic, ICON-EU, addicted-sports spot forecast.
         ens_s = [eh[m][i] for m in smembers if eh[m][i] is not None] if eh else []
-        srcs = ([sum(ens_s) / len(ens_s)] if ens_s else [])
+        blend = {}                                    # named contribution per source
+        if ens_s:
+            blend["eps"] = sum(ens_s) / len(ens_s)    # ICON-D2 ensemble mean
         if row.get("wind_speed_10m") is not None:
-            srcs.append(row["wind_speed_10m"])
+            blend["det"] = row["wind_speed_10m"]      # ICON-D2 deterministic point
         if euh and euh["wind_speed_10m"][i] is not None:
-            srcs.append(euh["wind_speed_10m"][i])
+            blend["eu"] = euh["wind_speed_10m"][i]    # ICON-EU
         if af.get("avg_kn") is not None:
-            srcs.append(af["avg_kn"])
+            blend["ads"] = af["avg_kn"]               # addicted-sports spot forecast
+        srcs = list(blend.values())
         raw_s = sum(srcs) / len(srcs) if srcs else (row.get("wind_speed_10m") or 0.0)
+        # cross-source disagreement (range) — exposed for the caller to log; no I/O here
+        blend_range = round(max(srcs) - min(srcs), 1) if len(srcs) >= 2 else None
         ens_g = [eh[m][i] for m in gmembers if eh[m][i] is not None] if eh else []
         gsrcs = ([sum(ens_g) / len(ens_g)] if ens_g else [])
         if row.get("wind_gusts_10m") is not None:
@@ -260,6 +266,8 @@ def build_table(lake, target_date, run_stamp=None):
             "bft": beaufort(cs), "regime": regime, "learned": learned,
             "dp": None if dp is None else round(dp, 1),
             "spread_kn": None if spread is None else round(spread, 1),
+            "blend_kn": {k: round(v, 1) for k, v in blend.items()},
+            "blend_range_kn": blend_range,
             "conf": conf, "foehn_note": foehn_note,
             "dtheta": feat.get("dtheta"),
             "foehn_grad": feat.get("foehn_gradient_hpa"),

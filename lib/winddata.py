@@ -338,6 +338,22 @@ def log_record(lake, kind, payload, path=None):
     return path
 
 
+EVENTS_LOG = os.path.join(LOG_DIR, "events.jsonl")
+
+
+def log_event(kind, payload, stamp=None):
+    """Append one notable event to the single events log (logs/events.jsonl).
+    kind ∈ {'blend_disagreement','analyst','diff_table'}. `stamp` is an ISO time
+    supplied by the caller (no Date.now() dependency, so it stays deterministic).
+    This is the single authority for the app's notable-event stream."""
+    rec = {"kind": kind, **payload}
+    if stamp is not None:
+        rec["stamp"] = stamp
+    with open(EVENTS_LOG, "a") as f:
+        f.write(json.dumps(rec) + "\n")
+    return EVENTS_LOG
+
+
 if __name__ == "__main__":
     print("self-test:")
     d = openmeteo_point(47.65, 11.35, ["wind_speed_10m", "wind_gusts_10m"])

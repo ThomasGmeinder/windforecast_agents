@@ -80,6 +80,12 @@ def main():
                                              "aggregate": res.get("agg"), "diffs": res.get("diffs")})
                 with open(os.path.join(ANALYST_DIR, f"{lake}_{yesterday}.json"), "w") as f:
                     json.dump({"lake": lake, "date": yesterday, "result": ares}, f, indent=2)
+                wd.log_event("analyst", {
+                    "lake": lake, "date": yesterday, "skipped": ares.get("skipped"),
+                    "n_proposals": len(ares.get("proposals", [])),
+                    "narrative": ares.get("narrative", ""),
+                    "proposals": ares.get("proposals", [])},
+                    stamp=now.isoformat(timespec="minutes"))
                 out.append(f"  analyst: skipped — {ares['skipped']}" if ares.get("skipped")
                            else f"  analyst: {len(ares.get('proposals', []))} proposal(s) — "
                                 f"{ares.get('narrative', '')[:120]}")
@@ -114,6 +120,17 @@ def main():
                         "dtheta": r.get("dtheta"), "foehn_grad": r.get("foehn_grad"),
                         "lapse": r.get("lapse")} for r in res["rows"]],
         })
+        # log hours where the blended source models disagree by more than the threshold
+        hits = [r for r in res["rows"]
+                if (r.get("blend_range_kn") or 0) > fc.BLEND_DISAGREE_KN]
+        if hits:
+            wd.log_event("blend_disagreement", {
+                "lake": lake, "date": today, "threshold_kn": fc.BLEND_DISAGREE_KN,
+                "hours": [{"hour": r["hour"], "range_kn": r["blend_range_kn"],
+                           "sources": r["blend_kn"], "regime": r["regime"]} for r in hits]},
+                stamp=now.isoformat(timespec="minutes"))
+            out.append(f"  ⚠ blend disagreement > {fc.BLEND_DISAGREE_KN:g} kn at "
+                       + ", ".join(f"{r['hour']:02d}h({r['blend_range_kn']:.0f})" for r in hits))
 
     report = "\n".join(out)
     with open(os.path.join(wd.LOG_DIR, "latest_report.txt"), "w") as f:

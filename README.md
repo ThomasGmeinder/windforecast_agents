@@ -292,9 +292,9 @@ caveats.
   1731 m → ~1456 m grid cell).
 - **`foehn_gradient_hpa` is logged and displayed but not yet a hard regime trigger**
   (MOSMIX Δp remains primary) until the learning calibrates it.
-- **Kochelsee actuals**: the on-lake `kochelsee/trimini` feed may lack a measured
-  station → falls back to DWD Garmisch (a distant valley proxy). Walchensee/Urfeld is
-  genuine on-lake truth.
+- **Kochelsee actuals**: the on-lake `kochelsee/trimini` feed provides genuine measured
+  wind (`mavg`/`mmax`/`dir`) and is used as truth; DWD Garmisch (a distant valley proxy)
+  is only a fallback if that feed is unavailable. Walchensee/Urfeld is on-lake truth too.
 - **Kochelsee terrain sectors** are inherited from Urfeld (provisional).
 - Residual error even after correction is ~1.0 m/s (valley) to ~1.5 m/s (ridge),
   worst in stable/thermal regimes — the forecast states confidence honestly and does
