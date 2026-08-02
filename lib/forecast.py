@@ -45,6 +45,23 @@ BIAS_CAP_KN = 8.0       # clamp on the learned bias so one anomalous day can't s
 BLEND_DISAGREE_KN = 6.0 # kn; range (max−min) across blend sources above this = notable disagreement
 
 
+def _quantiles(xs, levels=(10, 25, 50, 75, 90)):
+    """Empirical quantiles (linear interpolation, = numpy default) of a small sample,
+    as {"10":v,...}. None if fewer than 3 points. Kept dependency-free so the core
+    engine needs no numpy; the predictive deciles are persisted for CRPS scoring."""
+    s = sorted(xs)
+    n = len(s)
+    if n < 3:
+        return None
+    out = {}
+    for p in levels:
+        r = (p / 100.0) * (n - 1)
+        lo = int(r)
+        v = s[lo] if lo + 1 >= n else s[lo] + (r - lo) * (s[lo + 1] - s[lo])
+        out[str(p)] = round(v, 1)
+    return out
+
+
 def beaufort(kn):
     lim = [1, 4, 7, 11, 17, 22, 28, 34, 41, 48, 56, 64]
     b = 0
@@ -250,6 +267,13 @@ def build_table(lake, target_date, run_stamp=None):
         if len(ens_s) > 2:
             m_ = sum(ens_s) / len(ens_s)
             spread = (sum((x - m_) ** 2 for x in ens_s) / len(ens_s)) ** 0.5
+        # predictive deciles for CRPS scoring: take the ensemble's SHAPE/spread but recenter
+        # on the ISSUED (blended, bias-corrected) mean cs, so the distribution we score is the
+        # forecast we actually publish — not the ensemble-only distribution. None if no ensemble.
+        q_kn = _quantiles(ens_s)
+        if q_kn is not None:
+            shift = cs - sum(ens_s) / len(ens_s)
+            q_kn = {k: round(v + shift, 1) for k, v in q_kn.items()}
         conf = _confidence(regime, spread, learned)
         foehn_note = None
         if regime == "foehn":                       # föhn: SE reliable, SW weak; confirm at Peißenberg
@@ -266,6 +290,7 @@ def build_table(lake, target_date, run_stamp=None):
             "bft": beaufort(cs), "regime": regime, "learned": learned,
             "dp": None if dp is None else round(dp, 1),
             "spread_kn": None if spread is None else round(spread, 1),
+            "q_kn": q_kn,
             "blend_kn": {k: round(v, 1) for k, v in blend.items()},
             "blend_range_kn": blend_range,
             "conf": conf, "foehn_note": foehn_note,
