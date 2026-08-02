@@ -12,6 +12,7 @@ Units: Open-Meteo is queried in knots, so everything here is in knots.
 import os, sys, json
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import winddata as wd
+import postproc
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODELS_DIR = os.path.join(ROOT, "models")
@@ -135,12 +136,12 @@ def apply_bias(bias, regime, hour, speed_kn, gust_kn):
     n = (b or {}).get("n", 0)
     if not b or n < 1:
         return speed_kn, gust_kn, False
-    conf = min(1.0, n / N_MIN_OBS)                                  # evidence ramp
-    bkn = max(-BIAS_CAP_KN, min(BIAS_CAP_KN, b.get("bias_kn", 0.0)))
-    cs = max(0.0, speed_kn + bkn * conf)
-    gr = 1.0 + (b.get("gust_ratio", 1.0) - 1.0) * conf
+    conf = min(1.0, n / N_MIN_OBS)                                  # ramp the APPLIED correction by evidence
+    cs_full = postproc.apply(b, speed_kn, BIAS_CAP_KN)              # corrected = a + b·raw, capped
+    cs = speed_kn + conf * (cs_full - speed_kn)                     # one day barely moves it; full after N_MIN_OBS
+    gr = 1.0 + (b.get("gust_ratio", 1.0) - 1.0) * conf             # gust: shrunk multiplicative factor
     cg = max(cs, gust_kn * gr)
-    return round(cs, 1), round(cg, 1), n >= N_MIN_OBS              # "calibrated" only once trusted
+    return round(cs, 1), round(cg, 1), n >= N_MIN_OBS
 
 
 # ------------------------------------------------------------- build a table
@@ -166,13 +167,19 @@ def build_table(lake, target_date, run_stamp=None):
     lat, lon, label, alpine = LAKES[lake]
     pt = wd.openmeteo_point(lat, lon, OM_VARS, models="icon_d2", forecast_days=3)
     h = pt["hourly"]
-    # ensemble spread per hour (icon_d2 ensemble)
+    # multi-member / multi-model inputs so the VALUE is an average, not one run
     try:
-        ens = wd.openmeteo_ensemble(lat, lon, ["wind_speed_10m"], forecast_days=3)
+        ens = wd.openmeteo_ensemble(lat, lon, ["wind_speed_10m", "wind_gusts_10m"], forecast_days=3)
         eh = ens["hourly"]
-        members = [k for k in eh if k.startswith("wind_speed_10m")]
+        smembers = [k for k in eh if k.startswith("wind_speed_10m")]
+        gmembers = [k for k in eh if k.startswith("wind_gusts_10m")]
     except Exception:
-        eh, members = None, []
+        eh, smembers, gmembers = None, [], []
+    try:  # ICON-EU as an independent second model in the blend
+        euh = wd.openmeteo_point(lat, lon, ["wind_speed_10m", "wind_gusts_10m"],
+                                 models="icon_eu", forecast_days=3)["hourly"]
+    except Exception:
+        euh = None
     # foehn dp series (align by ISO hour prefix)
     try:
         dp_series = {r["time"][:13]: r["dp"] for r in wd.foehn_delta_p()}
@@ -202,17 +209,28 @@ def build_table(lake, target_date, run_stamp=None):
         row = {v: h[v][i] for v in OM_VARS}
         dp = dp_series.get(t[:13])
         feat = {**drivers.get(hour, {}), **stab.get(hour, {})}
+        # forecast VALUE = mean of all members (ICON-D2 EPS + deterministic + ICON-EU)
+        ens_s = [eh[m][i] for m in smembers if eh[m][i] is not None] if eh else []
+        sv = list(ens_s)
+        if row.get("wind_speed_10m") is not None:
+            sv.append(row["wind_speed_10m"])                    # ICON-D2 deterministic
+        if euh and euh["wind_speed_10m"][i] is not None:
+            sv.append(euh["wind_speed_10m"][i])                 # ICON-EU
+        raw_s = sum(sv) / len(sv) if sv else (row.get("wind_speed_10m") or 0.0)
+        gv = [eh[m][i] for m in gmembers if eh[m][i] is not None] if eh else []
+        if row.get("wind_gusts_10m") is not None:
+            gv.append(row["wind_gusts_10m"])
+        if euh and euh["wind_gusts_10m"][i] is not None:
+            gv.append(euh["wind_gusts_10m"][i])
+        raw_g = sum(gv) / len(gv) if gv else (row.get("wind_gusts_10m") or raw_s)
+        row["wind_speed_10m"] = raw_s   # regime's calm/cold-pool check uses the blended value
         regime = classify_regime(lake, hour, row, dp, feat)
-        raw_s = row["wind_speed_10m"] or 0.0
-        raw_g = row["wind_gusts_10m"] or raw_s
         cs, cg, learned = apply_bias(bias, regime, hour, raw_s, raw_g)
-        # ensemble spread
+        # ensemble spread (uncertainty) from the EPS members only
         spread = None
-        if eh and members:
-            vals = [eh[m][i] for m in members if eh[m][i] is not None]
-            if len(vals) > 2:
-                mean = sum(vals) / len(vals)
-                spread = (sum((x - mean) ** 2 for x in vals) / len(vals)) ** 0.5
+        if len(ens_s) > 2:
+            m_ = sum(ens_s) / len(ens_s)
+            spread = (sum((x - m_) ** 2 for x in ens_s) / len(ens_s)) ** 0.5
         rows.append({
             "hour": hour, "dir": row["wind_direction_10m"],
             "raw_kn": round(raw_s, 1), "raw_gust_kn": round(raw_g, 1),

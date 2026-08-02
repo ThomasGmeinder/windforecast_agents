@@ -24,6 +24,7 @@ import os, sys, json, datetime
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import winddata as wd
 import forecast as fc
+import postproc
 
 LEARN_DIR = os.path.join(wd.LOG_DIR, "learning")
 os.makedirs(LEARN_DIR, exist_ok=True)
@@ -161,28 +162,20 @@ def update_from_day(lake, date):
         rr = by_regime.setdefault(regime, {"n": 0, "sum": 0.0})
         rr["n"] += 1; rr["sum"] += err_issued
 
-        # ---- update the mechanism (EWMA on RAW error), record before -> after ----
+        # ---- update the RLS regression (corrected = a + b·raw), record before -> after ----
         key = fc._bucket_key(regime, hour)
-        b = buckets.setdefault(key, {"n": 0, "bias_kn": 0.0, "gust_ratio": 1.0, "mae_kn": 0.0})
-        before = dict(b)
-        model_err = act - raw
-        # EWMA toward the day's error, ALWAYS starting from 0 (no full-error jump on
-        # day 1) and capped — so the bias converges to the AVERAGE systematic error
-        # over many days and a single outlier day moves it only ~alpha of the error.
-        b["bias_kn"] = round((1 - alpha) * before["bias_kn"] + alpha * model_err, 2)
-        b["bias_kn"] = max(-fc.BIAS_CAP_KN, min(fc.BIAS_CAP_KN, b["bias_kn"]))
-        resid = abs(act - (raw + before["bias_kn"]))
-        b["mae_kn"] = round(abs(model_err) if before["n"] == 0
-                            else (1 - alpha) * before["mae_kn"] + alpha * resid, 2)
-        if rg and rg > 0:
-            b["gust_ratio"] = round((1 - alpha) * before["gust_ratio"] + alpha * (actg / rg), 2)
-        b["n"] += 1
+        st = buckets.setdefault(key, postproc.new_state())
+        a0, b0, n0, gr0 = st["a"], st["b"], st["n"], st.get("gust_ratio", 1.0)
+        postproc.update(st, raw, act)  # updates a, b, covariance, n, mae in place
+        if rg and rg > 0:              # gust: shrunk multiplicative factor (kept as EWMA)
+            ratio = actg / rg
+            st["gust_ratio"] = round(ratio if n0 == 0 else (1 - alpha) * gr0 + alpha * ratio, 2)
         bucket_updates.append({
             "key": key, "regime": regime, "hour": hour,
-            "raw_kn": raw, "actual_kn": act, "model_err_kn": round(model_err, 2),
-            "bias_before": round(before["bias_kn"], 2), "bias_after": round(b["bias_kn"], 2),
-            "gust_ratio_before": round(before["gust_ratio"], 2), "gust_ratio_after": round(b["gust_ratio"], 2),
-            "n_after": b["n"]})
+            "raw_kn": raw, "actual_kn": act, "model_err_kn": round(act - raw, 2),
+            "a_before": round(a0, 2), "a_after": st["a"], "b_before": round(b0, 2), "b_after": st["b"],
+            "gust_ratio_before": round(gr0, 2), "gust_ratio_after": st.get("gust_ratio", 1.0),
+            "n_after": st["n"]})
 
     for reg, d in by_regime.items():
         d["mbe_kn"] = round(d["sum"] / d["n"], 2)
@@ -213,21 +206,16 @@ def update_from_day(lake, date):
             continue
         under = d["err_issued_kn"] < 0  # err = forecast − measured; <0 ⇒ under-predicted
         bu = bmap.get(fc._bucket_key(d["regime"], d["hour"]), {})
-        after = bu.get("bias_after")
         n_after = bu.get("n_after") or 0
+        a_a, b_a = bu.get("a_after"), bu.get("b_after")
         explanation = (f"{'under' if under else 'over'}-predicted — forecast "
                        f"{d['issued_kn']} kn vs measured {d['actual_kn']} kn ({d['err_issued_kn']:+} kn)")
         lesson = (f"the model may {'underplay' if under else 'overplay'} the "
                   f"'{d['regime']}' regime around {d['hour']:02d}:00 — one day is weak evidence")
-        if after is None:
-            how = "logged as a single observation; corrections only build from repeated days"
-        else:
-            applied = int(100 * min(1.0, n_after / fc.N_MIN_OBS))
-            how = (f"the (regime×hour) bias moved {bu.get('bias_before')}→{after} kn — a "
-                   f"{int(alpha*100)}% EWMA step toward this day's error (capped ±{fc.BIAS_CAP_KN:g}), "
-                   f"converging to the AVERAGE error over days, not this one day. Only ~{applied}% applied "
-                   f"so far ({n_after} obs; full weight after {fc.N_MIN_OBS}), so one outlier barely shifts "
-                   f"the forecast")
+        how = (f"the correction for ({d['regime']}×{d['hour']:02d}h) is a regression "
+               f"corrected = {a_a:+.1f} + {b_a:.2f}·model — it **scales with** the model's own wind "
+               f"(so it can't double-count or blindly add a fixed amount), refined recursively over "
+               f"days ({n_after} obs; full weight after {fc.N_MIN_OBS})")
         large_misses.append({"hour": d["hour"], "regime": d["regime"], "issued_kn": d["issued_kn"],
                              "actual_kn": d["actual_kn"], "err_kn": d["err_issued_kn"],
                              "explanation": explanation, "lesson": lesson, "how_applied": how})
@@ -297,17 +285,18 @@ def format_report(res):
                      "; ".join(f"{d['hour']:02d}h {d['regime']}→{d['actual_regime']} "
                                f"({fc.compass(d['dir_actual'])})" for d in mism[:8]))
     L += ["", "**3. Lessons learned**"] + [f"- {x}" for x in res["lessons"]]
-    L += ["", "**4. How the prediction mechanism was updated** (EWMA α=0.3, per regime×hour)",
+    L += ["", "**4. How the prediction mechanism was updated** "
+          "(RLS regression `corrected = a + b·model`, per regime×hour)",
           "```",
-          " bucket        | model_err | bias: before -> after | gustR: before -> after | n",
-          " --------------|-----------|-----------------------|------------------------|--"]
+          " bucket        | model_err |   a: before->after |   b: before->after | n",
+          " --------------|-----------|--------------------|--------------------|--"]
     for u in res["bucket_updates"]:
         L.append(f" {u['key']:<13} | {u['model_err_kn']:>+8.2f}  | "
-                 f"{u['bias_before']:>+6.2f} -> {u['bias_after']:>+6.2f}      | "
-                 f"{u['gust_ratio_before']:>5.2f} -> {u['gust_ratio_after']:>5.2f}          | {u['n_after']}")
+                 f"{u['a_before']:>+5.2f} -> {u['a_after']:>+5.2f}   | "
+                 f"{u['b_before']:>4.2f} -> {u['b_after']:>4.2f}    | {u['n_after']}")
     L.append("```")
-    L.append(f"_Result: today's forecast adds these per-(regime×hour) biases to the raw model. "
-             f"Model now holds {res['buckets_total']} calibrated buckets._")
+    L.append(f"_The correction **scales with** the model (b·model) rather than adding a flat offset, "
+             f"so it neither double-counts nor over-adds. {res['buckets_total']} calibrated buckets._")
     return "\n".join(L)
 
 
