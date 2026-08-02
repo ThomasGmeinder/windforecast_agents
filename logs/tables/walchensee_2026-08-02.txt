@@ -18,7 +18,7 @@ Walchensee — 2026-08-02
   14   | N    |     5.5 (2) |  10.3   | thermal  | med  | raw (no local calib yet) Δθ-0.8
   15   | N    |     6.4 (2) |   8.7   | thermal  | med  | raw (no local calib yet) Δθ-0.7
   16   | NNW  |     6.9 (2) |   9.3   | thermal  | med  | raw (no local calib yet) Δθ-0.6
-  17   | NNW  |     5.8 (2) |  10.7   | gradient | low  | raw (no local calib yet)
+  17   | NNW  |     5.8 (2) |  10.7   | gradient | med  | raw (no local calib yet)
   18   | SSW  |    24.3 (6) |  37.9   | gradient | low  | raw (no local calib yet)
   19   | SSW  |     4.3 (2) |  71.3   | gradient | low  | raw (no local calib yet)
   20   | NNE  |     1.6 (1) |   6.8   | calm     | med  | glassy Δθ-1.9

@@ -1,4 +1,4 @@
-=== Bavarian lake wind — daily run 2026-08-02 10:40  ===
+=== Bavarian lake wind — daily run 2026-08-02 11:14  ===
 forecast day: 2026-08-02   |   learning from: 2026-08-01
 
 ========================================================================
@@ -46,29 +46,29 @@ Kochelsee — 2026-08-02
   dominant thermal; peak 12 kn (4 Bft) SSE ~19h
   Hour | Dir  | Mean kn (Bft) | Gust kn | Regime   | Conf | Note
   00   | SE   |     3.4 (1) |   5.0   | gradient | med  | raw (no local calib yet)
-  01   | NNE  |     1.8 (1) |   3.5   | calm     | med  | cold-pool capped Δθ+2.5
+  01   | NNE  |     1.8 (1) |   3.5   | calm     | med  | glassy
   02   | ENE  |     3.2 (1) |   4.9   | gradient | med  | raw (no local calib yet)
   03   | ENE  |     1.9 (1) |   3.6   | gradient | med  | raw (no local calib yet)
-  04   | NE   |     1.4 (1) |   3.7   | calm     | med  | cold-pool capped Δθ+3.3
-  05   | NE   |     0.3 (0) |   4.7   | calm     | med  | cold-pool capped Δθ+3.4
-  06   | SE   |     1.6 (1) |   2.9   | calm     | med  | cold-pool capped Δθ+3.2
-  07   | N    |     1.8 (1) |   3.4   | calm     | med  | cold-pool capped Δθ+3.2
+  04   | NE   |     1.4 (1) |   3.7   | calm     | med  | glassy
+  05   | NE   |     0.3 (0) |   4.7   | calm     | med  | glassy
+  06   | SE   |     1.6 (1) |   2.9   | calm     | med  | glassy
+  07   | N    |     1.8 (1) |   3.4   | calm     | med  | glassy
   08   | N    |     2.2 (1) |   4.1   | gradient | med  | raw (no local calib yet)
-  09   | NNW  |     1.7 (1) |   4.3   | calm     | med  | cold-pool capped Δθ+1.9
-  10   | N    |     2.7 (1) |   6.5   | thermal  | med  | raw (no local calib yet) Δθ+1.2
+  09   | NNW  |     1.7 (1) |   4.3   | calm     | med  | glassy
+  10   | N    |     2.7 (1) |   6.5   | thermal  | med  | raw (no local calib yet)
   11   | N    |     2.2 (1) |   6.9   | gradient | med  | raw (no local calib yet)
   12   | N    |     4.4 (2) |   8.9   | gradient | med  | raw (no local calib yet)
-  13   | N    |     5.5 (2) |  10.5   | thermal  | med  | raw (no local calib yet) Δθ-0.7
-  14   | N    |     6.3 (2) |   8.9   | thermal  | med  | raw (no local calib yet) Δθ-0.8
-  15   | NNE  |     8.1 (3) |  11.1   | thermal  | med  | raw (no local calib yet) Δθ-0.7
-  16   | NNE  |     7.8 (3) |  11.1   | thermal  | med  | raw (no local calib yet) Δθ-0.6
+  13   | N    |     5.5 (2) |  10.5   | thermal  | med  | raw (no local calib yet)
+  14   | N    |     6.3 (2) |   8.9   | thermal  | med  | raw (no local calib yet)
+  15   | NNE  |     8.1 (3) |  11.1   | thermal  | med  | raw (no local calib yet)
+  16   | NNE  |     7.8 (3) |  11.1   | thermal  | med  | raw (no local calib yet)
   17   | NE   |     6.9 (2) |  12.2   | gradient | med  | raw (no local calib yet)
   18   | NE   |     2.3 (1) |  14.0   | gradient | low  | raw (no local calib yet)
-  19   | SSE  |    12.5 (4) |  48.3   | gradient | med  | raw (no local calib yet)
+  19   | SSE  |    12.5 (4) |  48.3   | gradient | low  | raw (no local calib yet)
   20   | S    |     6.3 (2) |  18.7   | gradient | med  | raw (no local calib yet)
-  21   | SE   |     1.1 (1) |  10.1   | calm     | med  | glassy Δθ-0.9
-  22   | NNE  |     1.5 (1) |   2.7   | calm     | med  | cold-pool capped Δθ+1.8
-  23   | NNW  |     1.2 (1) |   2.9   | calm     | med  | cold-pool capped Δθ+2.1
+  21   | SE   |     1.1 (1) |  10.1   | calm     | med  | glassy
+  22   | NNE  |     1.5 (1) |   2.7   | calm     | med  | glassy
+  23   | NNW  |     1.2 (1) |   2.9   | calm     | med  | glassy
 
 Walchensee — 2026-08-02
   dominant thermal; peak 24 kn (6 Bft) SSW ~18h
@@ -90,7 +90,7 @@ Walchensee — 2026-08-02
   14   | N    |     5.5 (2) |  10.3   | thermal  | med  | raw (no local calib yet) Δθ-0.8
   15   | N    |     6.4 (2) |   8.7   | thermal  | med  | raw (no local calib yet) Δθ-0.7
   16   | NNW  |     6.9 (2) |   9.3   | thermal  | med  | raw (no local calib yet) Δθ-0.6
-  17   | NNW  |     5.8 (2) |  10.7   | gradient | low  | raw (no local calib yet)
+  17   | NNW  |     5.8 (2) |  10.7   | gradient | med  | raw (no local calib yet)
   18   | SSW  |    24.3 (6) |  37.9   | gradient | low  | raw (no local calib yet)
   19   | SSW  |     4.3 (2) |  71.3   | gradient | low  | raw (no local calib yet)
   20   | NNE  |     1.6 (1) |   6.8   | calm     | med  | glassy Δθ-1.9
