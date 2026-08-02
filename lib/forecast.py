@@ -205,6 +205,30 @@ def apply_bias(bias, regime, hour, speed_kn, gust_kn):
     return round(cs, 1), round(cg, 1), n >= N_MIN_OBS
 
 
+# ------------------------------------------------- the single regime+correction path
+def replay_hour(lake, hour, row, dp, feat, raw_s, raw_g, params=None, bias=None):
+    """Pure per-hour core: classify the regime, then apply the learned correction.
+    Returns (regime, corrected_speed, corrected_gust, learned).
+
+    THE single authority for "raw model + inputs -> issued forecast": used by
+    build_table for the live run AND by verify.backtest to replay past days under a
+    candidate parameter set, so a backtest can never drift from what production does."""
+    regime = classify_regime(lake, hour, row, dp, feat, params)
+    cs, cg, learned = apply_bias(bias or {}, regime, hour, raw_s, raw_g)
+    return regime, cs, cg, learned
+
+
+def row_from_logged(h):
+    """Rebuild the classification `row` from a LOGGED forecast hour (the inverse of the
+    'inputs' block daily_run persists). Keeps the field mapping in one place."""
+    inp = h.get("inputs") or {}
+    return {"wind_speed_925hPa": inp.get("spd925"),
+            "wind_speed_850hPa": inp.get("spd850"),
+            "wind_direction_850hPa": inp.get("dir850"),
+            "cloud_cover": inp.get("cloud"),
+            "wind_speed_10m": h.get("raw_kn")}
+
+
 # ------------------------------------------------------------- build a table
 def _confidence(regime, spread_kn, learned):
     # ensemble spread (kn) -> base label; foehn/fallwind capped; learned nudges up
@@ -304,8 +328,8 @@ def build_table(lake, target_date, run_stamp=None):
             gsrcs.append(af["boe_kn"])
         raw_g = sum(gsrcs) / len(gsrcs) if gsrcs else (row.get("wind_gusts_10m") or raw_s)
         row["wind_speed_10m"] = raw_s
-        regime = classify_regime(lake, hour, row, dp, feat)
-        cs, cg, learned = apply_bias(bias, regime, hour, raw_s, raw_g)
+        regime, cs, cg, learned = replay_hour(lake, hour, row, dp, feat, raw_s, raw_g,
+                                              params=PARAMS, bias=bias)
         spread = None
         if len(ens_s) > 2:
             m_ = sum(ens_s) / len(ens_s)

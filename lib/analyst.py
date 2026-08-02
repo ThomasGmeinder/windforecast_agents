@@ -27,27 +27,45 @@ _CA = "/etc/ssl/certs/ca-certificates.crt"
 SYSTEM = (
     "You tune a deterministic wind-forecaster for two coupled Bavarian lakes "
     "(Kochelsee ~604 m, Walchensee ~800 m, joined by the Kesselberg). Each day you "
-    "receive yesterday's per-hour forecast-vs-measured wind errors, the regime the "
-    "forecaster assigned each hour (foehn / thermal / gradient / calm), and its "
-    "current tunable parameters. Diagnose the main error patterns and their likely "
+    "receive: a MULTI-DAY window of per-hour forecast-vs-measured wind errors, the "
+    "regime the forecaster assigned each hour (foehn / thermal / gradient / calm), the "
+    "learned per-(regime x hour) regression state, the current tunable parameters, the "
+    "objective CRPS verification scorecard, and — critically — YOUR OWN PAST PROPOSALS "
+    "with what actually happened to the error since.\n\n"
+    "Work in two steps.\n"
+    "STEP 1 — JUDGE YOURSELF. For every entry in open_hypotheses, compare what you "
+    "expected against the measured outcome (crps_before vs crps_after). Emit one review "
+    "per entry with verdict 'confirmed' (it helped, or the evidence supports keeping it) "
+    "or 'retracted' (it did not help, or the evidence contradicts it). Be willing to "
+    "retract: a wrong hypothesis you drop is worth more than one you defend. If the "
+    "evidence is too thin to tell, say so in the reasoning and retract.\n"
+    "STEP 2 — PROPOSE. Diagnose the main remaining error patterns and their likely "
     "PHYSICAL cause — thermal onset timing, foehn breakthrough, cold-pool capping "
-    "(Kochel-Walchensee Δθ), or terrain-channelled wind direction — then propose AT "
-    "MOST 2 small numeric parameter changes that would reduce the error. Every "
-    "proposal must name an existing parameter, give a concrete new value, and a "
-    "one-line rationale. Be conservative: each change is backtested on held-out days "
-    "before it is ever applied, so prefer small, well-justified steps."
+    "(Kochel-Walchensee dtheta), or terrain-channelled wind direction — then propose AT "
+    "MOST 2 small numeric parameter changes. Every proposal must name an existing "
+    "parameter, give a concrete new value, a one-line rationale, and expected_effect "
+    "(what measurable change you predict, so you can be held to it next time). Do not "
+    "re-propose something you just retracted. Be conservative: each change is backtested "
+    "on held-out days against CRPS and is only applied if it verifiably helps, so prefer "
+    "small, well-justified steps."
 )
 
 RESPONSE_SCHEMA = {
     "type": "object",
     "properties": {
         "narrative": {"type": "string"},
+        "reviews": {"type": "array", "items": {"type": "object", "properties": {
+            "id": {"type": "string"}, "verdict": {"type": "string",
+                                                  "enum": ["confirmed", "retracted"]},
+            "reasoning": {"type": "string"}},
+            "required": ["id", "verdict", "reasoning"]}},
         "diagnosis": {"type": "array", "items": {"type": "object", "properties": {
             "pattern": {"type": "string"}, "cause": {"type": "string"}},
             "required": ["pattern", "cause"]}},
         "proposals": {"type": "array", "items": {"type": "object", "properties": {
             "param": {"type": "string"}, "proposed": {"type": "number"},
-            "rationale": {"type": "string"}}, "required": ["param", "proposed", "rationale"]}},
+            "rationale": {"type": "string"}, "expected_effect": {"type": "string"}},
+            "required": ["param", "proposed", "rationale"]}},
     },
     "required": ["narrative", "proposals"],
 }

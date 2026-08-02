@@ -200,6 +200,69 @@ def _summarize(lake, recs):
     }
 
 
+def mean_crps(recs, since=None, until=None):
+    """Mean CRPS over scored records, optionally restricted to [since, until).
+    Single authority for 'how good were we over this window' — used to measure whether
+    an analyst hypothesis actually helped after it was issued."""
+    xs = [r["crps"] for r in recs if r.get("crps") is not None
+          and (since is None or r["date"] >= since)
+          and (until is None or r["date"] < until)]
+    return sum(xs) / len(xs) if xs else None
+
+
+# ---------------------------------------------------------------- backtest (B2)
+N_MIN_BACKTEST_DAYS = 10   # replayable days required before a change may be APPLIED
+
+
+def backtest(lake, param, value, forecasts=None, actuals=None, params=None, bias=None):
+    """Replay every logged day under `param=value` and score it against the measured
+    wind, versus replaying the same days under the CURRENT parameters.
+
+    Returns {"crps_current","crps_candidate","crps_ss","n_days","n_pairs","enough_data"}.
+    crps_ss > 0 means the candidate genuinely reduced error out of sample. Only days
+    whose hours carry the persisted classification `inputs` can be replayed — older
+    point-only rows are skipped, and n_days reports how many actually counted."""
+    forecasts = _load_forecasts(lake) if forecasts is None else forecasts
+    actuals = _load_actuals(lake) if actuals is None else actuals
+    base = dict(params or fc.PARAMS)
+    if param not in base:
+        return {"error": f"unknown param {param}"}
+    cand = dict(base)
+    cand[param] = value
+    bias = fc.load_bias(lake) if bias is None else bias
+
+    cur_scores, cand_scores, days = [], [], set()
+    for date in sorted(forecasts):
+        if date not in actuals:
+            continue
+        for hour, h in forecasts[date].items():
+            if hour not in actuals[date] or not h.get("inputs"):
+                continue                       # not replayable (pre-capture row)
+            y = actuals[date][hour]
+            raw_s, raw_g = h.get("raw_kn"), h.get("raw_gust_kn")
+            if raw_s is None:
+                continue
+            row = fc.row_from_logged(h)
+            feat = {"dtheta": h.get("dtheta")}
+            dp = h.get("dp")
+            _, cs0, _, _ = fc.replay_hour(lake, hour, row, dp, feat, raw_s, raw_g or raw_s,
+                                          params=base, bias=bias)
+            _, cs1, _, _ = fc.replay_hour(lake, hour, row, dp, feat, raw_s, raw_g or raw_s,
+                                          params=cand, bias=bias)
+            cur_scores.append(abs(cs0 - y))    # point replay -> CRPS == absolute error
+            cand_scores.append(abs(cs1 - y))
+            days.add(date)
+    if not cur_scores:
+        return {"crps_current": None, "crps_candidate": None, "crps_ss": None,
+                "n_days": 0, "n_pairs": 0, "enough_data": False}
+    c0 = sum(cur_scores) / len(cur_scores)
+    c1 = sum(cand_scores) / len(cand_scores)
+    return {"crps_current": round(c0, 3), "crps_candidate": round(c1, 3),
+            "crps_ss": (round(1 - c1 / c0, 4) if c0 else None),
+            "n_days": len(days), "n_pairs": len(cur_scores),
+            "enough_data": len(days) >= N_MIN_BACKTEST_DAYS}
+
+
 # ---------------------------------------------------------------- reporting
 def _f(x, nd=2):
     return "n/a" if x is None else f"{x:.{nd}f}"
@@ -296,6 +359,56 @@ def _selftest_discrimination():
     return sg, sb
 
 
+def _synthetic_replayable(n_days=12):
+    """Days where the RIGHT answer is known: hours at cloud 42 truly behave like
+    'gradient' (measured = 2x raw), hours at cloud 36 truly behave like 'thermal'
+    (measured = raw). With THERMAL_CLOUD_MAX=45 both are called thermal, so the
+    cloud-42 hours are mis-corrected. Lowering the threshold to 38 fixes exactly those;
+    lowering it to 34 also breaks the cloud-36 hours. A correct backtest must rank
+    38 as better and 34 as worse."""
+    import postproc
+    RAW = 4.0
+    hours = {13: 42, 10: 36, 11: 36, 12: 36}      # hour -> cloud%  (1 'gradient', 3 'thermal')
+    bias = {"buckets": {}}
+    for h in hours:
+        for reg, b in (("thermal", 1.0), ("gradient", 2.0)):
+            st = postproc.new_state()
+            st.update(n=5, a=0.0, b=b)
+            bias["buckets"][f"{reg}|{h:02d}"] = st
+    forecasts, actuals = {}, {}
+    for k in range(n_days):
+        d = (datetime.date(2026, 5, 1) + datetime.timedelta(days=k)).isoformat()
+        forecasts[d], actuals[d] = {}, {}
+        for h, cloud in hours.items():
+            forecasts[d][h] = {"hour": h, "raw_kn": RAW, "raw_gust_kn": RAW * 2,
+                               "mean_kn": RAW, "dtheta": 0.0, "dp": 0.0,
+                               "inputs": {"spd925": 3.0, "spd850": 2.0,
+                                          "dir850": 10, "cloud": cloud}}
+            actuals[d][h] = RAW * (2.0 if cloud == 42 else 1.0)
+    return forecasts, actuals, bias
+
+
+def _selftest_backtest():
+    forecasts, actuals, bias = _synthetic_replayable()
+    base = dict(fc._DEFAULTS)
+    good = backtest("walchensee", "THERMAL_CLOUD_MAX", 38, forecasts, actuals, base, bias)
+    bad = backtest("walchensee", "THERMAL_CLOUD_MAX", 34, forecasts, actuals, base, bias)
+    assert good["crps_ss"] is not None and good["crps_ss"] > 0, good
+    assert bad["crps_ss"] is not None and bad["crps_ss"] < 0, bad
+    assert good["enough_data"] and good["n_days"] == 12, good
+    # a change with no replayable history must be honestly reported as insufficient
+    thin_f = {k: forecasts[k] for k in sorted(forecasts)[:3]}
+    thin_a = {k: actuals[k] for k in sorted(actuals)[:3]}
+    thin = backtest("walchensee", "THERMAL_CLOUD_MAX", 38, thin_f, thin_a, base, bias)
+    assert not thin["enough_data"] and thin["n_days"] == 3, thin
+    # rows without captured inputs are skipped rather than silently mis-scored
+    noinp = {d: {h: {kk: vv for kk, vv in hr.items() if kk != "inputs"}
+                 for h, hr in hh.items()} for d, hh in forecasts.items()}
+    empty = backtest("walchensee", "THERMAL_CLOUD_MAX", 38, noinp, actuals, base, bias)
+    assert empty["n_pairs"] == 0 and not empty["enough_data"], empty
+    return good, bad, thin
+
+
 def _selftest_realdata():
     for lake in fc.LAKES:
         sc = evaluate(lake)
@@ -319,8 +432,13 @@ if __name__ == "__main__":
               f"(good CRPS {g['crps']:.2f} < bad {b['crps']:.2f}; "
               f"good SS vs climo {g['ss_clim']:+.2f} / persist {g['ss_pers']:+.2f}; "
               f"bad SS vs climo {b['ss_clim']:+.2f})")
+        gd, bd, th = _selftest_backtest()
+        print(f"C. backtest gate .............. PASS  "
+              f"(good param SS {gd['crps_ss']:+.2f} over {gd['n_days']}d; "
+              f"bad param SS {bd['crps_ss']:+.2f}; thin history correctly "
+              f"'{'insufficient' if not th['enough_data'] else 'ENOUGH?!'}')")
         _selftest_realdata()
-        print("C. real-data honesty .......... PASS")
+        print("D. real-data honesty .......... PASS")
         print("ALL SELF-TESTS PASSED")
     else:
         for lake in (list(fc.LAKES) if arg == "all" else [arg]):

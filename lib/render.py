@@ -212,7 +212,8 @@ def _forecast_card(rec):
 
 
 def _analyst_block(lake):
-    """The latest advisory LLM-analyst proposal for a lake (from logs/analyst/)."""
+    """The latest self-tuning cycle for a lake: what it reviewed, proposed, and whether
+    the backtest gate let anything through (from logs/analyst/)."""
     files = sorted(glob.glob(os.path.join(wd.LOG_DIR, "analyst", f"{lake}_*.json")))
     if not files:
         return ""
@@ -221,22 +222,73 @@ def _analyst_block(lake):
     except Exception:
         return ""
     r = d.get("result", {})
-    if not isinstance(r, dict) or r.get("skipped") or not r.get("proposals"):
+    if not isinstance(r, dict) or r.get("skipped"):
         return ""
-    props = "".join(
-        f"<li><code>{html.escape(str(p.get('param')))}</code> → "
-        f"<b>{html.escape(str(p.get('proposed')))}</b> — {html.escape(str(p.get('rationale', '')))}</li>"
-        for p in r.get("proposals", []))
-    return (f'<div class="analyst"><b>🧠 Analyst (advisory · {html.escape(str(d.get("date", "")))}):</b> '
-            f'{html.escape(str(r.get("narrative", "")))}'
-            + (f'<ul>{props}</ul>' if props else '')
-            + '<div class="muted" style="margin-top:4px">Proposals are advisory — the backtest gate '
-              'validates any change before it is applied.</div></div>')
+    if not (r.get("proposals") or r.get("reviewed") or r.get("applied")):
+        return ""
+    esc = lambda x: html.escape(str(x))
+    parts = []
+    for v in r.get("reviewed", []):
+        verd = v.get("verdict", "")
+        parts.append(f'<li>↺ <b>{esc(verd)}</b> its earlier hypothesis '
+                     f'<code>{esc(v.get("id", ""))}</code></li>')
+    for p in r.get("proposals", []):
+        parts.append(f'<li><code>{esc(p.get("param"))}</code> → <b>{esc(p.get("proposed"))}</b>'
+                     f' — {esc(p.get("rationale", ""))}</li>')
+    for a in r.get("applied", []):
+        parts.append(f'<li>✔ <b>applied</b> <code>{esc(a.get("param"))}</code>: '
+                     f'{esc(a.get("from"))} → {esc(a.get("to"))} ({esc(a.get("reason"))})</li>')
+    for x in r.get("refused", []):
+        parts.append(f'<li>✗ held back <code>{esc(x.get("param"))}</code>='
+                     f'{esc(x.get("proposed"))} — {esc(x.get("reason"))}</li>')
+    n_app = len(r.get("applied", []))
+    foot = ("A change is applied only if replaying past days under it measurably lowers "
+            "CRPS on at least 10 replayable days; otherwise it stays a logged proposal."
+            if n_app else
+            "Nothing was applied: every proposal must first lower CRPS on at least 10 "
+            "replayable days of backtest. Until that history accrues, proposals are "
+            "recorded and reviewed but the forecaster is left unchanged.")
+    return (f'<div class="analyst"><b>🧠 Self-tuning loop · {esc(d.get("date", ""))}:</b> '
+            f'{esc(r.get("narrative", ""))}'
+            + (f'<ul>{"".join(parts)}</ul>' if parts else '')
+            + f'<div class="muted" style="margin-top:4px">{foot}</div></div>')
+
+
+def _verification_block(lake):
+    """The latest objective scorecard: CRPS vs persistence & climatology."""
+    path = os.path.join(wd.LOG_DIR, "events.jsonl")
+    if not os.path.exists(path):
+        return ""
+    rec = None
+    for line in open(path):
+        try:
+            e = json.loads(line)
+        except Exception:
+            continue
+        if e.get("kind") == "verification" and e.get("lake") == lake:
+            rec = e
+    if not rec or not rec.get("crps"):
+        return ""
+    f = lambda x: "n/a" if x is None else f"{x:.2f}"
+    ss = lambda x: "n/a" if x is None else f"{x:+.2f}"
+    warn = ("" if (rec.get("n_days") or 0) >= 10 else
+            f' <b>low confidence</b> — only {rec.get("n_days")} day(s) scored')
+    return (f'<div class="analyst"><b>📊 Verification · {html.escape(str(rec.get("date","")))}:</b> '
+            f'CRPS <b>{f(rec.get("crps"))} kn</b> (MAE {f(rec.get("mae"))}, '
+            f'RMSE {f(rec.get("rmse"))}, bias {f(rec.get("bias"))}) over '
+            f'{rec.get("n_pairs")} hours.{warn}'
+            f'<div class="muted" style="margin-top:4px">Skill vs persistence '
+            f'{ss(rec.get("ss_pers"))} · vs climatology {ss(rec.get("ss_clim"))} '
+            f'(&gt;0 beats the baseline). CRPS grades the whole predicted spread, not just '
+            f'the mean; for a single-number forecast it equals the absolute error.</div></div>')
 
 
 def _learning_section(lakes):
     blocks = []
     for lake in lakes:
+        vb = _verification_block(lake)
+        if vb:
+            blocks.append(vb)
         ab = _analyst_block(lake)
         if ab:
             blocks.append(ab)
@@ -274,13 +326,21 @@ def _methodology(group):
             model (no föhn double-count), evidence-gated and capped.</li>
       </ol>
       <p class="muted"><b>Föhn caveat:</b> its strength/timing isn't reliably predictable (often blows
-      only till ~09:00); flagged "unconfirmed" until Hohenpeißenberg shows S/SE. Next on the roadmap:
-      CRPS-scored probabilistic post-processing (<code>docs/IMPROVEMENT_PLAN.md</code>).</p>
+      only till ~09:00); flagged "unconfirmed" until Hohenpeißenberg shows S/SE.</p>
       <h3>How it learns</h3>
       <p>Each morning it compares yesterday's forecast to the measured wind (on-lake Urfeld for
       Walchensee, on-lake Trimini for Kochelsee), updates the per-(regime×hour) regression, and
       validates the regime against the measured direction. Until history builds, hours read
       "raw (no local calib yet)".</p>
+      <h3>How it's checked, and how it tunes itself</h3>
+      <p>Every run is scored out of sample with <b>CRPS</b> (knots, lower better — the
+      probabilistic version of mean absolute error: it grades the whole predicted spread, and for a
+      single-number forecast equals the absolute error) against two baselines,
+      <b>persistence</b> and <b>climatology</b>. On top of that an LLM tuner reviews
+      <i>its own</i> earlier proposals against the measured CRPS, confirms or retracts each, and may
+      propose small threshold changes — but a change is only written to the forecaster if replaying
+      past days under it measurably lowers CRPS on at least 10 replayable days. Until that history
+      exists, proposals are recorded and shown, and nothing is applied.</p>
     </section>"""
     return """
     <section class="card method">
@@ -299,8 +359,13 @@ def _methodology(group):
       </ol>
       <p class="muted">Measured truth: DWD Wielenbach (lake-level, ~11 km); the Herrsching on-water
       station is the reference but its Windfinder/addicted feeds are often the same sensor. No
-      Kesselberg Δθ / föhn drivers here (Alpine-rim only). Next: CRPS-scored probabilistic
-      post-processing.</p>
+      Kesselberg Δθ / föhn drivers here (Alpine-rim only).</p>
+      <h3>How it's checked, and how it tunes itself</h3>
+      <p>Every run is scored out of sample with <b>CRPS</b> (knots, lower better — the probabilistic
+      version of mean absolute error) against <b>persistence</b> and <b>climatology</b> baselines. An
+      LLM tuner reviews its own earlier proposals against the measured CRPS and may suggest small
+      threshold changes, but a change reaches the forecaster only if a backtest over at least 10
+      replayable days shows it lowers CRPS.</p>
       <h3>How it learns</h3>
       <p>Each morning it compares yesterday's forecast to the measured wind and updates the
       per-(regime×hour) regression before today's forecast.</p>

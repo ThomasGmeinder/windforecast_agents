@@ -22,7 +22,8 @@ os.environ.setdefault("REQUESTS_CA_BUNDLE", "/etc/ssl/certs/ca-certificates.crt"
 import winddata as wd
 import forecast as fc
 import learn
-import analyst
+import tuner
+import verify
 
 TABLES_DIR = os.path.join(wd.LOG_DIR, "tables")
 ANALYST_DIR = os.path.join(wd.LOG_DIR, "analyst")
@@ -71,25 +72,26 @@ def main():
         except Exception as e:
             out.append(f"### Learning — {lake}: ERROR — {e}")
             res = {"skipped": "learning error"}
-        # advisory LLM analyst (Layer 2) — guarded: no key / no data → clean skip
+        # self-tuning loop (Layer 2): reflect on past hypotheses → propose → backtest-gated
+        # apply. Guarded: no key / no data / failed call → clean skip, never blocks.
         if not res.get("skipped"):
             try:
-                ares = analyst.run_analysis({"lake": lake, "date": yesterday,
-                                             "current_params": _current_params(),
-                                             "aggregate": res.get("agg"), "diffs": res.get("diffs")})
+                ares = tuner.run(lake, yesterday, now.isoformat(timespec="minutes"),
+                                 agg=res.get("agg"), diffs=res.get("diffs"))
                 with open(os.path.join(ANALYST_DIR, f"{lake}_{yesterday}.json"), "w") as f:
                     json.dump({"lake": lake, "date": yesterday, "result": ares}, f, indent=2)
                 wd.log_event("analyst", {
                     "lake": lake, "date": yesterday, "skipped": ares.get("skipped"),
                     "n_proposals": len(ares.get("proposals", [])),
                     "narrative": ares.get("narrative", ""),
-                    "proposals": ares.get("proposals", [])},
+                    "proposals": ares.get("proposals", []),
+                    "reviews": ares.get("reviews", []),
+                    "applied": ares.get("applied", []),
+                    "refused": ares.get("refused", [])},
                     stamp=now.isoformat(timespec="minutes"))
-                out.append(f"  analyst: skipped — {ares['skipped']}" if ares.get("skipped")
-                           else f"  analyst: {len(ares.get('proposals', []))} proposal(s) — "
-                                f"{ares.get('narrative', '')[:120]}")
+                out.append(tuner.format_summary(ares))
             except Exception as e:
-                out.append(f"  analyst: error — {e}")
+                out.append(f"  tuner: error — {e}")
         out.append("")
 
     out.append("=" * 72)
@@ -132,6 +134,26 @@ def main():
                 stamp=now.isoformat(timespec="minutes"))
             out.append(f"  ⚠ blend disagreement > {fc.BLEND_DISAGREE_KN:g} kn at "
                        + ", ".join(f"{r['hour']:02d}h({r['blend_range_kn']:.0f})" for r in hits))
+
+    # 3. VERIFY — objective out-of-sample score vs persistence & climatology baselines
+    out.append("")
+    out.append("=" * 72)
+    out.append("STEP 3 — VERIFICATION  (CRPS out-of-sample vs baselines — the referee)")
+    out.append("=" * 72)
+    for lake in fc.LAKES:
+        try:
+            sc = verify.evaluate(lake)
+            out.append(verify.format_scorecard(sc))
+            if sc["n_pairs"]:
+                wd.log_event("verification", {
+                    "lake": lake, "date": today,
+                    **{k: sc.get(k) for k in ("n_pairs", "n_days", "crps", "mae", "rmse",
+                                              "bias", "crps_pers", "crps_clim",
+                                              "ss_pers", "ss_clim")}},
+                    stamp=now.isoformat(timespec="minutes"))
+        except Exception as e:
+            out.append(f"### Verification — {lake}: ERROR — {e}")
+        out.append("")
 
     report = "\n".join(out)
     with open(os.path.join(wd.LOG_DIR, "latest_report.txt"), "w") as f:

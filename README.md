@@ -168,13 +168,83 @@ tells us how often the regime *call itself* was right.
 
 ---
 
+## 5b. Verification — the referee (`lib/verify.py`)
+
+Layer 1 (above) learns; this layer decides **whether any of it actually helps**. Every
+morning the logged forecasts are scored out of sample against the measured wind:
+
+- **CRPS** (Continuous Ranked Probability Score, in knots, lower is better) — the
+  probabilistic generalization of MAE. For a single-number forecast CRPS *equals* the
+  absolute error; for a distribution it also grades whether the spread was honest, so
+  over-confidence is penalised and well-placed uncertainty is rewarded. To make that
+  meaningful each hour stores a predictive distribution: the ICON-D2 ensemble deciles
+  (`q_kn`, P10–P90) recentred on the issued blended value, plus `spread_kn`.
+- **Baselines**: *persistence* (yesterday's measured wind at the same hour) and
+  *climatology* (all earlier days at that hour). Both computed leak-free — a day is
+  scored using only strictly earlier data.
+- **Skill score** `SS = 1 − CRPS/CRPS_baseline`; `SS > 0` means we beat that baseline.
+  Reported overall, per regime and per hour.
+
+`python lib/verify.py` runs the self-tests (three independent CRPS implementations agree,
+plus a discrimination test that a good forecaster outranks a biased one);
+`python lib/verify.py <lake>|all` prints the scorecard. **Honest expectation:** with only
+a few days logged the scorecard says `LOW CONFIDENCE` and climatology may well win — the
+page will say so rather than flatter the model.
+
+---
+
+## 5c. The self-tuning loop (`lib/tuner.py`) — what the LLM actually does
+
+The LLM is **not** the forecaster and not the learner; it is a *tuner* that is measured
+and gated. One call (`tuner.run`) performs a full cycle:
+
+**Input it perceives** (previously: yesterday's errors only)
+- a **multi-day error window** (14 days of per-hour forecast-vs-measured errors);
+- the **learned regression state** (per-`regime×hour` `a`, `b`, `n`), so it reasons about
+  the *residual* the linear correction cannot absorb;
+- the **CRPS scorecard** and current tunable parameters with their legal bounds;
+- **its own past proposals**, each with the measured CRPS *before* vs *after* it was
+  issued.
+
+**Output it produces**
+1. **Reviews** — for every open hypothesis it must return `confirmed` or `retracted`
+   with reasoning; the verdict is written back to the ledger (`logs/ledger.jsonl`). This
+   is the memory that makes it accountable rather than a fresh opinion each morning.
+2. **Proposals** — at most two small parameter changes, each with a rationale and an
+   `expected_effect` it will be judged against next time. Each is recorded as a new open
+   hypothesis.
+
+**What happens to a proposal (the gate).** Nothing is applied on the model's say-so.
+Each proposal must pass, in order: the parameter is one of the six known tunables → the
+value is numeric and inside `PARAM_BOUNDS` → the step is ≤ 25 % of the current value →
+and then a **backtest**: every replayable logged day is re-run under the candidate value
+(`verify.backtest`, sharing `forecast.replay_hour` with production so a backtest can
+never drift from the real path) and it is applied **only if CRPS improves on at least 10
+replayable days**. A change that passes is written to `config/params.json` — the single
+source of truth the forecaster reads — and logged as a `param_change` event with its
+evidence. Anything else is refused, with the reason recorded.
+
+**Currently the gate is effectively dormant**: replayable history (days carrying the
+captured classification inputs) only began accumulating recently, so proposals are logged
+and reviewed but not applied, and the daily report says exactly that
+(`held back … insufficient replayable history (n/10 days)`). Agency — memory,
+self-evaluation, an objective referee — is live now; authority to change the forecaster
+switches on only once the evidence exists. Without a `GEMINI_API_KEY` the whole layer
+skips cleanly and the deterministic forecast is unaffected.
+
+---
+
 ## 6. Daily automation (`daily_run.py` + systemd)
 
 `daily_run.py`:
-1. STEP 1 — learn from yesterday (writes the detailed reports above);
+1. STEP 1 — learn from yesterday (writes the detailed reports above), then run the
+   self-tuning loop (review past hypotheses → propose → backtest-gated apply);
 2. STEP 2 — build today's tables from the just-updated model, print them, write
    `logs/tables/<lake>_<date>.txt` and `logs/latest_report.txt`, and log the
-   forecast (with raw values + features) for tomorrow to learn from.
+   forecast (with raw values, features, predictive deciles and the classification
+   inputs needed for replay) for tomorrow to learn from;
+3. STEP 3 — verify: score the logged forecasts with CRPS against persistence and
+   climatology and log a `verification` event.
 
 Idempotent (one forecast record per date). Scheduled by a **systemd user timer**
 `wind-agents-daily.timer` at **06:04 local**, `Persistent=true` so a run missed
