@@ -44,6 +44,47 @@ N_MIN_OBS = 3           # matching days before a (regime×hour) correction is fu
 BIAS_CAP_KN = 8.0       # clamp on the learned bias so one anomalous day can't swing it
 BLEND_DISAGREE_KN = 6.0 # kn; range (max−min) across blend sources above this = notable disagreement
 
+# ------------------------------------------------- tunable params: single source of truth
+# The regime thresholds above are DEFAULTS. The live values come from config/params.json
+# (written only by the backtest-gated tuner); classify_regime reads them so code, the LLM
+# analyst, and any applied change all agree on one authoritative set.
+CONFIG_DIR = os.path.join(ROOT, "config")
+PARAMS_PATH = os.path.join(CONFIG_DIR, "params.json")
+TUNABLE = ("FOEHN_DP_RIM", "FOEHN_DP_FORELAND", "FOEHN_850_KN",
+           "GRADIENT_925_KN", "THERMAL_CLOUD_MAX", "COLD_POOL_DTHETA")
+# sane bounds a proposed value must fall inside to ever be applied
+PARAM_BOUNDS = {"FOEHN_DP_RIM": (2.0, 8.0), "FOEHN_DP_FORELAND": (5.0, 14.0),
+                "FOEHN_850_KN": (3.0, 15.0), "GRADIENT_925_KN": (6.0, 20.0),
+                "THERMAL_CLOUD_MAX": (20.0, 70.0), "COLD_POOL_DTHETA": (0.5, 3.0)}
+_DEFAULTS = {k: globals()[k] for k in TUNABLE}
+
+
+def load_params():
+    """The tunable regime thresholds — single source of truth. config/params.json if
+    present, else the module defaults; unknown/non-numeric keys fall back to defaults."""
+    p = dict(_DEFAULTS)
+    if os.path.exists(PARAMS_PATH):
+        try:
+            with open(PARAMS_PATH) as f:
+                for k, v in json.load(f).items():
+                    if k in _DEFAULTS and isinstance(v, (int, float)):
+                        p[k] = v
+        except Exception:
+            pass
+    return p
+
+
+def save_params(params):
+    """Persist the full tunable set (missing keys filled from defaults)."""
+    os.makedirs(CONFIG_DIR, exist_ok=True)
+    merged = {k: params.get(k, _DEFAULTS[k]) for k in TUNABLE}
+    with open(PARAMS_PATH, "w") as f:
+        json.dump(merged, f, indent=2)
+    return PARAMS_PATH
+
+
+PARAMS = load_params()   # reload after save_params() if changed mid-process
+
 
 def _quantiles(xs, levels=(10, 25, 50, 75, 90)):
     """Empirical quantiles (linear interpolation, = numpy default) of a small sample,
@@ -101,11 +142,13 @@ def terrain_regime(lake, deg):
     return None
 
 
-def classify_regime(lake, hour, row, dp, feat=None):
+def classify_regime(lake, hour, row, dp, feat=None, params=None):
     """row: this hour's Open-Meteo values. dp: Bozen-Muenchen hPa or None. feat:
-    augmentation drivers (foehn_gradient_hpa, dtheta, ...). Returns foehn/thermal/
-    gradient/calm."""
+    augmentation drivers (foehn_gradient_hpa, dtheta, ...). params: tunable thresholds
+    (defaults to the live PARAMS; pass a candidate set for backtest replay). Returns
+    foehn/thermal/gradient/calm."""
     feat = feat or {}
+    P = params or PARAMS
     alpine = LAKES[lake][3]
     dir850 = row.get("wind_direction_850hPa")
     spd850 = row.get("wind_speed_850hPa") or 0
@@ -113,15 +156,15 @@ def classify_regime(lake, hour, row, dp, feat=None):
     cloud = row.get("cloud_cover")
     dp = dp if dp is not None else -99
     southerly = dir850 is not None and SW_SECTOR[0] <= dir850 <= SW_SECTOR[1]
-    dp_thr = FOEHN_DP_RIM if alpine else FOEHN_DP_FORELAND
+    dp_thr = P["FOEHN_DP_RIM"] if alpine else P["FOEHN_DP_FORELAND"]
 
-    if dp >= dp_thr and southerly and spd850 >= FOEHN_850_KN:
+    if dp >= dp_thr and southerly and spd850 >= P["FOEHN_850_KN"]:
         return "foehn"
-    if spd925 >= GRADIENT_925_KN:
+    if spd925 >= P["GRADIENT_925_KN"]:
         return "gradient"
-    if 9 <= hour <= 19 and cloud is not None and cloud <= THERMAL_CLOUD_MAX:
+    if 9 <= hour <= 19 and cloud is not None and cloud <= P["THERMAL_CLOUD_MAX"]:
         dth = feat.get("dtheta")
-        if dth is not None and dth >= COLD_POOL_DTHETA and (row.get("wind_speed_10m") or 0) < 6:
+        if dth is not None and dth >= P["COLD_POOL_DTHETA"] and (row.get("wind_speed_10m") or 0) < 6:
             return "calm"  # stable cold-air pool in the Kesselberg basin caps the thermal
         return "thermal"
     if (row.get("wind_speed_10m") or 0) < 2:
@@ -297,6 +340,12 @@ def build_table(lake, target_date, run_stamp=None):
             "dtheta": feat.get("dtheta"),
             "foehn_grad": feat.get("foehn_gradient_hpa"),
             "lapse": feat.get("lapse_2m_850"),
+            # classification inputs, persisted so past days can be REPLAYED under
+            # candidate params by the backtest gate (regime is a fn of these + params)
+            "inputs": {"spd925": row.get("wind_speed_925hPa"),
+                       "spd850": row.get("wind_speed_850hPa"),
+                       "dir850": row.get("wind_direction_850hPa"),
+                       "cloud": row.get("cloud_cover")},
         })
     summary = _summary(lake, rows)
     return {"lake": lake, "label": label, "date": target_date, "run_stamp": run_stamp,
@@ -334,7 +383,7 @@ def format_table(res):
             note = "raw (no local calib yet)"
         if r["regime"] == "calm":
             note = "cold-pool capped" if (r.get("dtheta") is not None
-                                          and r["dtheta"] >= COLD_POOL_DTHETA) else "glassy"
+                                          and r["dtheta"] >= PARAMS["COLD_POOL_DTHETA"]) else "glassy"
         extra = []
         if r.get("dtheta") is not None and r["regime"] in ("thermal", "calm"):
             extra.append(f"Δθ{r['dtheta']:+.1f}")

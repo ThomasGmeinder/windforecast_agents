@@ -31,10 +31,9 @@ os.makedirs(ANALYST_DIR, exist_ok=True)
 
 
 def _current_params():
-    """The tunable parameters the analyst may propose changes to."""
-    return {"COLD_POOL_DTHETA": fc.COLD_POOL_DTHETA, "FOEHN_DP_RIM": fc.FOEHN_DP_RIM,
-            "FOEHN_DP_FORELAND": fc.FOEHN_DP_FORELAND, "FOEHN_850_KN": fc.FOEHN_850_KN,
-            "GRADIENT_925_KN": fc.GRADIENT_925_KN, "THERMAL_CLOUD_MAX": fc.THERMAL_CLOUD_MAX}
+    """The tunable parameters the analyst may propose changes to — the live values from
+    the single source of truth (config/params.json, else defaults)."""
+    return dict(fc.PARAMS)
 
 
 def _log_forecast(lake, payload):
@@ -119,7 +118,8 @@ def main():
                         "dir": r["dir"], "conf": r["conf"], "foehn_note": r.get("foehn_note"),
                         "spread_kn": r.get("spread_kn"), "q_kn": r.get("q_kn"),
                         "dtheta": r.get("dtheta"), "foehn_grad": r.get("foehn_grad"),
-                        "lapse": r.get("lapse")} for r in res["rows"]],
+                        "lapse": r.get("lapse"), "dp": r.get("dp"),
+                        "inputs": r.get("inputs")} for r in res["rows"]],
         })
         # log hours where the blended source models disagree by more than the threshold
         hits = [r for r in res["rows"]
