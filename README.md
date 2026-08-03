@@ -192,8 +192,16 @@ morning the logged forecasts are scored out of sample against the measured wind:
   meaningful each hour stores a predictive distribution: the ICON-D2 ensemble deciles
   (`q_kn`, P10–P90) recentred on the issued blended value, plus `spread_kn`.
 - **Baselines**: *persistence* (yesterday's measured wind at the same hour) and
-  *climatology* (all earlier days at that hour). Both computed leak-free — a day is
-  scored using only strictly earlier data.
+  *climatology*. For Ammersee the climatology is a real observational archive —
+  **93,080 hourly on-lake readings from the Ammerseeboje, 2014–2026**, aggregated to a
+  per-(month × hour-of-day) distribution (`lib/climatology.py`,
+  `models/ammersee_climatology.json`). It is available from day one, whereas the
+  from-logs climatology needs ≥3 prior days at the same hour and is therefore absent
+  early on; the other two lakes still use the from-logs version. Rebuild with
+  `python lib/climatology.py build ammersee` (~13 requests; the archive is static while
+  the buoy is offline). Both baselines are leak-free — a day is scored using only
+  strictly earlier data, and the archive climatology **refuses** any date inside its own
+  coverage window.
 - **Skill score** `SS = 1 − CRPS/CRPS_baseline`; `SS > 0` means we beat that baseline.
   Reported overall, per regime and per hour.
 - **Lead time**: hours that had already elapsed when the forecast was issued are not

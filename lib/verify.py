@@ -35,6 +35,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import winddata as wd
 import forecast as fc
 import postproc
+import climatology
 
 QLEVELS = (10, 25, 50, 75, 90)   # the persisted decile levels (percent)
 _ND = NormalDist()
@@ -230,7 +231,7 @@ def evaluate(lake, forecasts=None, actuals=None):
     forecasts = _load_forecasts(lake) if forecasts is None else forecasts
     actuals = _load_actuals(lake) if actuals is None else actuals
     recs = []
-    n_leaked = 0
+    n_leaked = n_clim_archive = 0
     for date in sorted(forecasts):
         if date not in actuals:
             continue
@@ -248,15 +249,25 @@ def evaluate(lake, forecasts=None, actuals=None):
             # persistence baseline: previous day's measured wind at this hour (a point)
             pv = actuals.get(_prev_day(date), {}).get(hour)
             crps_p = abs(pv - y) if pv is not None else None
-            # climatology baseline: measured winds at this hour on STRICTLY earlier days
-            clim = [actuals[dd][hour] for dd in actuals if dd < date and hour in actuals[dd]]
-            crps_c = crps_ensemble(clim, y) if len(clim) >= 3 else None
+            # climatology baseline. Preferred: the long observational archive for this
+            # (month, hour) — it is available on day one, whereas the from-logs version
+            # needs >=3 prior days at the same hour and so is simply absent early on.
+            # climatology.members() returns None if the archive would contain `date`
+            # itself (that would be leakage), in which case we fall back to prior logs.
+            cm = climatology.members(lake, date, hour)
+            if cm:
+                crps_c = crps_ensemble(cm, y)
+                n_clim_archive += 1
+            else:
+                clim = [actuals[dd][hour] for dd in actuals if dd < date and hour in actuals[dd]]
+                crps_c = crps_ensemble(clim, y) if len(clim) >= 3 else None
             recs.append({"date": date, "hour": hour, "regime": hr.get("regime", "?"),
                          "y": y, "mean": mean, "crps": crps_m, "crps_pers": crps_p,
                          "crps_clim": crps_c, "ae": abs(mean - y),
                          "se": (mean - y) ** 2, "signed": mean - y})
     sc = _summarize(lake, recs)
     sc["n_leaked_skipped"] = n_leaked
+    sc["n_clim_from_archive"] = n_clim_archive
     return sc
 
 
@@ -417,7 +428,9 @@ def format_scorecard(sc, detail=True):
          f"({sc['n_pairs']} hourly pairs over {sc['n_days']} day(s)){conf}{leak}",
          f"  model:  CRPS {_f(sc['crps'])} kn | MAE {_f(sc['mae'])} | "
          f"RMSE {_f(sc['rmse'])} | bias {_f(sc['bias'])}",
-         f"  baseline CRPS:  persistence {_f(sc['crps_pers'])} | climatology {_f(sc['crps_clim'])}",
+         f"  baseline CRPS:  persistence {_f(sc['crps_pers'])} | climatology {_f(sc['crps_clim'])}"
+         + (f"  [{sc['n_clim_from_archive']}/{sc['n_pairs']} hrs from the on-lake archive]"
+            if sc.get("n_clim_from_archive") else ""),
          f"  skill (SS>0 beats it):  vs persistence {_ss(sc['ss_pers'])} | "
          f"vs climatology {_ss(sc['ss_clim'])}"]
     if detail:

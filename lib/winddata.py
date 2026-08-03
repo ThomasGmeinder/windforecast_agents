@@ -194,21 +194,27 @@ GKD_WIND = {"ammersee": ("isar", "ammerseeboje-16601050", "GKD Ammerseeboje (on-
 GKD_MIN_HOURS = 3          # below this the day is treated as unusable and we fall back
 
 
-def gkd_wind_hourly(basin, slug, yyyy_mm_dd, param="wind"):
-    """Hourly mean wind for one GKD station and one LOCAL date -> {hour:int -> knots}.
+def gkd_wind_range(basin, slug, beg_ger, end_ger, param="wind", timeout=90):
+    """All hourly values in a date range -> [(iso_date, hour, knots), ...].
 
     The station page renders only the last few hours; the `/messwerte/tabelle` view with an
-    explicit range is what returns a full day. Values are m/s with a German decimal comma."""
-    d = datetime.date.fromisoformat(yyyy_mm_dd)
-    ger = d.strftime("%d.%m.%Y")
-    url = GKD_TABELLE.format(param=param, basin=basin, slug=slug, beg=ger, end=ger)
-    txt = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", _get(url, timeout=40).decode("utf-8", "replace")))
-    out = {}
+    explicit range returns the whole span — a full year of hourly values comes back in one
+    request, which is what makes building a multi-year climatology cheap and polite.
+    Values are m/s with a German decimal comma."""
+    url = GKD_TABELLE.format(param=param, basin=basin, slug=slug, beg=beg_ger, end=end_ger)
+    txt = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", _get(url, timeout=timeout).decode("utf-8", "replace")))
+    out = []
     for ts, val in re.findall(r"(\d{2}\.\d{2}\.\d{4} \d{2}:\d{2})[^\d\-]{0,20}(-?[\d]+,[\d]+)", txt):
-        if ts[:10] != ger:
-            continue
-        out[int(ts[11:13])] = round(float(val.replace(",", ".")) * MS_TO_KN, 1)
+        iso = f"{ts[6:10]}-{ts[3:5]}-{ts[0:2]}"
+        out.append((iso, int(ts[11:13]), round(float(val.replace(",", ".")) * MS_TO_KN, 1)))
     return out
+
+
+def gkd_wind_hourly(basin, slug, yyyy_mm_dd, param="wind"):
+    """Hourly mean wind for one GKD station and one LOCAL date -> {hour:int -> knots}."""
+    ger = datetime.date.fromisoformat(yyyy_mm_dd).strftime("%d.%m.%Y")
+    return {h: kn for iso, h, kn in gkd_wind_range(basin, slug, ger, ger, param, timeout=40)
+            if iso == yyyy_mm_dd}
 
 
 def _mess_datum_local(stamp):
