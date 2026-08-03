@@ -440,7 +440,12 @@ def _data_sources(group):
              "Open-Meteo <code>ensemble-api.open-meteo.com/v1/ensemble</code>"),
         ]
         meas = [
-            ("DWD 10-min obs", "measured actual — Wielenbach 05538 (lake-level, ~11 km S)",
+            ("GKD Ammerseeboje", "measured actual — official buoy ON the lake (preferred)",
+             "hourly means from <code>gkd.bayern.de/de/meteo/wind/isar/ammerseeboje-16601050"
+             "/messwerte/tabelle</code> (© GKD Bayern, CC BY 4.0). Speed only — direction and "
+             "gust come from DWD for the same hours. Offline since 15.06.2026 (electronics "
+             "defect), so the DWD fallback below is currently in use"),
+            ("DWD 10-min obs", "measured actual — fallback: Wielenbach 05538 (lake-level, ~11 km inland)",
              "zipped 10-min FF/DD from "
              "<code>opendata.dwd.de/climate_environment/CDC/…/10_minutes/wind/recent/</code>"),
             ("Herrsching anemometer", "on-water reference (human-readable; not yet the learning actual)",

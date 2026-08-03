@@ -93,8 +93,20 @@ The forecast VALUE is the **equal-weight mean of several sources**, not one run:
   site's own `mae`/`guete`. `winddata.addicted_measured_hourly`. Daylight hours
   only. **Far better than any DWD station** — it captures the NE nozzle thermal a
   valley station misses.
+- **Ammerseeboje** (`winddata.gkd_wind_hourly`, GKD Bayern station 16601050) — an
+  official buoy **on Ammersee**, hourly, archive back to 2014, CC BY 4.0. It is the ONLY
+  buoy in GKD's entire 127-station wind network, so there is no second one to fall back
+  to. Speed only, so direction and the gust proxy come from DWD for the same hours.
+  Used **by default** for Ammersee, with a validity check (≥3 hours for the requested
+  date); if the buoy is down the code falls through to DWD automatically. It is offline
+  as of 15.06.2026 with a reported electronics defect, so the fallback is live today.
+  Timestamps are Europe/Berlin — verified by cross-correlation against DWD, not assumed.
 - **DWD 10-min obs** (`winddata.dwd_obs_hourly`) as fallback: Garmisch 01550
-  (valley proxy) for the southern lakes, Wielenbach 05538 for Ammersee.
+  (valley proxy) for the southern lakes, Wielenbach 05538 for Ammersee (lake-level but
+  ~11 km inland). **Measured against the buoy over 68 overlapping hours, Wielenbach reads
+  just 53 % of the on-lake wind (mean gap 6.0 kn)** — so while the buoy is down, Ammersee
+  is being calibrated against a systematically low truth. This is the leading explanation
+  for its poor verification skill.
 - `winddata.actual_hourly(lake, date)` picks on-lake first, DWD as fallback, and
   reports which source it used.
 

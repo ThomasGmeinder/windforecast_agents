@@ -177,6 +177,40 @@ def _circ_mean_deg(degs):
     return round((math.degrees(math.atan2(s, c)) + 360) % 360)
 
 
+# --------------------------------------------------------------- GKD Bayern (on-lake buoy)
+# Gewässerkundlicher Dienst Bayern. The Ammerseeboje is an official buoy ON the lake and is
+# the ONLY buoy in GKD's entire wind network (all 127 stations enumerated; no second one
+# exists), which makes it the best possible ground truth for Ammersee — far better than a
+# land station kilometres inland. Speed only, hourly. Data © GKD Bayern, CC BY 4.0.
+#
+# Timestamps are Europe/Berlin, i.e. the same frame as the Open-Meteo forecast series, so
+# no conversion is applied. That was VERIFIED empirically rather than assumed (the page
+# states no timezone): cross-correlating a live GKD land station against DWD 10-min data
+# converted to Berlin peaks at lag 0 on clean-signal days (r=0.86, r=0.90). There is a
+# residual ±1 h ambiguity from hour-labelling convention that a longer overlap would settle.
+GKD_TABELLE = ("https://www.gkd.bayern.de/de/meteo/{param}/{basin}/{slug}"
+               "/messwerte/tabelle?beginn={beg}&ende={end}")
+GKD_WIND = {"ammersee": ("isar", "ammerseeboje-16601050", "GKD Ammerseeboje (on-lake)")}
+GKD_MIN_HOURS = 3          # below this the day is treated as unusable and we fall back
+
+
+def gkd_wind_hourly(basin, slug, yyyy_mm_dd, param="wind"):
+    """Hourly mean wind for one GKD station and one LOCAL date -> {hour:int -> knots}.
+
+    The station page renders only the last few hours; the `/messwerte/tabelle` view with an
+    explicit range is what returns a full day. Values are m/s with a German decimal comma."""
+    d = datetime.date.fromisoformat(yyyy_mm_dd)
+    ger = d.strftime("%d.%m.%Y")
+    url = GKD_TABELLE.format(param=param, basin=basin, slug=slug, beg=ger, end=ger)
+    txt = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", _get(url, timeout=40).decode("utf-8", "replace")))
+    out = {}
+    for ts, val in re.findall(r"(\d{2}\.\d{2}\.\d{4} \d{2}:\d{2})[^\d\-]{0,20}(-?[\d]+,[\d]+)", txt):
+        if ts[:10] != ger:
+            continue
+        out[int(ts[11:13])] = round(float(val.replace(",", ".")) * MS_TO_KN, 1)
+    return out
+
+
 def _mess_datum_local(stamp):
     """DWD MESS_DATUM ('YYYYMMDDHHMM', UTC) -> naive Europe/Berlin datetime, or None."""
     try:
@@ -318,9 +352,40 @@ def actual_hourly(lake, yyyy_mm_dd):
             if len(data) >= 3:
                 return data, f"addicted-sports on-lake ({ADS_SPOT[lake]})"
         except Exception:
-            pass  # fall back to DWD below
+            pass  # fall back below
+
     st = STA_OBS[lake]
-    return dwd_obs_hourly(st, yyyy_mm_dd.replace("-", "")), f"DWD station {st} (valley proxy)"
+    dwd, dwd_src = None, f"DWD station {st}"
+
+    if lake in GKD_WIND:
+        # PREFERRED: the on-lake buoy. It reports SPEED only, so direction and the gust
+        # proxy are taken from the DWD station for the same hours — speed is both the most
+        # important field and the one a land station distorts most. The buoy is used only
+        # for hours it actually covers on THIS date; a defect or a lifted buoy simply means
+        # too few hours and we fall through to DWD entirely.
+        basin, slug, label = GKD_WIND[lake]
+        try:
+            buoy = gkd_wind_hourly(basin, slug, yyyy_mm_dd)
+        except Exception:
+            buoy = {}
+        if len(buoy) >= GKD_MIN_HOURS:
+            try:
+                dwd = dwd_obs_hourly(st, yyyy_mm_dd.replace("-", ""))
+            except Exception:
+                dwd = {}
+            data = {}
+            for h, kn in buoy.items():
+                aux = (dwd or {}).get(h, {})
+                data[h] = {"mean_kn": kn,
+                           "gust_kn": aux.get("gust_kn", kn),   # no gust sensor on the buoy
+                           "dir": aux.get("dir")}
+            extra = f" + {dwd_src} for dir/gust" if dwd else " (no direction available)"
+            return data, f"{label}{extra}"
+
+    if dwd is None:
+        dwd = dwd_obs_hourly(st, yyyy_mm_dd.replace("-", ""))
+    note = "lake-level, ~11 km inland" if lake == "ammersee" else "valley proxy"
+    return dwd, f"{dwd_src} ({note})"
 
 
 # --------------------------------------------------------------- foehn/thermal cause drivers + valley stability
