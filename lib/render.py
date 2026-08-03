@@ -273,7 +273,7 @@ def _verification_block(lake):
         return ""
     f = lambda x: "n/a" if x is None else f"{x:.2f}"
     ss = lambda x: "n/a" if x is None else f"{x:+.2f}"
-    warn = ("" if (rec.get("n_days") or 0) >= 10 else
+    warn = ("" if (rec.get("n_days") or 0) >= verify.LOW_CONF_DAYS else
             f' <b>low confidence</b> — only {rec.get("n_days")} day(s) scored')
     return (f'<div class="analyst"><b>📊 Verification · {html.escape(str(rec.get("date","")))}:</b> '
             f'CRPS <b>{f(rec.get("crps"))} kn</b> (MAE {f(rec.get("mae"))}, '
@@ -308,6 +308,9 @@ def _learning_section(lakes):
 
 def _methodology(group):
     nmin = verify.N_MIN_BACKTEST_DAYS
+    lowconf = verify.LOW_CONF_DAYS
+    # thresholds are tuner-writable and per-lake: never hardcode them into the page
+    P = fc.params_for(GROUPS[group]["lakes"][0])
     if group == "kochel-walchensee":
         return f"""
     <section class="card method">
@@ -322,9 +325,9 @@ def _methodology(group):
         <li><b>Diagnose drivers.</b> Cross-Alpine Δp (Bozen−München), 850 hPa wind, föhn-gradient,
             radiation, and the Kochel−Walchensee <b>Δθ</b> stability index.</li>
         <li><b>Classify the regime</b> — terrain then fixes direction (N–NE thermal · S–SE föhn ·
-            W–NW gradient): <b>föhn</b> (Δp ≥ 4 hPa + SE–S 850 wind; confirmed by morning S/SE at
-            Hohenpeißenberg) → <b>gradient</b> (925 hPa ≥ 12 kn) → <b>thermal</b> (sun + weak gradient
-            + no cold pool, Δθ &lt; 1.5 K) → <b>calm</b>.</li>
+            W–NW gradient): <b>föhn</b> (Δp ≥ {P['FOEHN_DP_RIM']:g} hPa + SE–S 850 wind; confirmed by morning S/SE at
+            Hohenpeißenberg) → <b>gradient</b> (925 hPa ≥ {P['GRADIENT_925_KN']:g} kn) → <b>thermal</b> (sun + weak gradient
+            + no cold pool, Δθ &lt; {P['COLD_POOL_DTHETA']:g} K) → <b>calm</b>.</li>
         <li><b>Correct.</b> A learned regression <b>corrected = a + b·model</b> that scales with the
             model (no föhn double-count), evidence-gated and capped.</li>
       </ol>
@@ -508,6 +511,11 @@ pre{white-space:pre-wrap;font:12px/1.4 ui-monospace,Menlo,Consolas,monospace;
 .chip.fc{color:#fff;background:var(--g);border-color:transparent}
 .chip.meas{color:var(--ink2);background:var(--plane)}
 .card.measured{border-left:3px solid var(--muted)}
+/* one lake's big-miss table + its measured dropdown read as a single unit: tighter gap
+   inside the pair (8px) than between lakes (the 18px main grid gap) */
+.lakegroup{display:grid;gap:8px}
+.lakegroup .card.measured{margin:0}
+.lakegroup>.card.measured>details>summary{color:var(--ink2)}
 .analyst{margin:8px 0;padding:10px 12px;border-left:3px solid var(--g);background:var(--plane);
  border-radius:8px;font-size:13px;color:var(--ink2)} .analyst b{color:var(--ink)}
 .analyst ul{margin:6px 0 0 18px;padding:0}
@@ -575,8 +583,12 @@ def report_html(group, static=False):
            + "".join(f' &nbsp;·&nbsp; <a href="{_href(k, static)}">{html.escape(GROUPS[k]["title"])}</a>'
                      for k in other) + "</div>")
     fcards = "".join(_forecast_card(_latest_forecast(l)) for l in g["lakes"])
-    bigcards = "".join(_bigdiff_card(l) for l in g["lakes"])
-    mcards = "".join(_measured_card(l) for l in g["lakes"])
+    # Pair each lake's big-miss table with ITS OWN "all measured hours" dropdown, wrapped
+    # so the two read as one unit (tighter internal gap than between lakes). Previously
+    # both diff tables came first and both dropdowns after, so the Walchensee dropdown sat
+    # under the Kochelsee table.
+    meascards = "".join(f'<div class="lakegroup">{_bigdiff_card(l)}{_measured_card(l)}</div>'
+                        for l in g["lakes"])
     date = next((r["date"] for r in (_latest_forecast(l) for l in g["lakes"]) if r), "—")
     return f"""<!doctype html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -590,8 +602,7 @@ def report_html(group, static=False):
   <div class="sec"><span class="chip fc">forecast</span> Predicted — today ({date})</div>
   {fcards or '<p class="muted">No forecast logged yet — run daily_run.py.</p>'}
   <div class="sec"><span class="chip meas">measured</span> Yesterday: forecast vs measured — big misses</div>
-  {bigcards}
-  {mcards}
+  {meascards}
   {_methodology(group)}
   {_data_sources(group)}
   {_learning_section(g["lakes"])}

@@ -369,7 +369,7 @@ def log_event(kind, payload, stamp=None):
     Idempotent per (kind, lake, date, param): re-logging the same event (e.g. a same-day
     workflow re-run) REPLACES the prior record instead of duplicating it, mirroring the
     forecast log. `param` is included so two different parameter changes on one day are
-    kept as separate audit records. kind ∈ {'blend_disagreement','analyst','diff_table'}; `stamp`
+    kept as separate audit records. kind ∈ {'blend_disagreement','analyst','diff_table','verification','param_change'}; `stamp`
     is an ISO time supplied by the caller (no Date.now() dependency, so it stays
     deterministic). Single authority for the app's notable-event stream."""
     rec = {"kind": kind, **payload}

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-daily_run.py — the 6 a.m. entrypoint.
+daily_run.py — the daily pipeline entrypoint.
 
 Every morning it:
   1. LEARNS from yesterday: for each lake, compares yesterday's logged forecast to
@@ -10,7 +10,9 @@ Every morning it:
      logs the forecast so tomorrow's run can learn from it.
 
 Run manually:  .venv/bin/python daily_run.py
-Scheduled  :   via the systemd user timer wind-agents-daily.timer (~06:00, Persistent).
+Scheduled  :   in GitHub Actions (.github/workflows/daily.yml, cron 03:07 UTC). The
+               local systemd timer wind-agents-daily.timer fires at 05:00 and only
+               DISPATCHES that workflow; it does not run this script.
 """
 import os, sys, json, datetime
 
@@ -32,24 +34,36 @@ os.makedirs(ANALYST_DIR, exist_ok=True)
 
 
 def _log_forecast(lake, payload):
-    """Append the forecast, but keep at most ONE record per date (idempotent across
-    same-day reruns) so the log stays a clean single source of truth."""
+    """Keep at most one record per (date, run_stamp).
+
+    Deliberately NOT one record per date: a same-day re-run is a DIFFERENT, better-
+    informed forecast, and overwriting the morning one destroyed the only evidence of
+    what was actually issued at 06:00 — the verifier then scored the evening re-run as
+    if it had been the day's forecast. Keeping both lets verify.py take the earliest as
+    the forecast of record while the site still shows the freshest table. Re-running at
+    the same stamp still replaces, so the log stays idempotent."""
     path = os.path.join(wd.LOG_DIR, f"{lake}_forecast.jsonl")
+    key = (payload["date"], payload.get("run_stamp"))
     kept = []
     if os.path.exists(path):
         for line in open(path):
             try:
-                if json.loads(line).get("date") != payload["date"]:
-                    kept.append(line.rstrip("\n"))
+                r = json.loads(line)
             except Exception:
-                pass
+                continue
+            if (r.get("date"), r.get("run_stamp")) != key:
+                kept.append(line.rstrip("\n"))
     kept.append(json.dumps({"lake": lake, "kind": "forecast", **payload}))
     with open(path, "w") as f:
         f.write("\n".join(kept) + "\n")
 
 
 def main():
-    now = datetime.datetime.now()
+    # Timezone-AWARE, in the project's one timezone. A naive datetime.now() is Berlin on
+    # the laptop but UTC on the GitHub runner, and the forecast hours are always
+    # Europe/Berlin — so a naive stamp made the lead-time leak filter under-drop by 2 h on
+    # every cloud-produced record. Same UTC-vs-local trap as the foehn dp join.
+    now = datetime.datetime.now(wd.BERLIN)
     today = now.date().isoformat()
     yesterday = (now.date() - datetime.timedelta(days=1)).isoformat()
     out = [f"=== Bavarian lake wind — daily run {now.strftime('%Y-%m-%d %H:%M %Z')} ===",

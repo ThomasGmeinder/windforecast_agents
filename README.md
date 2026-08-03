@@ -246,7 +246,9 @@ skips cleanly and the deterministic forecast is unaffected.
 3. STEP 3 — verify: score the logged forecasts with CRPS against persistence and
    climatology and log a `verification` event.
 
-Idempotent (one forecast record per date).
+Idempotent per (date, run_stamp): a same-day re-run is kept as a separate record
+rather than replacing the morning one, so verification and learning can always use the
+forecast that was actually issued first (see 5b).
 
 **Where it actually runs:** the pipeline runs **in GitHub Actions**, not on the laptop.
 `.github/workflows/daily.yml` is on a `7 3 * * *` **UTC** cron (≈05:07 Berlin in summer,
@@ -257,8 +259,9 @@ The local **systemd user timer** `wind-agents-daily.timer` fires at **05:00 loca
 does *not* run `daily_run.py` — it only dispatches the cloud workflow
 (`gh workflow run daily.yml`), because GitHub's own cron can lag by many minutes and this
 makes the morning publish punctual. `Persistent=true`, so a dispatch missed while the
-laptop slept fires on next wake. Linger is **not** enabled, so the timer only runs while
-you are logged in; the cloud cron is the backstop that guarantees a daily run regardless.
+laptop slept fires on next wake. Linger **is** enabled (`loginctl show-user $USER`
+reports `Linger=yes`), so the timer also fires without an active login session; the cloud
+cron remains the backstop that guarantees a run even if the laptop is off.
 
 ```
 systemctl --user list-timers wind-agents-daily.timer

@@ -10,9 +10,11 @@ One call (`tuner.run`) does the whole cycle, so the caller never assembles it:
   2. REFLECT   the analyst reviews each open hypothesis and confirms or retracts it;
                the verdict is written back to the ledger.
   3. PROPOSE   new bounded parameter proposals are recorded as open hypotheses.
-  4. ACT       each proposal is BACKTESTED; a change is applied to config/params.json
+  4. ACT       each proposal is BACKTESTED; a change is applied to the lake's params
                only if it verifiably lowers CRPS on enough replayable days. Otherwise
                it stays a logged proposal. Nothing is ever applied on faith.
+               The write goes to config/params_<lake>.json — per-lake, because the
+               evidence was only ever gathered for that one lake.
 
 Everything is guarded: no API key, no data, or a failed call degrades to a clean skip —
 the deterministic forecast/learning path has already run and is never blocked.
@@ -160,11 +162,18 @@ def apply_change(lake, param, value, reason, backtest_result, date, stamp):
     before = params.get(param)
     params[param] = value
     fc.save_params(params, lake=lake)     # PER-LAKE: verified on this lake's history only
-    fc.PARAMS = fc.load_params()          # refresh the global view in-process
+    # The backtest measured this change with each arm relearning its bias from scratch,
+    # i.e. the steady state AFTER recalibration. The live buckets were fit under the OLD
+    # regime labels, so leaving them would make production behave like neither arm and
+    # silently score the relabelling cost as zero. Retire them so the lake relearns under
+    # the labels the change was actually verified with.
+    n_dropped = fc.reset_bias(lake)
     wd.log_event("param_change", {"lake": lake, "date": date, "param": param,
                                   "from": before, "to": value, "reason": reason,
+                                  "bias_buckets_retired": n_dropped,
                                   "backtest": backtest_result}, stamp=stamp)
-    return {"param": param, "from": before, "to": value, "reason": reason}
+    return {"param": param, "from": before, "to": value, "reason": reason,
+            "bias_buckets_retired": n_dropped}
 
 
 # ---------------------------------------------------------------- the loop
@@ -248,6 +257,13 @@ def _selftest():
     fc.PARAMS_PATH = os.path.join(tmp, "params.json")
     fc.PARAMS = dict(fc._DEFAULTS)
     wd.EVENTS_LOG = os.path.join(tmp, "events.jsonl")
+    # MODELS_DIR too: apply_change now retires the lake's learned buckets, and without
+    # this the test destroyed the REAL models/<lake>_bias.json. Seed a copy so reset_bias
+    # has something to drop and we can assert it actually dropped it.
+    fc.MODELS_DIR = tmp
+    with open(fc.bias_path("walchensee"), "w") as f:
+        json.dump({"alpha": 0.3, "processed_dates": ["2026-07-31"],
+                   "buckets": {"thermal|13": {"n": 4, "a": 0.0, "b": 1.2}}}, f)
 
     # --- validation: every bad proposal is rejected, with a reason
     assert _validate("NOT_A_PARAM", 5) and "unknown" in _validate("NOT_A_PARAM", 5)
@@ -278,7 +294,11 @@ def _selftest():
     # justify it (the change was only ever backtested against walchensee)
     assert fc.params_for("kochelsee")["THERMAL_CLOUD_MAX"] == fc._DEFAULTS["THERMAL_CLOUD_MAX"]
     assert fc.params_for("ammersee")["THERMAL_CLOUD_MAX"] == fc._DEFAULTS["THERMAL_CLOUD_MAX"]
-    print("  PASS apply: written per-lake; other lakes unaffected")
+    # the stale calibration must be retired, since it was fit under the OLD labels
+    assert json.load(open(fc.bias_path("walchensee")))["buckets"] == {}, "stale buckets kept"
+    assert json.load(open(fc.bias_path("walchensee")))["processed_dates"] == ["2026-07-31"], \
+        "processed dates must survive so days are not re-learned twice"
+    print("  PASS apply: per-lake write, other lakes untouched, stale buckets retired")
 
     # --- memory loop: proposal recorded, then reviewed and resolved next run
     fc.PARAMS = dict(fc._DEFAULTS)

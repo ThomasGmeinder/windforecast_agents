@@ -10,7 +10,7 @@ Leak control, on BOTH sides of the comparison:
   - baselines for a day use only data from strictly earlier days;
   - model hours that had already elapsed when the forecast was issued are NOT scored
     (a 06:00 run does not "predict" 00:00-05:00 — that model run already assimilated
-    them). See _is_leaked; the count skipped is reported as n_leaked_skipped.
+    them). See is_leaked; the count skipped is reported as n_leaked_skipped.
   - the forecast OF RECORD for a date is the earliest one logged, so a better-informed
     same-day re-run cannot replace it.
 
@@ -118,31 +118,54 @@ def _load_forecasts(lake):
                 continue
             if not r.get("hourly"):
                 continue
-            d, stamp = r["date"], r.get("run_stamp") or ""
-            if d not in best or stamp < best[d][0]:
-                best[d] = (stamp, r)
+            d, raw = r["date"], r.get("run_stamp")
+            # Rank by the PARSED instant, not the raw string: stamps can carry different
+            # offsets, so lexical order is not chronological. An unusable stamp ranks LAST
+            # so it can never beat a properly stamped record into the verification set.
+            when = parse_stamp(raw)
+            rank = when if when is not None else datetime.datetime.max.replace(tzinfo=wd.BERLIN)
+            if d not in best or rank < best[d][0]:
+                best[d] = (rank, raw, r)
     out = {}
-    for d, (stamp, r) in best.items():
-        out[d] = {h["hour"]: {**h, "_run_stamp": stamp} for h in r["hourly"]}
+    for d, (_rank, raw, r) in best.items():
+        out[d] = {h["hour"]: {**h, "_run_stamp": raw} for h in r["hourly"]}
     return out
 
 
-def _is_leaked(date, hour, run_stamp):
+def parse_stamp(run_stamp):
+    """A run_stamp as an Europe/Berlin-local datetime, or None if unusable.
+
+    Forecast hours are always Europe/Berlin (Open-Meteo is queried that way), so the issue
+    time must be compared in that same frame. Stamps written from 2026-08-03 on carry an
+    explicit offset. LEGACY naive stamps are assumed UTC: that is where the authoritative
+    cloud runs produced them, and for a laptop-made stamp the assumption only shifts the
+    issue time LATER, i.e. it drops more hours. Erring toward dropping never flatters the
+    model, which is the direction a referee must fail in."""
+    if not run_stamp:
+        return None
+    try:
+        dt = datetime.datetime.fromisoformat(run_stamp)
+    except Exception:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=datetime.timezone.utc)      # legacy: assume UTC
+    return dt.astimezone(wd.BERLIN)
+
+
+def is_leaked(date, hour, run_stamp):
     """True if `hour` on `date` had already elapsed when the forecast was issued.
 
     A forecast issued at 06:00 does not 'predict' 00:00-05:00 of the same day: the model
     run behind it has already assimilated those observations, so scoring them would be a
     hindcast. Only hours strictly after the issue time count as a forecast. A missing or
     unparseable stamp is treated as leaked (fail closed — never flatter the model)."""
-    if not run_stamp:
+    issued = parse_stamp(run_stamp)
+    if issued is None:
         return True
-    try:
-        issued = datetime.datetime.fromisoformat(run_stamp)
-    except Exception:
-        return True
-    if issued.date().isoformat() < date:
+    iso = issued.date().isoformat()
+    if iso < date:
         return False                       # issued on an earlier day: a genuine forecast
-    if issued.date().isoformat() > date:
+    if iso > date:
         return True                        # issued after the fact entirely
     return hour <= issued.hour             # same day: only later hours are forecasts
 
@@ -180,7 +203,7 @@ def evaluate(lake, forecasts=None, actuals=None):
         for hour, hr in forecasts[date].items():
             if hour not in actuals[date]:
                 continue
-            if _is_leaked(date, hour, hr.get("_run_stamp")):
+            if is_leaked(date, hour, hr.get("_run_stamp")):
                 n_leaked += 1              # already-elapsed hour: not a forecast, don't score it
                 continue
             y = actuals[date][hour]
@@ -264,7 +287,7 @@ def _replayable(date, hour, h, actuals):
     classification inputs, has a raw value, and was a genuine forecast at issue time."""
     return (hour in actuals.get(date, {}) and bool(h.get("inputs"))
             and h.get("raw_kn") is not None
-            and not _is_leaked(date, hour, h.get("_run_stamp")))
+            and not is_leaked(date, hour, h.get("_run_stamp")))
 
 
 def _walk_forward(lake, params, forecasts, actuals, dates):
@@ -497,12 +520,23 @@ def _selftest_backtest():
 
 def _selftest_leakfilter():
     """The lead-time filter must drop already-elapsed hours and keep genuine forecasts."""
-    assert _is_leaked("2026-05-02", 3, "2026-05-02T06:00")        # 03:00 already past at 06:00
-    assert not _is_leaked("2026-05-02", 9, "2026-05-02T06:00")    # 09:00 still ahead
-    assert not _is_leaked("2026-05-02", 0, "2026-05-01T18:00")    # issued day before
-    assert _is_leaked("2026-05-02", 9, "2026-05-03T06:00")        # issued after the fact
-    assert _is_leaked("2026-05-02", 9, None)                      # unknown -> fail closed
-    assert _is_leaked("2026-05-02", 9, "garbage")                 # unparseable -> fail closed
+    assert is_leaked("2026-05-02", 3, "2026-05-02T06:00")        # 03:00 already past at 06:00
+    assert not is_leaked("2026-05-02", 9, "2026-05-02T06:00")    # 09:00 still ahead
+    assert not is_leaked("2026-05-02", 0, "2026-05-01T18:00")    # issued day before
+    assert is_leaked("2026-05-02", 9, "2026-05-03T06:00")        # issued after the fact
+    assert is_leaked("2026-05-02", 9, None)                      # unknown -> fail closed
+    assert is_leaked("2026-05-02", 9, "garbage")                 # unparseable -> fail closed
+    # TIMEZONE: forecast hours are Europe/Berlin. A naive stamp is assumed UTC (that is
+    # where the cloud runs write it), so 04:20 naive == 06:20 Berlin and hours 5-6 must be
+    # dropped. Comparing 'hour <= 4' instead would silently leak 2 h/day in production.
+    assert is_leaked("2026-08-03", 5, "2026-08-03T04:20")
+    assert is_leaked("2026-08-03", 6, "2026-08-03T04:20")
+    assert not is_leaked("2026-08-03", 7, "2026-08-03T04:20")
+    # an explicit offset must be honoured, not string-compared
+    assert is_leaked("2026-08-03", 6, "2026-08-03T06:20+02:00")
+    assert not is_leaked("2026-08-03", 7, "2026-08-03T06:20+02:00")
+    # earliest-of-record must rank by INSTANT, so a later-but-lexically-smaller stamp loses
+    assert parse_stamp("2026-08-03T04:20") == parse_stamp("2026-08-03T06:20+02:00")
     # evaluate() must exclude them and say so
     f, a = _synthetic_days([(3.0, 30, 1.0)], n_days=4)
     hind = {d: {h: {**hr, "_run_stamp": d + "T23:00"} for h, hr in hh.items()}

@@ -26,6 +26,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import winddata as wd
 import forecast as fc
 import postproc
+import verify  # single authority for the lead-time (hindcast) filter
 
 LEARN_DIR = os.path.join(wd.LOG_DIR, "learning")
 os.makedirs(LEARN_DIR, exist_ok=True)
@@ -48,20 +49,27 @@ def _dir_err(a, b):
 
 
 def _forecast_for(lake, date):
-    """The last logged forecast made FOR `date` (YYYY-MM-DD)."""
+    """The forecast OF RECORD for `date` — the EARLIEST one logged for it.
+
+    Not the last: a same-day re-run is better informed (its model run has already seen
+    part of the day), so learning against it would flatter the correction with hindsight,
+    exactly as it flattered the verifier. The earliest record is what was actually issued
+    and published, so that is what we hold ourselves to."""
     path = os.path.join(wd.LOG_DIR, f"{lake}_forecast.jsonl")
     if not os.path.exists(path):
         return None
-    rec = None
+    best = None
     with open(path) as f:
         for line in f:
             try:
                 r = json.loads(line)
             except Exception:
                 continue
-            if r.get("date") == date and r.get("hourly"):
-                rec = r
-    return rec
+            if r.get("date") != date or not r.get("hourly"):
+                continue
+            if best is None or (r.get("run_stamp") or "") < (best.get("run_stamp") or ""):
+                best = r
+    return best
 
 
 def _mean(xs):
@@ -139,9 +147,18 @@ def update_from_day(lake, date):
     ei, er, signed, dir_errs, gratios = [], [], [], [], []
     by_regime = {}
 
+    run_stamp = rec.get("run_stamp")
+    n_leaked = 0
     for hp in rec["hourly"]:
         hour = hp["hour"]
         if hour not in actual:
+            continue
+        # Do not LEARN from hours that had already elapsed when the forecast was issued.
+        # Scoring them is a hindcast (verify.py refuses to), and training the correction on
+        # them is worse: it fits the buckets to near-nowcast skill the real 05:00 forecast
+        # will never have, and it makes production diverge from what the backtest replays.
+        if verify.is_leaked(date, hour, run_stamp):
+            n_leaked += 1
             continue
         raw = hp.get("raw_kn")
         issued = hp.get("mean_kn", raw)
@@ -238,6 +255,7 @@ def update_from_day(lake, date):
     return {"lake": lake, "date": date, "source": source, "agg": agg,
             "diffs": diffs, "bucket_updates": bucket_updates, "lessons": lessons,
             "large_misses": large_misses, "large_err_kn": LARGE_ERR_KN,
+            "n_leaked_skipped": n_leaked,
             "buckets_total": len(buckets), "_bias": bias}
 
 
@@ -259,8 +277,10 @@ def format_report(res):
     if res.get("skipped"):
         return f"### Learning — {res['lake']} (from {res['date']}): skipped — {res['skipped']}"
     a = res["agg"]
+    leak = (f" · {res['n_leaked_skipped']} hour(s) skipped (already elapsed when issued)"
+            if res.get("n_leaked_skipped") else "")
     L = [f"### Learning report — {res['lake']} — learned from {res['date']}",
-         f"Actual source: {res['source']} · matched {a['n_hours']} hours",
+         f"Actual source: {res['source']} · matched {a['n_hours']} hours{leak}",
          "",
          "**1. Prediction vs measured (per hour)** — Δ = prediction − measured (kn)",
          "```",

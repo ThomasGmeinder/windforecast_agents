@@ -9,7 +9,7 @@ so the logic lives in exactly one place.
 
 Units: Open-Meteo is queried in knots, so everything here is in knots.
 """
-import os, sys, json
+import os, sys, json, math
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import winddata as wd
 import postproc
@@ -69,20 +69,31 @@ def params_path(lake=None):
 def _overlay(base, path):
     """Merge a params file over `base`, ignoring unknown or non-numeric keys. A corrupt
     or unreadable file is reported (never silently ignored) and the base is kept."""
+    name = os.path.basename(path)
     if not os.path.exists(path):
         return base, None
+    # The whole parse+merge is guarded: valid JSON that is not an object (a list, number
+    # or string) would otherwise raise AttributeError on .items() and take the entire
+    # forecast run down, which is worse than the silent fallback this replaced.
     try:
         with open(path) as f:
             data = json.load(f)
+        if data is None:
+            return base, None
+        if not isinstance(data, dict):
+            return base, f"{name}: not a JSON object ({type(data).__name__}) — keeping previous values"
+        bad = []
+        for k, v in data.items():
+            # bare NaN/Infinity parse as floats and would poison every comparison in
+            # classify_regime (NaN compares False against everything), so require finite
+            if (k in _DEFAULTS and isinstance(v, (int, float))
+                    and not isinstance(v, bool) and math.isfinite(v)):
+                base[k] = v
+            else:
+                bad.append(k)
+        return base, (f"{name}: ignored keys {bad}" if bad else None)
     except Exception as e:
-        return base, f"{os.path.basename(path)} unreadable ({type(e).__name__}) — using defaults"
-    bad = []
-    for k, v in (data or {}).items():
-        if k in _DEFAULTS and isinstance(v, (int, float)) and not isinstance(v, bool):
-            base[k] = v
-        else:
-            bad.append(k)
-    return base, (f"{os.path.basename(path)}: ignored keys {bad}" if bad else None)
+        return base, f"{name} unreadable ({type(e).__name__}) — keeping previous values"
 
 
 PARAM_WARNINGS = []      # surfaced by daily_run so a broken config can't fail silently
@@ -223,6 +234,24 @@ def load_bias(lake):
         with open(p) as f:
             return json.load(f)
     return {"alpha": 0.3, "buckets": {}, "processed_dates": []}
+
+
+def reset_bias(lake):
+    """Retire the learned per-(regime x hour) buckets for a lake, keeping the processed
+    dates so nothing is re-learned twice. Called when a regime THRESHOLD changes: the
+    buckets were fit under the old labels, so an hour may now land in a different bucket
+    and the old calibration no longer describes it. Returns how many were dropped."""
+    bias = load_bias(lake)
+    n = len(bias.get("buckets") or {})
+    bias["buckets"] = {}
+    path = bias_path(lake)
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(bias, f, indent=2)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)
+    return n
 
 
 def _bucket_key(regime, hour):
