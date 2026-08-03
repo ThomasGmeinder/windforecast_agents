@@ -28,7 +28,7 @@ forecasts: for a point forecast it EQUALS the absolute error; for a distribution
 rewards honest spread (penalizes over-confidence, rewards well-placed uncertainty). Units
 are knots, lower is better. Skill score SS = 1 − CRPS/CRPS_baseline; SS > 0 beats it.
 """
-import os, sys, json, math, datetime
+import os, sys, json, math, random, datetime
 from statistics import NormalDist
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -324,7 +324,38 @@ def mean_crps(recs, since=None, until=None):
 
 
 # ---------------------------------------------------------------- backtest (B2)
-N_MIN_BACKTEST_DAYS = 10   # replayable days required before a change may be APPLIED
+N_MIN_BACKTEST_DAYS = 10    # replayable days required before a change may be APPLIED
+N_MIN_BACKTEST_PAIRS = 60   # ...and this many scored hours; days alone can be near-empty
+MIN_EFFECT_KN = 0.05        # a change must reduce mean CRPS by at least this to count
+BOOTSTRAP_N = 2000          # resamples for the confidence interval
+BOOTSTRAP_CONF = 0.95
+
+
+def _block_bootstrap_ci(by_day, n=BOOTSTRAP_N, conf=BOOTSTRAP_CONF, seed=12345):
+    """Confidence interval for the mean paired difference, resampling whole DAYS.
+
+    Resampling individual hours would badly overstate significance: hours within a day
+    share one weather situation and one model run, so they are nowhere near independent.
+    Resampling days (a block bootstrap) respects that structure. Deterministic seed so a
+    gate decision is reproducible — the same evidence must always give the same verdict."""
+    days = sorted(by_day)
+    if len(days) < 2:
+        return None, None
+    rnd = random.Random(seed)
+    k = len(days)
+    means = []
+    for _ in range(n):
+        pool = []
+        for _ in range(k):
+            pool.extend(by_day[days[rnd.randrange(k)]])
+        if pool:
+            means.append(sum(pool) / len(pool))
+    if not means:
+        return None, None
+    means.sort()
+    lo = means[int((1 - conf) / 2 * len(means))]
+    hi = means[min(len(means) - 1, int((1 + conf) / 2 * len(means)))]
+    return lo, hi
 
 
 def _replayable(date, hour, h, actuals):
@@ -359,7 +390,7 @@ def _walk_forward(lake, params, forecasts, actuals, dates):
             regime, cs, _, _ = fc.replay_hour(lake, hour, fc.row_from_logged(h),
                                               h.get("dp"), {"dtheta": h.get("dtheta")},
                                               raw_s, raw_g, params=params, bias=bias)
-            errs.append(abs(cs - y))            # predicted knowing only up to yesterday
+            errs.append((date, abs(cs - y)))    # predicted knowing only up to yesterday
             learned_today.append((regime, hour, raw_s, y))
         for regime, hour, raw_s, y in learned_today:   # ...only now learn from today
             st = bias["buckets"].setdefault(fc._bucket_key(regime, hour),
@@ -396,13 +427,31 @@ def backtest(lake, param, value, forecasts=None, actuals=None, params=None, bias
     alt = _walk_forward(lake, cand, forecasts, actuals, dates)
     if not cur:
         return {"crps_current": None, "crps_candidate": None, "crps_ss": None,
-                "n_days": 0, "n_pairs": 0, "enough_data": False}
-    c0 = sum(cur) / len(cur)
-    c1 = sum(alt) / len(alt)
+                "n_days": 0, "n_pairs": 0, "enough_data": False,
+                "delta_kn": None, "ci_lo": None, "ci_hi": None, "significant": False}
+    c0 = sum(e for _, e in cur) / len(cur)
+    c1 = sum(e for _, e in alt) / len(alt)
+
+    # PAIRED comparison: the two arms scored the very same hours, so the per-hour
+    # difference removes the weather entirely and leaves only the parameter's effect.
+    # Comparing two independent means would drown a real effect in day-to-day variance.
+    by_day = {}
+    for (d, e0), (_, e1) in zip(cur, alt):
+        by_day.setdefault(d, []).append(e1 - e0)      # negative = candidate is better
+    diffs = [x for v in by_day.values() for x in v]
+    delta = sum(diffs) / len(diffs)
+    lo, hi = _block_bootstrap_ci(by_day)
+    # significant only if the WHOLE interval sits below zero, and the effect is big
+    # enough to be worth acting on rather than merely non-zero
+    sig = (hi is not None and hi < 0 and delta <= -MIN_EFFECT_KN)
     return {"crps_current": round(c0, 3), "crps_candidate": round(c1, 3),
             "crps_ss": (round(1 - c1 / c0, 4) if c0 else None),
             "n_days": n_days, "n_pairs": len(cur),
-            "enough_data": n_days >= N_MIN_BACKTEST_DAYS}
+            "enough_data": n_days >= N_MIN_BACKTEST_DAYS and len(cur) >= N_MIN_BACKTEST_PAIRS,
+            "delta_kn": round(delta, 4),
+            "ci_lo": None if lo is None else round(lo, 4),
+            "ci_hi": None if hi is None else round(hi, 4),
+            "significant": bool(sig)}
 
 
 # ---------------------------------------------------------------- reporting
@@ -509,7 +558,7 @@ def _selftest_discrimination():
     return sg, sb
 
 
-def _synthetic_days(specs, n_days=16, hour=13, raw=4.0):
+def _synthetic_days(specs, n_days=16, hours=(10, 11, 12, 13, 14, 15), raw=4.0):
     """Build replayable logged days at one hour. `specs` is a list of
     (spd925, cloud, truth_multiple) cycled across days, so the SAME hour sees different
     conditions on different days — which is what makes the regime label (and therefore
@@ -522,13 +571,15 @@ def _synthetic_days(specs, n_days=16, hour=13, raw=4.0):
         day = datetime.date(2026, 5, 1) + datetime.timedelta(days=k)
         d = day.isoformat()
         stamp = (day - datetime.timedelta(days=1)).isoformat() + "T18:00"
-        spd925, cloud, mult = specs[k % len(specs)]
-        forecasts[d] = {hour: {"hour": hour, "raw_kn": raw, "raw_gust_kn": raw * 2,
-                               "mean_kn": raw, "dtheta": 0.0, "dp": 0.0,
-                               "_run_stamp": stamp,
-                               "inputs": {"spd925": spd925, "spd850": 2.0,
-                                          "dir850": 10, "cloud": cloud}}}
-        actuals[d] = {hour: raw * mult}
+        spd925, cloud, mult = specs[k % len(specs)]   # one weather situation per DAY
+        forecasts[d], actuals[d] = {}, {}
+        for hour in hours:
+            forecasts[d][hour] = {"hour": hour, "raw_kn": raw, "raw_gust_kn": raw * 2,
+                                  "mean_kn": raw, "dtheta": 0.0, "dp": 0.0,
+                                  "_run_stamp": stamp,
+                                  "inputs": {"spd925": spd925, "spd850": 2.0,
+                                             "dir850": 10, "cloud": cloud}}
+            actuals[d][hour] = raw * mult
     return forecasts, actuals
 
 
@@ -557,6 +608,18 @@ def _selftest_backtest():
                  for h, hr in hh.items()} for d, hh in f1.items()}
     empty = backtest("walchensee", "THERMAL_CLOUD_MAX", 38, noinp, a1, base)
     assert empty["n_pairs"] == 0 and not empty["enough_data"], empty
+    # A NOISE-LEVEL improvement must be REFUSED. Before the significance test, any
+    # crps_ss > 0 was accepted, so a coin-flip difference could reach production.
+    import random as _r
+    rnd = _r.Random(7)
+    f3, a3 = _synthetic_days([(3.0, 30, 1.0)], n_days=20)
+    for d in a3:                       # pure noise, no systematic difference
+        for h in a3[d]:
+            a3[d][h] = round(4.0 + rnd.gauss(0, 1.5), 2)
+    noise = backtest("walchensee", "THERMAL_CLOUD_MAX", 38, f3, a3, base)
+    assert not noise["significant"], f"noise accepted as improvement: {noise}"
+    # ...and a genuine effect is still detected
+    assert good["significant"], good
     # hours already elapsed at issue time must not be replayable either
     leaked = {d: {h: {**hr, "_run_stamp": d + "T20:00"} for h, hr in hh.items()}
               for d, hh in f1.items()}
@@ -586,13 +649,14 @@ def _selftest_leakfilter():
     assert parse_stamp("2026-08-03T04:20") == parse_stamp("2026-08-03T06:20+02:00")
     # evaluate() must exclude them and say so
     f, a = _synthetic_days([(3.0, 30, 1.0)], n_days=4)
+    n_hours = sum(len(v) for v in f.values())          # derive, never hardcode the fixture
     hind = {d: {h: {**hr, "_run_stamp": d + "T23:00"} for h, hr in hh.items()}
             for d, hh in f.items()}
     sc = evaluate("walchensee", hind, a)
-    assert sc["n_pairs"] == 0 and sc["n_leaked_skipped"] == 4, sc
+    assert sc["n_pairs"] == 0 and sc["n_leaked_skipped"] == n_hours, sc
     assert "hindcast" in format_scorecard(sc)
     ok = evaluate("walchensee", f, a)
-    assert ok["n_pairs"] == 4 and ok["n_leaked_skipped"] == 0, ok
+    assert ok["n_pairs"] == n_hours and ok["n_leaked_skipped"] == 0, ok
     # earliest record per date wins, so a later re-run cannot launder the issue time
     import tempfile
     tmp = tempfile.mkdtemp()
@@ -645,8 +709,9 @@ if __name__ == "__main__":
               "(already-elapsed hours excluded; earliest record per date wins)")
         gd, bd, th = _selftest_backtest()
         print(f"D. backtest gate .............. PASS  "
-              f"(good param SS {gd['crps_ss']:+.2f} over {gd['n_days']}d; "
-              f"bad param SS {bd['crps_ss']:+.2f}; thin history correctly "
+              f"(real effect Δ{gd['delta_kn']:+.2f} kn CI[{gd['ci_lo']},{gd['ci_hi']}] "
+              f"significant={gd['significant']}; harmful SS {bd['crps_ss']:+.2f}; "
+              f"noise correctly rejected; thin history "
               f"'{'insufficient' if not th['enough_data'] else 'ENOUGH?!'}')")
         n_checked = _selftest_realdata()
         print(f"E. real-data honesty .......... PASS  ({n_checked} lake(s) with data asserted)")

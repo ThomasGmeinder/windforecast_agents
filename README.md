@@ -259,8 +259,13 @@ Each proposal must pass, in order: the parameter is one of the six known tunable
 value is numeric and inside `PARAM_BOUNDS` → the step is ≤ 25 % of the current value →
 and then a **backtest**: every replayable logged day is re-run under the candidate value
 (`verify.backtest`, sharing `forecast.replay_hour` with production so a backtest can
-never drift from the real path) and it is applied **only if CRPS improves over at least
-`verify.N_MIN_BACKTEST_DAYS` (currently 10) replayable days**. A change that passes is written to `config/params_<lake>.json` — per-lake, because
+never drift from the real path) and it is applied only if the improvement is **statistically significant**: the
+per-hour errors of the two arms are compared **pairwise** (same hours, so the weather
+cancels), and a block bootstrap over whole DAYS — hours within a day are not independent —
+must put the entire 95 % confidence interval below zero, with a mean gain of at least
+`MIN_EFFECT_KN`. It also needs `N_MIN_BACKTEST_DAYS` (10) days **and**
+`N_MIN_BACKTEST_PAIRS` (60) scored hours. A merely positive point estimate is not
+evidence and is refused. A change that passes is written to `config/params_<lake>.json` — per-lake, because
 it was only ever verified against that one lake's history — and logged as a `param_change` event with its
 evidence. Anything else is refused, with the reason recorded.
 

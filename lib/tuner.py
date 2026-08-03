@@ -149,11 +149,21 @@ def consider(lake, param, value):
     if bt.get("error"):
         return False, bt["error"], bt
     if not bt["enough_data"]:
-        return False, (f"insufficient replayable history "
-                       f"({bt['n_days']}/{verify.N_MIN_BACKTEST_DAYS} days)"), bt
-    if not bt["crps_ss"] or bt["crps_ss"] <= 0:
-        return False, f"backtest shows no improvement (CRPS-SS {bt['crps_ss']})", bt
-    return True, f"backtest CRPS-SS {bt['crps_ss']:+.4f} over {bt['n_days']} days", bt
+        return False, (f"insufficient replayable history ({bt['n_days']}/"
+                       f"{verify.N_MIN_BACKTEST_DAYS} days, {bt['n_pairs']}/"
+                       f"{verify.N_MIN_BACKTEST_PAIRS} hours)"), bt
+    # A positive point estimate is not evidence. The walk-forward score is deliberately
+    # noisy (each arm relearns from cold), so requiring only crps_ss > 0 applied a
+    # coin-flip-grade "improvement" a large fraction of the time. Demand instead that the
+    # whole bootstrap interval of the PAIRED per-hour difference sits below zero, and that
+    # the effect is big enough to be worth acting on.
+    if not bt.get("significant"):
+        return False, (f"not statistically significant (Δ {bt['delta_kn']:+.3f} kn, "
+                       f"95% CI [{bt['ci_lo']}, {bt['ci_hi']}], need CI<0 and "
+                       f"Δ≤-{verify.MIN_EFFECT_KN})"), bt
+    return True, (f"CRPS -{abs(bt['delta_kn']):.3f} kn, 95% CI [{bt['ci_lo']}, {bt['ci_hi']}]"
+                  f" over {bt['n_days']} days / {bt['n_pairs']} hours "
+                  f"(SS {bt['crps_ss']:+.4f})"), bt
 
 
 def apply_change(lake, param, value, reason, backtest_result, date, stamp):
@@ -275,20 +285,32 @@ def _selftest():
 
     # --- gate: decision follows the backtest, not the model's confidence
     real_backtest = verify.backtest
-    cases = [({"crps_ss": 0.2, "n_days": 20, "enough_data": True}, True, "verified win"),
-             ({"crps_ss": -0.2, "n_days": 20, "enough_data": True}, False, "no improvement"),
-             ({"crps_ss": 0.0, "n_days": 20, "enough_data": True}, False, "flat"),
-             ({"crps_ss": 0.9, "n_days": 2, "enough_data": False}, False, "thin history")]
+    def bt(ss, days=20, enough=True, delta=-0.4, lo=-0.6, hi=-0.2, sig=None):
+        return {"crps_ss": ss, "n_days": days, "n_pairs": days * 6, "enough_data": enough,
+                "delta_kn": delta, "ci_lo": lo, "ci_hi": hi,
+                "significant": (hi < 0 and delta <= -verify.MIN_EFFECT_KN) if sig is None else sig}
+    cases = [
+        (bt(0.2), True, "verified win: CI entirely below zero"),
+        (bt(-0.2, delta=0.4, lo=0.2, hi=0.6), False, "candidate is worse"),
+        (bt(0.0, delta=0.0, lo=-0.1, hi=0.1), False, "flat"),
+        (bt(0.9, days=2, enough=False), False, "thin history"),
+        # THE POINT OF THE SIGNIFICANCE TEST: a positive point estimate whose interval
+        # still straddles zero is noise, and used to be applied.
+        (bt(0.15, delta=-0.30, lo=-0.75, hi=0.20), False, "positive but CI straddles zero"),
+        # ...and an effect too small to be worth acting on, even if significant
+        (bt(0.01, delta=-0.01, lo=-0.02, hi=-0.005), False, "significant but trivial effect"),
+    ]
     for fake, expect_ok, label in cases:
         verify.backtest = (lambda _f: (lambda *a, **k: dict(_f)))(fake)
         ok, reason, _ = consider("walchensee", "THERMAL_CLOUD_MAX", 40)
         assert ok is expect_ok, f"{label}: expected ok={expect_ok}, got {ok} ({reason})"
-    print("  PASS gate: applies only a backtested win; refuses regressions, flat, thin data")
+    print("  PASS gate: applies only a SIGNIFICANT, non-trivial win; refuses regressions,\n"
+          "             flat results, thin history, CI-straddles-zero noise, and tiny effects")
 
     # --- apply writes the single source of truth and is picked up live
-    verify.backtest = lambda *a, **k: {"crps_ss": 0.2, "n_days": 20, "enough_data": True}
-    ok, reason, bt = consider("walchensee", "THERMAL_CLOUD_MAX", 40)
-    apply_change("walchensee", "THERMAL_CLOUD_MAX", 40, reason, bt, "2026-08-02", "stamp")
+    verify.backtest = lambda *a, **k: bt(0.2)
+    ok, reason, bt_ = consider("walchensee", "THERMAL_CLOUD_MAX", 40)
+    apply_change("walchensee", "THERMAL_CLOUD_MAX", 40, reason, bt_, "2026-08-02", "stamp")
     assert fc.params_for("walchensee")["THERMAL_CLOUD_MAX"] == 40
     # and CRITICALLY: it must NOT have leaked to the other lakes, whose history did not
     # justify it (the change was only ever backtested against walchensee)
@@ -309,7 +331,7 @@ def _selftest():
         "proposals": [{"param": "COLD_POOL_DTHETA", "proposed": 1.3,
                        "rationale": "cold pool clears earlier",
                        "expected_effect": "CRPS -0.3 kn on 10-13h"}]}
-    verify.backtest = lambda *a, **k: {"crps_ss": 0.1, "n_days": 2, "enough_data": False}
+    verify.backtest = lambda *a, **k: bt(0.1, days=2, enough=False)
     r1 = run("walchensee", "2026-08-01", "stamp")
     assert len(r1["refused"]) == 1 and "insufficient" in r1["refused"][0]["reason"]
     # refused => NOT an open hypothesis (nothing changed, so CRPS movement would be weather)
@@ -319,7 +341,7 @@ def _selftest():
     print("  PASS propose: refused change recorded with its reason, NOT as an open hypothesis")
 
     # now an APPLIED change: it becomes an open hypothesis and is reviewed once due
-    verify.backtest = lambda *a, **k: {"crps_ss": 0.15, "n_days": 20, "enough_data": True}
+    verify.backtest = lambda *a, **k: bt(0.15)
     analyst.run_analysis = lambda ev, **k: {
         "narrative": "raise the cloud ceiling", "reviews": [],
         "proposals": [{"param": "THERMAL_CLOUD_MAX", "proposed": 41,
