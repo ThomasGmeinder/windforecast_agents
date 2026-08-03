@@ -30,17 +30,23 @@ jobs:
       - name: Set up Python + uv
         uses: astral-sh/setup-uv@v3
       - run: uv venv
-      - run: uv pip install --python .venv cfgrib eccodes xarray numpy pandas
+      # numpy only. The GRIB reader (cfgrib/eccodes/xarray) is reachable solely from
+      # winddata's own __main__ self-test, never from daily_run, and pandas is unused —
+      # installing heavy binary wheels every morning cost minutes and added failure modes
+      # for code the pipeline does not execute.
+      - run: uv pip install --python .venv numpy
 
       # Fail fast if the referee or the safety gate is broken — these are pure, offline
       # and fast, and a silently-broken verifier would let bad tuning through unnoticed.
-      - name: Self-tests (verifier, tuner gate, ledger, regression)
+      # Hermetic; gates the live pipeline so a broken referee can never tune anything.
+      - name: Self-tests + end-to-end loop simulation
         run: |
           .venv/bin/python lib/verify.py
           .venv/bin/python lib/tuner.py selftest
           .venv/bin/python lib/ledger.py
           .venv/bin/python lib/postproc.py
           .venv/bin/python lib/forecast.py selftest
+          .venv/bin/python lib/simulate.py offline
 
       - name: Daily run (learn from yesterday -> forecast today)
         env:

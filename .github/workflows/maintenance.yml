@@ -1,0 +1,70 @@
+name: maintenance (manual)
+
+# Network-heavy rebuilds of derived data. MANUAL ONLY — deliberately no schedule.
+#
+# Each of these hammers a public service (GKD Bayern, DWD Open Data, Open-Meteo archive)
+# for data that is essentially static: the Ammersee buoy archive stops at 2026-06-15
+# because the station is broken, and the DWD/buoy overlap only grows a day at a time.
+# Rebuilding daily would be pointless load on somebody else's infrastructure and would
+# gain nothing. Run these when the buoy comes back, or every few months.
+#
+# They also REWRITE models/, so keeping them off the daily path means a routine forecast
+# run can never silently change the calibration underneath the tuner.
+
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: which rebuild to run
+        required: true
+        default: climatology
+        type: choice
+        options: [climatology, calibration, both]
+      lake:
+        description: lake
+        required: true
+        default: ammersee
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: maintenance
+  cancel-in-progress: false
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - run: uv venv
+      - run: uv pip install --python .venv numpy
+
+      # Never rebuild on top of a broken referee.
+      - name: Self-tests first
+        run: |
+          .venv/bin/python lib/verify.py
+          .venv/bin/python lib/simulate.py offline
+
+      - name: Rebuild climatology (≈13 ranged requests to GKD)
+        if: inputs.task == 'climatology' || inputs.task == 'both'
+        run: .venv/bin/python lib/climatology.py build ${{ inputs.lake }}
+
+      - name: Rebuild fallback calibration (one DWD archive download + GKD range)
+        if: inputs.task == 'calibration' || inputs.task == 'both'
+        run: .venv/bin/python lib/obs_calib.py build ${{ inputs.lake }}
+
+      - name: Show what changed, then commit
+        run: |
+          .venv/bin/python lib/climatology.py show ${{ inputs.lake }} || true
+          .venv/bin/python lib/obs_calib.py show ${{ inputs.lake }} || true
+          git config user.name  "wind-bot"
+          git config user.email "wind-bot@users.noreply.github.com"
+          git add models
+          git commit -m "maintenance: rebuild ${{ inputs.task }} for ${{ inputs.lake }}" \
+            || echo "nothing to commit"
+          git pull --rebase --autostash origin main
+          git push

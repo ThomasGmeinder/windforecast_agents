@@ -1,0 +1,69 @@
+name: ci
+
+# Fast, hermetic checks on every code change.
+#
+# Deliberately NO network and NO secrets: everything here is deterministic, so a red CI
+# always means "you broke something", never "a third-party service hiccuped". A test suite
+# that fails for reasons outside the repo trains people to ignore it. The live pipeline —
+# which genuinely depends on Open-Meteo, DWD, GKD and Gemini — runs in daily.yml, where a
+# transient outage is visible as a bad run rather than a bad commit.
+#
+# Runs on pull requests too, and needs no secrets, so fork PRs are testable.
+
+on:
+  push:
+    branches: [main]
+    # The daily job commits its own state back to main. Without this, every bot commit
+    # would retrigger CI in a loop for changes that contain no code.
+    paths-ignore:
+      - 'logs/**'
+      - 'models/**'
+      - 'site/**'
+      - 'config/**'
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python + uv
+        uses: astral-sh/setup-uv@v3
+      - run: uv venv
+      # numpy only: it is the single third-party package the hermetic suites touch
+      # (verify's correctness tests). cfgrib/eccodes/xarray/pandas are NOT installed here
+      # — the GRIB reader is reachable only from winddata's own __main__, never from the
+      # pipeline, and pulling heavy binary wheels would add minutes and failure modes for
+      # code these tests never execute.
+      - run: uv pip install --python .venv numpy
+
+      - name: Unit suites
+        run: |
+          .venv/bin/python lib/postproc.py
+          .venv/bin/python lib/ledger.py
+          .venv/bin/python lib/forecast.py selftest
+          .venv/bin/python lib/verify.py
+          .venv/bin/python lib/tuner.py selftest
+
+      # The whole loop: propose -> gate -> APPLY -> open hypothesis -> withhold from early
+      # review -> review. On real data the gate correctly refuses everything, so this
+      # engineered fixture is the only thing that exercises the apply branch at all.
+      - name: End-to-end loop simulation (offline)
+        run: .venv/bin/python lib/simulate.py offline
+
+      # The simulation sandboxes every write. If that ever regresses it would corrupt real
+      # state in the daily job, so prove it here instead of finding out in production.
+      - name: Assert the test run mutated no tracked state
+        run: |
+          git diff --exit-code -- logs models config \
+            || { echo "::error::a test wrote into tracked state"; exit 1; }
+
+      - name: Site renders from committed state
+        run: .venv/bin/python build_site.py
