@@ -1,27 +1,27 @@
 Kochelsee — 2026-08-03
-  dominant thermal; peak 5 kn (2 Bft) NNE ~18h  FOEHN 04-05h (Kesselberg fall-wind)
+  dominant thermal; peak 4 kn (1 Bft) NNE ~17h  FOEHN 04-23h (Kesselberg fall-wind)
   Hour | Dir  | Mean kn (Bft) | Gust kn | Regime   | Conf | Note
-  00   | W    |     1.4 (1) |   8.2   | calm     | med  | glassy
-  01   | SW   |     1.4 (1) |   3.8   | calm     | med  | glassy
-  02   | S    |     5.4 (2) |  11.6   | gradient | med  | raw (no local calib yet)
-  03   | SW   |     2.1 (1) |  10.5   | gradient | med  | raw (no local calib yet)
-  04   | WSW  |     1.3 (1) |   3.9   | foehn    | med  | raw (no local calib yet) fg+0.7 SW föhn — often unreliable
-  05   | WSW  |     2.3 (1) |   4.8   | foehn    | med  | raw (no local calib yet) fg+0.7 SW föhn — often unreliable
-  06   | NW   |     1.1 (1) |   4.9   | calm     | med  | glassy
-  07   | W    |     1.9 (1) |   3.8   | calm     | med  | glassy
-  08   | SE   |     2.6 (1) |   7.7   | calm     | med  | glassy
-  09   | SW   |     1.9 (1) |   5.5   | thermal  | med  | raw (no local calib yet)
-  10   | W    |     1.4 (1) |   4.8   | calm     | med  | glassy
-  11   | WSW  |     2.1 (1) |   6.3   | thermal  | med  | raw (no local calib yet)
-  12   | NW   |     2.1 (1) |   6.4   | thermal  | med  | raw (no local calib yet)
-  13   | N    |     1.5 (1) |   4.6   | thermal  | med  | raw (no local calib yet)
-  14   | NNE  |     2.9 (1) |   5.9   | thermal  | med  | raw (no local calib yet)
-  15   | NNE  |     3.8 (1) |   8.3   | thermal  | med  | raw (no local calib yet)
-  16   | N    |     3.6 (1) |   7.8   | thermal  | med  | raw (no local calib yet)
-  17   | NNE  |     4.5 (2) |  10.5   | thermal  | med  | raw (no local calib yet)
-  18   | NNE  |     4.9 (2) |  18.4   | gradient | med  | raw (no local calib yet)
-  19   | ENE  |     1.9 (1) |  10.9   | gradient | med  | raw (no local calib yet)
-  20   | S    |     3.3 (1) |   9.3   | gradient | med  | raw (no local calib yet)
-  21   | SE   |     3.4 (1) |   5.9   | gradient | med  | raw (no local calib yet)
-  22   | S    |     3.2 (1) |   7.5   | gradient | med  | raw (no local calib yet)
-  23   | S    |     5.3 (2) |  10.7   | gradient | med  | raw (no local calib yet)
+  00   | W    |     1.7 (1) |   8.2   | calm     | med  | glassy
+  01   | SW   |     1.6 (1) |   4.2   | calm     | med  | glassy
+  02   | S    |     7.8 (3) |  21.0   | gradient | med  | raw (no local calib yet)
+  03   | SW   |     2.3 (1) |  10.7   | gradient | med  | raw (no local calib yet)
+  04   | WSW  |     2.0 (1) |   4.7   | foehn    | low  | raw (no local calib yet) fg+0.6 unconfirmed @Peißenberg (W 4kn)
+  05   | WSW  |     2.3 (1) |   5.2   | foehn    | low  | raw (no local calib yet) fg+0.5 unconfirmed @Peißenberg (W 4kn)
+  06   | NW   |     1.2 (1) |   4.2   | calm     | med  | glassy
+  07   | W    |     1.2 (1) |   2.9   | calm     | med  | glassy
+  08   | SE   |     2.7 (1) |  10.0   | calm     | med  | glassy
+  09   | SW   |     1.9 (1) |   5.8   | thermal  | med  | raw (no local calib yet)
+  10   | W    |     1.7 (1) |   5.2   | calm     | med  | glassy
+  11   | WSW  |     1.7 (1) |   5.0   | thermal  | med  | raw (no local calib yet)
+  12   | NW   |     1.4 (1) |   4.1   | thermal  | med  | raw (no local calib yet)
+  13   | N    |     1.4 (1) |   3.8   | thermal  | med  | raw (no local calib yet)
+  14   | NNE  |     3.1 (1) |   6.1   | thermal  | med  | raw (no local calib yet)
+  15   | NNE  |     3.3 (1) |   7.8   | thermal  | med  | raw (no local calib yet)
+  16   | N    |     3.2 (1) |   7.3   | thermal  | med  | raw (no local calib yet)
+  17   | NNE  |     3.9 (1) |   9.7   | thermal  | med  | raw (no local calib yet)
+  18   | NNE  |     3.8 (1) |  13.5   | gradient | med  | raw (no local calib yet)
+  19   | ENE  |     1.6 (1) |  10.3   | gradient | med  | raw (no local calib yet)
+  20   | S    |     2.0 (1) |   5.6   | calm     | med  | glassy
+  21   | SE   |     3.2 (1) |   6.0   | gradient | med  | raw (no local calib yet)
+  22   | S    |     3.4 (1) |   7.7   | foehn    | low  | raw (no local calib yet) fg-1.6 unconfirmed @Peißenberg (W 4kn)
+  23   | S    |     6.0 (2) |  11.1   | foehn    | low  | raw (no local calib yet) fg-1.2 unconfirmed @Peißenberg (W 4kn)
