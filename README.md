@@ -269,6 +269,15 @@ evidence and is refused. A change that passes is written to `config/params_<lake
 it was only ever verified against that one lake's history — and logged as a `param_change` event with its
 evidence. Anything else is refused, with the reason recorded.
 
+**Measured leverage (`docs/LEVERAGE.md`).** Replaying real history shows the six tunable
+thresholds are worth **<0.5 % of MAE with confidence intervals straddling zero**, even in
+föhn season with 219 föhn hours — because the per-(regime×hour) regression absorbs the
+error whichever bucket an hour lands in. By contrast the bias correction itself is worth
+**+37 %** and getting the ground truth right was worth **+42 %**. The gate refusing every
+proposal is therefore not excessive caution; it is an accurate report that these knobs do
+not move the forecast. Pointing the tuner at blend weights or the correction's own
+constants would give it something real to optimise.
+
 **Currently the gate is effectively dormant**: replayable history (days carrying the
 captured classification inputs) only began accumulating recently, so proposals are logged
 and reviewed but not applied, and the daily report says exactly that
