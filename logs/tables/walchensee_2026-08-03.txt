@@ -1,5 +1,5 @@
 Walchensee — 2026-08-03
-  dominant thermal; peak 5 kn (2 Bft) S ~19h
+  dominant thermal; peak 6.5 kn (2 Bft) SSW ~20h · gusts to 18.0 kn ~19h
   Hour | Dir  | Mean kn (Bft) | Gust kn | Regime   | Conf | Note
   00   | SSE  |     4.7 (2) |   9.2   | gradient | med  | raw (no local calib yet)
   01   | SSE  |     4.8 (2) |   9.7   | gradient | med  | raw (no local calib yet)
@@ -11,14 +11,14 @@ Walchensee — 2026-08-03
   07   | SSE  |     3.9 (1) |   7.9   | gradient | med  | raw (no local calib yet)
   08   | S    |     3.5 (1) |   7.7   | gradient | med  | raw (no local calib yet)
   09   | S    |     3.5 (1) |   7.3   | gradient | med  | raw (no local calib yet)
-  10   | SSW  |     3.1 (1) |   7.6   | thermal  | med  | raw (no local calib yet)
-  11   | SSW  |     2.6 (1) |   7.1   | thermal  | med  | raw (no local calib yet)
-  12   | SW   |     2.4 (1) |   7.5   | thermal  | med  | raw (no local calib yet)
-  13   | W    |     2.7 (1) |   6.3   | thermal  | med  | raw (no local calib yet)
-  14   | N    |     3.5 (1) |   8.5   | thermal  | med  | raw (no local calib yet)
-  15   | N    |     4.2 (2) |   9.1   | thermal  | med  | raw (no local calib yet)
-  16   | N    |     4.4 (2) |   9.3   | thermal  | med  | raw (no local calib yet)
-  17   | N    |     4.7 (2) |   9.4   | thermal  | med  | raw (no local calib yet)
+  10   | SSW  |     3.1 (1) |   7.6   | thermal  | med  | raw (no local calib yet) Δθ-2.2
+  11   | SSW  |     2.6 (1) |   7.1   | thermal  | med  | raw (no local calib yet) Δθ-1.8
+  12   | SW   |     2.4 (1) |   7.5   | thermal  | med  | raw (no local calib yet) Δθ-1.5
+  13   | W    |     2.7 (1) |   6.3   | thermal  | med  | raw (no local calib yet) Δθ-0.9
+  14   | N    |     3.5 (1) |   8.5   | thermal  | med  | raw (no local calib yet) Δθ-1.1
+  15   | N    |     4.2 (2) |   9.1   | thermal  | med  | raw (no local calib yet) Δθ-0.8
+  16   | N    |     4.4 (2) |   9.3   | thermal  | med  | raw (no local calib yet) Δθ-0.4
+  17   | N    |     4.7 (2) |   9.4   | thermal  | med  | raw (no local calib yet) Δθ-0.0
   18   | NNE  |     3.5 (1) |   8.5   | gradient | med  | raw (no local calib yet)
   19   | S    |     5.3 (2) |  18.0   | gradient | med  | raw (no local calib yet)
   20   | SSW  |     6.5 (2) |  13.2   | gradient | med  | raw (no local calib yet)

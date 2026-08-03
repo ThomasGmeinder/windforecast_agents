@@ -40,6 +40,7 @@ jobs:
           .venv/bin/python lib/tuner.py selftest
           .venv/bin/python lib/ledger.py
           .venv/bin/python lib/postproc.py
+          .venv/bin/python lib/forecast.py selftest
 
       - name: Daily run (learn from yesterday -> forecast today)
         env:

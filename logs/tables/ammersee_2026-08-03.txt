@@ -1,5 +1,5 @@
 Ammersee — 2026-08-03
-  dominant thermal; peak 8 kn (3 Bft) NW ~19h
+  dominant thermal; peak 11.3 kn (4 Bft) WSW ~20h · gusts to 21.1 kn ~20h
   Hour | Dir  | Mean kn (Bft) | Gust kn | Regime   | Conf | Note
   00   | ESE  |     2.6 (1) |   5.7   | gradient | med  | raw (no local calib yet)
   01   | SE   |     2.4 (1) |   5.1   | gradient | med  | raw (no local calib yet)

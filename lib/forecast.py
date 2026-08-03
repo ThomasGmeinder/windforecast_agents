@@ -44,6 +44,11 @@ N_MIN_OBS = 3           # matching days before a (regime×hour) correction is fu
 BIAS_CAP_KN = 8.0       # clamp on the learned bias so one anomalous day can't swing it
 BLEND_DISAGREE_KN = 6.0 # kn; range (max−min) across blend sources above this = notable disagreement
 
+# ONE authority for how a wind speed is printed. Mean wind and gusts must use the SAME
+# resolution everywhere — headline, HTML tables and text report — or the same forecast
+# reads as different numbers depending on where you look.
+KN_FMT = ".1f"
+
 # ------------------------------------------------- tunable params: single source of truth
 # The regime thresholds above are DEFAULTS. The live values come from config/params.json
 # (written only by the backtest-gated tuner); classify_regime reads them so code, the LLM
@@ -469,12 +474,20 @@ def build_table(lake, target_date, run_stamp=None):
 
 
 def _summary(lake, rows):
+    """The one-line headline shown on the landing page.
+
+    The peak MUST be the maximum of the hours the detail table actually displays — all 24
+    of them — at the same resolution the table prints. Scanning only 09-19 and rounding to
+    whole knots made the headline contradict the page it links to (e.g. "peak 4 kn ~17h"
+    above a table whose real maximum was 7.8 kn at 02h). Mean and gust are reported to the
+    same number of decimals so the two are directly comparable."""
     if not rows:
         return "no data"
+    peak = max(rows, key=lambda r: r["mean_kn"])
+    gust = max(rows, key=lambda r: (r.get("gust_kn") or 0))
     day = [r for r in rows if 9 <= r["hour"] <= 19]
-    peak = max(day or rows, key=lambda r: r["mean_kn"])
     regimes = {}
-    for r in day or rows:
+    for r in day or rows:                       # "dominant" stays a DAYTIME statement
         regimes[r["regime"]] = regimes.get(r["regime"], 0) + 1
     dom = max(regimes, key=regimes.get)
     foehn_hrs = [r["hour"] for r in rows if r["regime"] == "foehn"]
@@ -485,8 +498,11 @@ def _summary(lake, rows):
             extra += " (NE thermal suppressed)"
         if lake == "kochelsee":
             extra += " (Kesselberg fall-wind)"
-    return (f"dominant {dom}; peak {peak['mean_kn']:.0f} kn ({beaufort(peak['mean_kn'])} Bft) "
-            f"{compass(peak['dir'])} ~{peak['hour']:02d}h{extra}")
+    g = gust.get("gust_kn")
+    gtxt = (f" · gusts to {g:{KN_FMT}} kn ~{gust['hour']:02d}h" if g else "")
+    return (f"dominant {dom}; peak {peak['mean_kn']:{KN_FMT}} kn "
+            f"({beaufort(peak['mean_kn'])} Bft) {compass(peak['dir'])} "
+            f"~{peak['hour']:02d}h{gtxt}{extra}")
 
 
 def format_table(res):
@@ -509,16 +525,40 @@ def format_table(res):
         if r.get("foehn_note"):
             extra.append(r["foehn_note"])
         note = " ".join(([note] if note else []) + extra)
-        mean = f"{r['mean_kn']:.1f} ({r['bft']})"
+        mean = f"{r['mean_kn']:{KN_FMT}} ({r['bft']})"
         lines.append(
             f"  {r['hour']:02d}   | {compass(r['dir']):<4} | "
-            f"{mean:>11} | {r['gust_kn']:>5.1f}   | "
+            f"{mean:>11} | {r['gust_kn']:>5{KN_FMT}}   | "
             f"{r['regime']:<8} | {r['conf']:<4} | {note}")
     return "\n".join(lines)
 
 
+def _selftest_summary():
+    """The headline must agree with the table it links to, at the same resolution."""
+    rows = [{"hour": h, "mean_kn": v, "gust_kn": v * 2, "dir": 340, "regime": "thermal",
+             "bft": beaufort(v)}
+            for h, v in enumerate([2.0] * 9 + [3.0] * 11 + [6.5] + [1.0] * 3)]
+    s = _summary("walchensee", rows)
+    peak = max(rows, key=lambda r: r["mean_kn"])          # 6.5 kn at hour 20, OUTSIDE 09-19
+    assert f"{peak['mean_kn']:{KN_FMT}} kn" in s, f"headline missed the table max: {s}"
+    assert f"~{peak['hour']:02d}h" in s, f"headline quoted the wrong hour: {s}"
+    gust = max(rows, key=lambda r: r["gust_kn"])
+    assert f"{gust['gust_kn']:{KN_FMT}} kn" in s, f"headline missed the max gust: {s}"
+    # mean and gust must carry the SAME number of decimals
+    import re as _re
+    decs = {len(m.split(".")[1]) for m in _re.findall(r"\d+\.\d+(?= kn)", s)}
+    assert len(decs) == 1, f"mean and gust printed at different resolutions: {s}"
+    print("  PASS summary: peak+gust match the full table, one shared resolution")
+    return s
+
+
 if __name__ == "__main__":
     import datetime
+    if len(sys.argv) > 1 and sys.argv[1] == "selftest":
+        print("=== forecast.py self-tests ===")
+        print("  ", _selftest_summary())
+        print("ALL SELF-TESTS PASSED")
+        sys.exit(0)
     lake = sys.argv[1] if len(sys.argv) > 1 else "walchensee"
     date = sys.argv[2] if len(sys.argv) > 2 else datetime.date.today().isoformat()
     print(format_table(build_table(lake, date)))

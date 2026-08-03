@@ -129,8 +129,9 @@ def _bigdiff_card(lake):
     else:
         trs = "".join(
             f'<tr><td class="hr">{r["hour"]:02d}</td>'
-            f'<td class="gust">{r.get("issued_kn")}</td>'
-            f'<td class="gust" style="{_wind_cell_style(r.get("actual_kn") or 0)}">{r.get("actual_kn")}</td>'
+            f'<td class="gust">{(r.get("issued_kn") or 0):{fc.KN_FMT}}</td>'
+            f'<td class="gust" style="{_wind_cell_style(r.get("actual_kn") or 0)}">'
+            f'{(r.get("actual_kn") or 0):{fc.KN_FMT}}</td>'
             f'<td class="wind" style="{_wind_cell_style(abs(r["err_issued_kn"]))}">{r["err_issued_kn"]:+.1f}</td>'
             f'<td><span class="badge {r.get("actual_regime","calm")}">{r.get("actual_regime","")}</span></td></tr>'
             for r in big)
@@ -159,10 +160,10 @@ def _measured_card(lake):
         trs.append(
             f'<tr><td class="hr">{r["hour"]:02d}</td>'
             f'<td class="dir">{_dir_arrow(r.get("dir_actual"))} {fc.compass(r.get("dir_actual"))}</td>'
-            f'<td class="wind" style="{_wind_cell_style(kn)}">{kn:.1f}'
+            f'<td class="wind" style="{_wind_cell_style(kn)}">{kn:{fc.KN_FMT}}'
             f'<span class="bft">{fc.beaufort(kn)}</span></td>'
             f'<td class="gust" style="{_wind_cell_style(r.get("actual_gust_kn") or 0)}">'
-            f'{(r.get("actual_gust_kn") or 0):.0f}</td>'
+            f'{(r.get("actual_gust_kn") or 0):{fc.KN_FMT}}</td>'
             f'<td>{badge}</td><td class="note">{note}</td></tr>')
     return f"""
     <section class="card measured">
@@ -196,10 +197,10 @@ def _forecast_card(rec):
         rows.append(
             f'<tr><td class="hr">{r["hour"]:02d}</td>'
             f'<td class="dir">{_dir_arrow(r.get("dir"))} {fc.compass(r.get("dir"))}</td>'
-            f'<td class="wind" style="{_wind_cell_style(kn)}">{kn:.1f}'
+            f'<td class="wind" style="{_wind_cell_style(kn)}">{kn:{fc.KN_FMT}}'
             f'<span class="bft">{fc.beaufort(kn)}</span></td>'
             f'<td class="gust" style="{_wind_cell_style(r.get("gust_kn") or 0)}">'
-            f'{(r.get("gust_kn") or 0):.0f}</td>'
+            f'{(r.get("gust_kn") or 0):{fc.KN_FMT}}</td>'
             f'<td><span class="badge {reg}">{reg}</span></td>'
             f'<td class="conf c-{r.get("conf","med")}">{r.get("conf","")}</td>'
             f'<td class="note">{html.escape(" ".join(note))}</td></tr>')
