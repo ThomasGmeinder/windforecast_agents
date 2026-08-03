@@ -1,0 +1,59 @@
+{
+  "lake": "ammersee",
+  "date": "2026-08-02",
+  "result": {
+    "narrative": "The primary issue identified is a significant overprediction of wind speed during night and early morning hours, specifically when the forecaster incorrectly assigns a 'gradient' regime to what are actually 'calm' conditions. This is evidenced by the 'gradient->calm' confusion count of 9 and large positive errors during these periods. This suggests the model is failing to recognize stable boundary layer conditions or cold-pool capping, leading it to predict stronger gradient winds when surface winds are decoupled and calm. There is also a pattern of underprediction during mid-morning to early afternoon hours, indicating a potential underestimation of thermal or gradient wind development during these periods. The proposals focus on addressing the most impactful error: the 'gradient->calm' misclassification and associated overprediction.",
+    "diagnosis": [
+      {
+        "pattern": "Frequent misclassification of 'gradient' regime as 'calm' during night and early morning hours (0-5, 19-22), leading to significant overprediction of wind speed.",
+        "cause": "Cold-pool capping / Stable boundary layer: The forecaster fails to recognize stable conditions that decouple surface winds from stronger gradient flow aloft, thus overestimating surface wind when a cold pool is present. The GRADIENT_925_KN threshold might be too low, or COLD_POOL_DTHETA might not be sensitive enough."
+      },
+      {
+        "pattern": "Underprediction of wind speed during mid-morning to early afternoon (hours 8-14) when the regime is classified as 'gradient' or 'thermal'.",
+        "cause": "Underestimated thermal wind development or general gradient strength: The model might be too conservative in predicting the increase in wind speed as the day progresses."
+      }
+    ],
+    "proposals": [
+      {
+        "param": "GRADIENT_925_KN",
+        "proposed": 13.5,
+        "rationale": "To reduce the number of hours incorrectly classified as 'gradient' when actual conditions are 'calm', especially during night and early morning. A higher threshold for 925hPa wind speed will make it harder to trigger the gradient regime, directly addressing the 'gradient->calm' confusion and associated overprediction.",
+        "expected_effect": "A reduction in positive bias during calm periods, particularly in the early morning and late evening, leading to improved MAE and CRPS. Fewer instances of 'gradient->calm' misclassification."
+      },
+      {
+        "param": "COLD_POOL_DTHETA",
+        "proposed": 2.0,
+        "rationale": "To increase the sensitivity of the model to stable boundary layer conditions, making it more likely to correctly identify and classify hours as 'calm' when a cold pool is present and capping surface winds. This will help prevent the forecaster from predicting gradient winds when the surface is decoupled and calm.",
+        "expected_effect": "Improved regime classification accuracy, specifically reducing 'gradient->calm' confusion, and a further reduction in overprediction during calm periods, contributing to lower MAE and CRPS."
+      }
+    ],
+    "reviews": [],
+    "reviewed": [],
+    "applied": [],
+    "refused": [
+      {
+        "param": "GRADIENT_925_KN",
+        "proposed": 13.5,
+        "reason": "insufficient replayable history (1/10 days)"
+      },
+      {
+        "param": "COLD_POOL_DTHETA",
+        "proposed": 2.0,
+        "reason": "step too large (>25% of 1.5)"
+      }
+    ],
+    "n_open": 0,
+    "verification": {
+      "n_pairs": 48,
+      "n_days": 2,
+      "crps": 1.4028333333333334,
+      "mae": 1.5054166666666668,
+      "rmse": 1.9920045041225294,
+      "bias": 0.8247222222222222,
+      "crps_pers": 1.7916666666666667,
+      "crps_clim": null,
+      "ss_pers": 0.4549767441860465,
+      "ss_clim": null
+    }
+  }
+}

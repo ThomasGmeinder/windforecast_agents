@@ -1,0 +1,63 @@
+{
+  "lake": "walchensee",
+  "date": "2026-08-02",
+  "result": {
+    "narrative": "The primary issue observed is a significant and consistent underprediction of wind speeds, particularly within the thermal regime, and a delay in the onset of thermal winds in the morning. The aggregate mean bias error for thermal winds was -6.1 kn, with individual hourly errors reaching -8.3 kn. Several early morning hours (e.g., 6, 8, 10) were misclassified as 'calm' when 'thermal' conditions were already active, leading to substantial underpredictions. There were also instances of foehn conditions being missed, with 'gradient' being predicted instead, resulting in underpredictions. To address these, I propose adjusting parameters related to thermal development and foehn detection.",
+    "diagnosis": [
+      {
+        "pattern": "Severe and consistent underprediction of wind speeds during the thermal regime, especially from late morning through afternoon.",
+        "cause": "The model's representation of thermal wind generation or its interaction with atmospheric stability is too weak, leading to an underestimation of actual thermal wind strength."
+      },
+      {
+        "pattern": "Delayed onset of thermal winds, with early morning hours frequently misclassified as 'calm' when 'thermal' conditions are already active.",
+        "cause": "The threshold for overcoming stable cold pools might be too high, preventing the timely development and detection of early thermal winds."
+      },
+      {
+        "pattern": "Occasional misclassification of gradient wind conditions as foehn, leading to underpredictions.",
+        "cause": "Foehn detection parameters might be too conservative, causing the model to miss some foehn events."
+      }
+    ],
+    "proposals": [
+      {
+        "param": "COLD_POOL_DTHETA",
+        "proposed": 1.2,
+        "rationale": "To allow for earlier and stronger thermal development by reducing the stability threshold required to break cold pools, addressing the severe thermal underprediction and delayed onset.",
+        "expected_effect": "Reduced negative bias in thermal wind forecasts, particularly in the morning and early afternoon, and improved thermal regime classification accuracy."
+      },
+      {
+        "param": "FOEHN_850_KN",
+        "proposed": 6.5,
+        "rationale": "To increase the sensitivity of foehn detection by lowering the 850 hPa wind speed threshold, addressing instances where foehn conditions were missed.",
+        "expected_effect": "Improved identification of foehn events, potentially reducing underpredictions during foehn conditions."
+      }
+    ],
+    "reviews": [],
+    "reviewed": [],
+    "applied": [],
+    "refused": [
+      {
+        "param": "COLD_POOL_DTHETA",
+        "proposed": 1.2,
+        "reason": "insufficient replayable history (1/10 days)"
+      },
+      {
+        "param": "FOEHN_850_KN",
+        "proposed": 6.5,
+        "reason": "insufficient replayable history (1/10 days)"
+      }
+    ],
+    "n_open": 0,
+    "verification": {
+      "n_pairs": 27,
+      "n_days": 2,
+      "crps": 3.1816296296296294,
+      "mae": 3.2826388888888887,
+      "rmse": 4.3342657450381505,
+      "bias": -2.7550462962962965,
+      "crps_pers": 6.341666666666666,
+      "crps_clim": null,
+      "ss_pers": 0.3603153745072273,
+      "ss_clim": null
+    }
+  }
+}
