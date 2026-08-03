@@ -31,12 +31,6 @@ os.makedirs(TABLES_DIR, exist_ok=True)
 os.makedirs(ANALYST_DIR, exist_ok=True)
 
 
-def _current_params():
-    """The tunable parameters the analyst may propose changes to — the live values from
-    the single source of truth (config/params.json, else defaults)."""
-    return dict(fc.PARAMS)
-
-
 def _log_forecast(lake, payload):
     """Append the forecast, but keep at most ONE record per date (idempotent across
     same-day reruns) so the log stays a clean single source of truth."""
@@ -60,6 +54,10 @@ def main():
     yesterday = (now.date() - datetime.timedelta(days=1)).isoformat()
     out = [f"=== Bavarian lake wind — daily run {now.strftime('%Y-%m-%d %H:%M %Z')} ===",
            f"forecast day: {today}   |   learning from: {yesterday}", ""]
+    for lake in fc.LAKES:      # touch every lake's config so a broken file is reported
+        fc.params_for(lake)
+    for w in fc.PARAM_WARNINGS:
+        out.append(f"⚠ CONFIG: {w}")   # a corrupt params file must never revert silently
 
     # 1. LEARN from yesterday — detailed comparison + mechanism update, BEFORE forecasting
     out.append("=" * 72)

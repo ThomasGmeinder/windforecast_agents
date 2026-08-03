@@ -14,7 +14,8 @@ import os, sys, json, glob, html, datetime
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import winddata as wd
 import forecast as fc
-import learn  # for the shared large-miss threshold (LARGE_ERR_KN)
+import learn   # shared large-miss threshold (LARGE_ERR_KN)
+import verify  # shared gate/confidence thresholds (N_MIN_BACKTEST_DAYS, LOW_CONF_DAYS)
 
 GROUPS = {
     "kochel-walchensee": {
@@ -163,7 +164,7 @@ def _measured_card(lake):
     <section class="card measured">
       <details><summary>{label} — all measured hours · {date}</summary>
       <p class="summary">Observed wind from {html.escape(src)}. Regime inferred from the measured
-       direction; "vs fc" = measured − that day's forecast (kn). Daylight hours where a station reported.</p>
+       direction; "vs fc" = that day's forecast − measured (kn), same sign convention as the big-miss table. Daylight hours where a station reported.</p>
       <table><thead><tr><th>h</th><th>dir</th><th>mean kn (Bft)</th><th>gust</th>
         <th>regime</th><th>vs&nbsp;fc</th></tr></thead><tbody>{''.join(trs)}</tbody></table>
       </details>
@@ -242,12 +243,13 @@ def _analyst_block(lake):
         parts.append(f'<li>✗ held back <code>{esc(x.get("param"))}</code>='
                      f'{esc(x.get("proposed"))} — {esc(x.get("reason"))}</li>')
     n_app = len(r.get("applied", []))
-    foot = ("A change is applied only if replaying past days under it measurably lowers "
-            "CRPS on at least 10 replayable days; otherwise it stays a logged proposal."
+    nmin = verify.N_MIN_BACKTEST_DAYS
+    foot = (f"A change is applied only if replaying past days under it measurably lowers "
+            f"CRPS on at least {nmin} replayable days; otherwise it stays a logged proposal."
             if n_app else
-            "Nothing was applied: every proposal must first lower CRPS on at least 10 "
-            "replayable days of backtest. Until that history accrues, proposals are "
-            "recorded and reviewed but the forecaster is left unchanged.")
+            f"Nothing was applied: every proposal must first lower CRPS on at least {nmin} "
+            f"replayable days of backtest. Until that history accrues, proposals are "
+            f"recorded and reviewed but the forecaster is left unchanged.")
     return (f'<div class="analyst"><b>🧠 Self-tuning loop · {esc(d.get("date", ""))}:</b> '
             f'{esc(r.get("narrative", ""))}'
             + (f'<ul>{"".join(parts)}</ul>' if parts else '')
@@ -305,8 +307,9 @@ def _learning_section(lakes):
 
 
 def _methodology(group):
+    nmin = verify.N_MIN_BACKTEST_DAYS
     if group == "kochel-walchensee":
-        return """
+        return f"""
     <section class="card method">
       <h2>How it's predicted</h2>
       <p>Kochelsee and Walchensee share one wind system but are reported separately: under
@@ -339,10 +342,10 @@ def _methodology(group):
       <b>persistence</b> and <b>climatology</b>. On top of that an LLM tuner reviews
       <i>its own</i> earlier proposals against the measured CRPS, confirms or retracts each, and may
       propose small threshold changes — but a change is only written to the forecaster if replaying
-      past days under it measurably lowers CRPS on at least 10 replayable days. Until that history
-      exists, proposals are recorded and shown, and nothing is applied.</p>
+      past days under it measurably lowers CRPS on at least {nmin} replayable days. Until that
+      history exists, proposals are recorded and shown, and nothing is applied.</p>
     </section>"""
-    return """
+    return f"""
     <section class="card method">
       <h2>How it's predicted</h2>
       <p>Ammersee (~533 m) is an open foreland lake: wind is mostly <b>synoptic gradient</b> plus a
@@ -364,8 +367,8 @@ def _methodology(group):
       <p>Every run is scored out of sample with <b>CRPS</b> (knots, lower better — the probabilistic
       version of mean absolute error) against <b>persistence</b> and <b>climatology</b> baselines. An
       LLM tuner reviews its own earlier proposals against the measured CRPS and may suggest small
-      threshold changes, but a change reaches the forecaster only if a backtest over at least 10
-      replayable days shows it lowers CRPS.</p>
+      threshold changes, but a change reaches the forecaster only if a backtest over at least
+      {nmin} replayable days shows it lowers CRPS.</p>
       <h3>How it learns</h3>
       <p>Each morning it compares yesterday's forecast to the measured wind and updates the
       per-(regime×hour) regression before today's forecast.</p>

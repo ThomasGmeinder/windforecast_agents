@@ -17,9 +17,15 @@ Sources, in order of quality:
   5. foehn_delta_p()       -> Bozen - Muenchen pressure difference time series
 Plus log_record() to append forecast/actual pairs for later bias-correction.
 """
-import ssl, os, re, bz2, io, json, zipfile, time as _time
+import ssl, os, re, bz2, io, json, zipfile, datetime, time as _time
 import urllib.request, urllib.parse
 import xml.etree.ElementTree as ET
+
+try:                                    # the project's one timezone: all series are joined
+    from zoneinfo import ZoneInfo       # in Europe/Berlin local time
+    BERLIN = ZoneInfo("Europe/Berlin")
+except Exception:                       # no tzdata: fall back to fixed CEST rather than
+    BERLIN = datetime.timezone(datetime.timedelta(hours=2))   # silently mis-joining by 2 h
 
 CA = "/etc/ssl/certs/ca-certificates.crt"
 _CTX = ssl.create_default_context(cafile=CA) if os.path.exists(CA) else ssl.create_default_context()
@@ -121,9 +127,25 @@ def mosmix_pressure(station):
     return steps, pres
 
 
+def _to_local_hour(utc_iso):
+    """MOSMIX timesteps are UTC ('2026-08-03T04:00:00.000Z'); every other series here is
+    Europe/Berlin local (Open-Meteo is queried with timezone=Europe/Berlin). Return the
+    'YYYY-MM-DDTHH' LOCAL key so the two can be joined. Joining the raw UTC string to a
+    local one silently shifts the foehn gradient by 2 h in summer / 1 h in winter."""
+    try:
+        dt = datetime.datetime.fromisoformat(utc_iso.replace("Z", "+00:00"))
+    except Exception:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=datetime.timezone.utc)
+    return dt.astimezone(BERLIN).strftime("%Y-%m-%dT%H")
+
+
 def foehn_delta_p(south=STA_BOZEN, north=STA_MUENCHEN):
     """Cross-Alpine pressure difference dp = p(south) - p(north) time series.
-    dp >= ~4 hPa noticeable, >= ~8 hPa reaches the lake surfaces (south foehn)."""
+    dp >= ~4 hPa noticeable, >= ~8 hPa reaches the lake surfaces (south foehn).
+    `time` is the raw UTC stamp; `hour_local` is the Europe/Berlin 'YYYY-MM-DDTHH' key
+    callers must use when joining against the (local-time) forecast series."""
     ts_s, p_s = mosmix_pressure(south)
     ts_n, p_n = mosmix_pressure(north)
     pn = dict(zip(ts_n, p_n))
@@ -131,7 +153,8 @@ def foehn_delta_p(south=STA_BOZEN, north=STA_MUENCHEN):
     for t, ps in zip(ts_s, p_s):
         pnv = pn.get(t)
         dp = (ps - pnv) if (ps is not None and pnv is not None) else None
-        out.append({"time": t, "p_south": ps, "p_north": pnv, "dp": dp})
+        out.append({"time": t, "hour_local": _to_local_hour(t),
+                    "p_south": ps, "p_north": pnv, "dp": dp})
     return out
 
 
@@ -343,15 +366,18 @@ EVENTS_LOG = os.path.join(LOG_DIR, "events.jsonl")
 
 def log_event(kind, payload, stamp=None):
     """Record one notable event in the single events log (logs/events.jsonl).
-    Idempotent per (kind, lake, date): re-logging the same event (e.g. a same-day
-    workflow re-run) REPLACES the prior record instead of duplicating it, mirroring
-    the forecast log. kind ∈ {'blend_disagreement','analyst','diff_table'}; `stamp`
+    Idempotent per (kind, lake, date, param): re-logging the same event (e.g. a same-day
+    workflow re-run) REPLACES the prior record instead of duplicating it, mirroring the
+    forecast log. `param` is included so two different parameter changes on one day are
+    kept as separate audit records. kind ∈ {'blend_disagreement','analyst','diff_table'}; `stamp`
     is an ISO time supplied by the caller (no Date.now() dependency, so it stays
     deterministic). Single authority for the app's notable-event stream."""
     rec = {"kind": kind, **payload}
     if stamp is not None:
         rec["stamp"] = stamp
-    key = (kind, payload.get("lake"), payload.get("date"))
+    # `param` is part of the identity: two DIFFERENT parameters changed for the same lake
+    # on the same day are distinct events, and must not overwrite each other's audit trail.
+    key = (kind, payload.get("lake"), payload.get("date"), payload.get("param"))
     kept = []
     if os.path.exists(EVENTS_LOG):
         for line in open(EVENTS_LOG):
@@ -363,7 +389,7 @@ def log_event(kind, payload, stamp=None):
             except Exception:
                 kept.append(line)  # preserve anything unparseable rather than lose it
                 continue
-            if (r.get("kind"), r.get("lake"), r.get("date")) != key:
+            if (r.get("kind"), r.get("lake"), r.get("date"), r.get("param")) != key:
                 kept.append(line)
     kept.append(json.dumps(rec))
     with open(EVENTS_LOG, "w") as f:

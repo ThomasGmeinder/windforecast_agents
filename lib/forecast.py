@@ -59,31 +59,71 @@ PARAM_BOUNDS = {"FOEHN_DP_RIM": (2.0, 8.0), "FOEHN_DP_FORELAND": (5.0, 14.0),
 _DEFAULTS = {k: globals()[k] for k in TUNABLE}
 
 
-def load_params():
-    """The tunable regime thresholds — single source of truth. config/params.json if
-    present, else the module defaults; unknown/non-numeric keys fall back to defaults."""
+def params_path(lake=None):
+    """Per-lake overrides live in their own file. A change is only ever verified against
+    ONE lake's history, so it must only take effect for that lake — a single shared file
+    would silently apply Walchensee's evidence to Ammersee."""
+    return (os.path.join(CONFIG_DIR, f"params_{lake}.json") if lake else PARAMS_PATH)
+
+
+def _overlay(base, path):
+    """Merge a params file over `base`, ignoring unknown or non-numeric keys. A corrupt
+    or unreadable file is reported (never silently ignored) and the base is kept."""
+    if not os.path.exists(path):
+        return base, None
+    try:
+        with open(path) as f:
+            data = json.load(f)
+    except Exception as e:
+        return base, f"{os.path.basename(path)} unreadable ({type(e).__name__}) — using defaults"
+    bad = []
+    for k, v in (data or {}).items():
+        if k in _DEFAULTS and isinstance(v, (int, float)) and not isinstance(v, bool):
+            base[k] = v
+        else:
+            bad.append(k)
+    return base, (f"{os.path.basename(path)}: ignored keys {bad}" if bad else None)
+
+
+PARAM_WARNINGS = []      # surfaced by daily_run so a broken config can't fail silently
+
+
+def load_params(lake=None):
+    """The tunable regime thresholds — single source of truth. Defaults, overlaid with
+    config/params.json (global), overlaid with config/params_<lake>.json if `lake`."""
     p = dict(_DEFAULTS)
-    if os.path.exists(PARAMS_PATH):
-        try:
-            with open(PARAMS_PATH) as f:
-                for k, v in json.load(f).items():
-                    if k in _DEFAULTS and isinstance(v, (int, float)):
-                        p[k] = v
-        except Exception:
-            pass
+    warns = []
+    for path in ([PARAMS_PATH] + ([params_path(lake)] if lake else [])):
+        p, w = _overlay(p, path)
+        if w:
+            warns.append(w)
+    for w in warns:
+        if w not in PARAM_WARNINGS:
+            PARAM_WARNINGS.append(w)
     return p
 
 
-def save_params(params):
-    """Persist the full tunable set (missing keys filled from defaults)."""
+def save_params(params, lake=None):
+    """Persist the full tunable set (missing keys filled from defaults). Writes the
+    per-lake override file when `lake` is given."""
     os.makedirs(CONFIG_DIR, exist_ok=True)
     merged = {k: params.get(k, _DEFAULTS[k]) for k in TUNABLE}
-    with open(PARAMS_PATH, "w") as f:
+    path = params_path(lake)
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
         json.dump(merged, f, indent=2)
-    return PARAMS_PATH
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)
+    return path
 
 
-PARAMS = load_params()   # reload after save_params() if changed mid-process
+PARAMS = load_params()   # global baseline; per-lake values come from params_for(lake)
+
+
+def params_for(lake):
+    """The parameters actually in force for one lake (global + that lake's overrides)."""
+    return load_params(lake)
 
 
 def _quantiles(xs, levels=(10, 25, 50, 75, 90)):
@@ -267,7 +307,9 @@ def build_table(lake, target_date, run_stamp=None):
         euh = None
     # foehn dp series (align by ISO hour prefix)
     try:
-        dp_series = {r["time"][:13]: r["dp"] for r in wd.foehn_delta_p()}
+        # key on the LOCAL hour: MOSMIX is UTC, the Open-Meteo series is Europe/Berlin
+        dp_series = {r["hour_local"]: r["dp"] for r in wd.foehn_delta_p()
+                     if r.get("hour_local")}
     except Exception:
         dp_series = {}
 
@@ -293,6 +335,7 @@ def build_table(lake, target_date, run_stamp=None):
     peiss = wd.hohenpeissenberg_now() if lake in ("kochelsee", "walchensee") else None  # föhn nowcast
 
     bias = load_bias(lake)
+    lake_params = params_for(lake)   # global + this lake's verified overrides
     rows = []
     for i, t in enumerate(h["time"]):
         if not t.startswith(target_date):
@@ -329,7 +372,7 @@ def build_table(lake, target_date, run_stamp=None):
         raw_g = sum(gsrcs) / len(gsrcs) if gsrcs else (row.get("wind_gusts_10m") or raw_s)
         row["wind_speed_10m"] = raw_s
         regime, cs, cg, learned = replay_hour(lake, hour, row, dp, feat, raw_s, raw_g,
-                                              params=PARAMS, bias=bias)
+                                              params=lake_params, bias=bias)
         spread = None
         if len(ens_s) > 2:
             m_ = sum(ens_s) / len(ens_s)
@@ -340,7 +383,9 @@ def build_table(lake, target_date, run_stamp=None):
         q_kn = _quantiles(ens_s)
         if q_kn is not None:
             shift = cs - sum(ens_s) / len(ens_s)
-            q_kn = {k: round(v + shift, 1) for k, v in q_kn.items()}
+            # clamp at 0: wind speed cannot be negative, and a negative P10 would both
+            # publish an impossible value and distort the CRPS the deciles are scored with
+            q_kn = {k: max(0.0, round(v + shift, 1)) for k, v in q_kn.items()}
         conf = _confidence(regime, spread, learned)
         foehn_note = None
         if regime == "foehn":                       # föhn: SE reliable, SW weak; confirm at Peißenberg
@@ -398,6 +443,7 @@ def _summary(lake, rows):
 
 
 def format_table(res):
+    _fmt_params = params_for(res["lake"])   # annotate with the lake's own thresholds
     lines = [f"{res['label']} — {res['date']}",
              f"  {res['summary']}",
              "  Hour | Dir  | Mean kn (Bft) | Gust kn | Regime   | Conf | Note"]
@@ -407,7 +453,7 @@ def format_table(res):
             note = "raw (no local calib yet)"
         if r["regime"] == "calm":
             note = "cold-pool capped" if (r.get("dtheta") is not None
-                                          and r["dtheta"] >= PARAMS["COLD_POOL_DTHETA"]) else "glassy"
+                                          and r["dtheta"] >= _fmt_params["COLD_POOL_DTHETA"]) else "glassy"
         extra = []
         if r.get("dtheta") is not None and r["regime"] in ("thermal", "calm"):
             extra.append(f"Δθ{r['dtheta']:+.1f}")

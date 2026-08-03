@@ -65,22 +65,41 @@ def _regression_state(lake):
     return {"buckets": out[:40], "n_buckets": len(out)}
 
 
-def _hypothesis_evidence(lake, recs):
-    """Open hypotheses + the MEASURED CRPS before vs after each was issued. This is what
-    makes the analyst accountable: it sees whether its own past call actually helped."""
+def _hypothesis_evidence(lake, recs, on_date=None):
+    """Open hypotheses — i.e. changes that were ACTUALLY APPLIED and have waited their
+    review period — with the measured CRPS before vs after the change took effect.
+
+    Two things this deliberately does NOT do, because both would make the analyst
+    accountable for something it did not cause:
+      - it never includes refused proposals (nothing changed, so any CRPS movement is
+        pure weather); those appear separately under `recent_proposals`;
+      - the 'after' window starts at effective_date, the first day the new value could
+        influence a forecast, not at issued_date (which always predates it)."""
     out = []
-    for e in ledger.open_entries(lake):
-        issued = e["issued_date"]
-        before = verify.mean_crps(recs, until=issued)
-        after = verify.mean_crps(recs, since=issued)
+    for e in ledger.open_entries(lake, on_date=on_date):
+        eff = e.get("effective_date") or e["issued_date"]
+        before = verify.mean_crps(recs, until=eff)
+        after = verify.mean_crps(recs, since=eff)
         out.append({"id": e["id"], "param": e["param"], "from": e["from"],
                     "proposed": e["proposed"], "expected_effect": e.get("expected_effect"),
-                    "issued_date": issued,
+                    "issued_date": e["issued_date"], "effective_date": eff,
                     "crps_before": None if before is None else round(before, 3),
                     "crps_after": None if after is None else round(after, 3),
                     "delta_crps": (None if (before is None or after is None)
-                                   else round(after - before, 3))})
+                                   else round(after - before, 3)),
+                    "note": ("compare crps_before vs crps_after; both are measured, but "
+                             "with few days they also reflect weather, so say so if the "
+                             "evidence is too thin to judge")})
     return out
+
+
+def _recent_proposals(lake):
+    """What this analyst already proposed and what the gate did with it — so it neither
+    repeats itself nor is graded on changes that never took effect."""
+    return [{"id": e["id"], "param": e["param"], "proposed": e["proposed"],
+             "issued_date": e["issued_date"], "applied": e.get("applied", False),
+             "gate_reason": e.get("gate_reason", ""), "status": e.get("status")}
+            for e in ledger.recent(lake)]
 
 
 def build_evidence(lake, date, agg=None, diffs=None):
@@ -88,7 +107,7 @@ def build_evidence(lake, date, agg=None, diffs=None):
     sc = verify.evaluate(lake)
     return {
         "lake": lake, "date": date,
-        "current_params": dict(fc.PARAMS),
+        "current_params": fc.params_for(lake),
         "param_bounds": fc.PARAM_BOUNDS,
         "yesterday_aggregate": agg,
         "yesterday_diffs": diffs,
@@ -96,13 +115,15 @@ def build_evidence(lake, date, agg=None, diffs=None):
         "regression_state": _regression_state(lake),
         "verification": {k: sc.get(k) for k in
                          ("n_pairs", "n_days", "crps", "mae", "rmse", "bias",
-                          "crps_pers", "crps_clim", "ss_pers", "ss_clim")},
-        "open_hypotheses": _hypothesis_evidence(lake, sc.get("recs", [])),
+                          "crps_pers", "crps_clim", "ss_pers", "ss_clim",
+                          "n_leaked_skipped")},
+        "open_hypotheses": _hypothesis_evidence(lake, sc.get("recs", []), on_date=date),
+        "recent_proposals": _recent_proposals(lake),
     }
 
 
 # ---------------------------------------------------------------- act (gated apply)
-def _validate(param, value):
+def _validate(param, value, params=None):
     """Reject anything outside the known, bounded, capped-step envelope."""
     if param not in fc.TUNABLE:
         return f"unknown parameter '{param}'"
@@ -111,7 +132,7 @@ def _validate(param, value):
     lo, hi = fc.PARAM_BOUNDS[param]
     if not (lo <= value <= hi):
         return f"out of bounds ({lo}..{hi})"
-    cur = fc.PARAMS[param]
+    cur = (params or fc.PARAMS)[param]
     if cur and abs(value - cur) > abs(cur) * MAX_REL_STEP:
         return f"step too large (>{int(MAX_REL_STEP * 100)}% of {cur})"
     return None
@@ -119,10 +140,10 @@ def _validate(param, value):
 
 def consider(lake, param, value):
     """Decide whether a proposed change may be applied. Returns (ok, reason, backtest)."""
-    bad = _validate(param, value)
+    bad = _validate(param, value, fc.params_for(lake))
     if bad:
         return False, bad, None
-    bt = verify.backtest(lake, param, value)
+    bt = verify.backtest(lake, param, value, params=fc.params_for(lake))
     if bt.get("error"):
         return False, bt["error"], bt
     if not bt["enough_data"]:
@@ -135,11 +156,11 @@ def consider(lake, param, value):
 
 def apply_change(lake, param, value, reason, backtest_result, date, stamp):
     """Write the verified change to the single source of truth + record the evidence."""
-    params = dict(fc.PARAMS)
+    params = fc.params_for(lake)
     before = params.get(param)
     params[param] = value
-    fc.save_params(params)
-    fc.PARAMS = fc.load_params()          # refresh the live view in-process
+    fc.save_params(params, lake=lake)     # PER-LAKE: verified on this lake's history only
+    fc.PARAMS = fc.load_params()          # refresh the global view in-process
     wd.log_event("param_change", {"lake": lake, "date": date, "param": param,
                                   "from": before, "to": value, "reason": reason,
                                   "backtest": backtest_result}, stamp=stamp)
@@ -158,29 +179,42 @@ def run(lake, date, stamp, agg=None, diffs=None):
     if res.get("skipped"):
         return {"skipped": res["skipped"], "n_open": len(evidence["open_hypotheses"])}
 
-    # REFLECT — write the analyst's self-judgement back to the ledger
-    reviewed = []
+    # REFLECT — write the analyst's self-judgement back to the ledger. `lake=` scoping
+    # means a hallucinated id cannot close another lake's hypothesis; unmatched ids are
+    # reported rather than silently dropped.
+    reviewed, unknown_ids = [], []
     for rv in res.get("reviews", []) or []:
-        if rv.get("verdict") in ("confirmed", "retracted") and rv.get("id"):
-            if ledger.resolve(rv["id"], rv["verdict"], rv.get("reasoning", ""), date):
-                reviewed.append({"id": rv["id"], "verdict": rv["verdict"]})
+        if rv.get("verdict") not in ("confirmed", "retracted") or not rv.get("id"):
+            continue
+        if ledger.resolve(rv["id"], rv["verdict"], rv.get("reasoning", ""), date, lake=lake):
+            reviewed.append({"id": rv["id"], "verdict": rv["verdict"]})
+        else:
+            unknown_ids.append(rv["id"])
 
-    # PROPOSE + ACT — record each proposal, then let the backtest gate decide
-    applied, refused = [], []
+    # PROPOSE + ACT — gate FIRST, then record the proposal together with the outcome, so
+    # the ledger never shows a refused change as an open hypothesis.
+    applied, refused, seen = [], [], set()
     for p in res.get("proposals", []) or []:
         param, value = p.get("param"), p.get("proposed")
-        ledger.add(lake, param, fc.PARAMS.get(param), value,
-                   p.get("expected_effect") or p.get("rationale", ""), date,
-                   REVIEW_AFTER_DAYS)
+        if param in seen:          # two proposals for one param would compound past the step cap
+            refused.append({"param": param, "proposed": value,
+                            "reason": "duplicate proposal for the same parameter in one run"})
+            continue
+        seen.add(param)
+        before = fc.params_for(lake).get(param)   # capture BEFORE any apply overwrites it
         ok, reason, bt = consider(lake, param, value)
         if ok:
             applied.append(apply_change(lake, param, value, reason, bt, date, stamp))
         else:
             refused.append({"param": param, "proposed": value, "reason": reason})
+        ledger.add(lake, param, before, value,
+                   p.get("expected_effect") or p.get("rationale", ""), date,
+                   REVIEW_AFTER_DAYS, applied=ok, gate_reason=reason)
 
     return {"narrative": res.get("narrative", ""), "diagnosis": res.get("diagnosis", []),
             "proposals": res.get("proposals", []), "reviews": res.get("reviews", []),
-            "reviewed": reviewed, "applied": applied, "refused": refused,
+            "reviewed": reviewed, "unknown_review_ids": unknown_ids,
+            "applied": applied, "refused": refused,
             "n_open": len(evidence["open_hypotheses"]),
             "verification": evidence["verification"]}
 
@@ -196,6 +230,8 @@ def format_summary(r):
         L.append(f"    ✗ held back {x['param']}={x['proposed']} — {x['reason']}")
     for v in r["reviewed"]:
         L.append(f"    ↺ {v['verdict']}: {v['id']}")
+    for bad in r.get("unknown_review_ids", []):
+        L.append(f"    ? review for unknown id ignored: {bad}")
     return "\n".join(L)
 
 
@@ -204,7 +240,11 @@ def _selftest():
     the memory loop round-trips — all offline, without touching production files."""
     import tempfile
     tmp = tempfile.mkdtemp()
+    # Redirect EVERY write path into the sandbox. CONFIG_DIR matters as much as
+    # PARAMS_PATH now that params are per-lake (params_path() builds off CONFIG_DIR),
+    # otherwise this test would write config/params_<lake>.json into the real repo.
     ledger.LEDGER_PATH = os.path.join(tmp, "ledger.jsonl")
+    fc.CONFIG_DIR = tmp
     fc.PARAMS_PATH = os.path.join(tmp, "params.json")
     fc.PARAMS = dict(fc._DEFAULTS)
     wd.EVENTS_LOG = os.path.join(tmp, "events.jsonl")
@@ -233,9 +273,12 @@ def _selftest():
     verify.backtest = lambda *a, **k: {"crps_ss": 0.2, "n_days": 20, "enough_data": True}
     ok, reason, bt = consider("walchensee", "THERMAL_CLOUD_MAX", 40)
     apply_change("walchensee", "THERMAL_CLOUD_MAX", 40, reason, bt, "2026-08-02", "stamp")
-    assert fc.load_params()["THERMAL_CLOUD_MAX"] == 40
-    assert fc.PARAMS["THERMAL_CLOUD_MAX"] == 40
-    print("  PASS apply: config/params.json updated and live PARAMS refreshed")
+    assert fc.params_for("walchensee")["THERMAL_CLOUD_MAX"] == 40
+    # and CRITICALLY: it must NOT have leaked to the other lakes, whose history did not
+    # justify it (the change was only ever backtested against walchensee)
+    assert fc.params_for("kochelsee")["THERMAL_CLOUD_MAX"] == fc._DEFAULTS["THERMAL_CLOUD_MAX"]
+    assert fc.params_for("ammersee")["THERMAL_CLOUD_MAX"] == fc._DEFAULTS["THERMAL_CLOUD_MAX"]
+    print("  PASS apply: written per-lake; other lakes unaffected")
 
     # --- memory loop: proposal recorded, then reviewed and resolved next run
     fc.PARAMS = dict(fc._DEFAULTS)
@@ -248,21 +291,44 @@ def _selftest():
     verify.backtest = lambda *a, **k: {"crps_ss": 0.1, "n_days": 2, "enough_data": False}
     r1 = run("walchensee", "2026-08-01", "stamp")
     assert len(r1["refused"]) == 1 and "insufficient" in r1["refused"][0]["reason"]
-    opens = ledger.open_entries("walchensee")
-    assert len(opens) == 1 and opens[0]["param"] == "COLD_POOL_DTHETA", opens
-    print("  PASS propose: hypothesis recorded as open; apply correctly withheld on thin data")
+    # refused => NOT an open hypothesis (nothing changed, so CRPS movement would be weather)
+    assert ledger.open_entries("walchensee") == [], ledger.open_entries("walchensee")
+    rec = ledger.recent("walchensee")[-1]
+    assert rec["status"] == "not_applied" and "insufficient" in rec["gate_reason"], rec
+    print("  PASS propose: refused change recorded with its reason, NOT as an open hypothesis")
 
-    eid = opens[0]["id"]
+    # now an APPLIED change: it becomes an open hypothesis and is reviewed once due
+    verify.backtest = lambda *a, **k: {"crps_ss": 0.15, "n_days": 20, "enough_data": True}
+    analyst.run_analysis = lambda ev, **k: {
+        "narrative": "raise the cloud ceiling", "reviews": [],
+        "proposals": [{"param": "THERMAL_CLOUD_MAX", "proposed": 41,
+                       "rationale": "more thermals", "expected_effect": "CRPS -0.2"}]}
+    r2 = run("walchensee", "2026-08-05", "stamp")
+    assert len(r2["applied"]) == 1, r2
+    eid = ledger.open_entries("walchensee")[0]["id"]
+    # ...but NOT judged the same day: the review period must elapse first
+    analyst.run_analysis = lambda ev, **k: {"narrative": "too soon", "reviews": [], "proposals": []}
+    r3 = run("walchensee", "2026-08-06", "stamp")
+    assert r3["n_open"] == 0, "hypothesis judged before its review period elapsed"
     analyst.run_analysis = lambda ev, **k: {
         "narrative": "that did not help",
-        "reviews": [{"id": ev["open_hypotheses"][0]["id"], "verdict": "retracted",
-                     "reasoning": "CRPS unchanged"}],
+        "reviews": ([{"id": ev["open_hypotheses"][0]["id"], "verdict": "retracted",
+                      "reasoning": "CRPS unchanged"}] if ev["open_hypotheses"] else []),
         "proposals": []}
-    r2 = run("walchensee", "2026-08-04", "stamp")
-    assert r2["n_open"] == 1, r2                      # it SAW its own past hypothesis
-    assert r2["reviewed"] == [{"id": eid, "verdict": "retracted"}], r2["reviewed"]
+    r4 = run("walchensee", "2026-08-20", "stamp")
+    assert r4["n_open"] == 1, r4                      # now due, and it SAW it
+    assert r4["reviewed"] == [{"id": eid, "verdict": "retracted"}], r4["reviewed"]
     assert ledger.open_entries("walchensee") == []    # and closed it out
-    print("  PASS reflect: analyst saw its own open hypothesis and retracted it")
+    print("  PASS reflect: applied change became a hypothesis, waited, then was retracted")
+
+    # a hallucinated review id must not silently close anything
+    analyst.run_analysis = lambda ev, **k: {
+        "narrative": "x", "proposals": [],
+        "reviews": [{"id": "kochelsee:FOEHN_DP_RIM:2026-01-01", "verdict": "confirmed",
+                     "reasoning": "made up"}]}
+    r5 = run("walchensee", "2026-08-21", "stamp")
+    assert r5["reviewed"] == [] and r5["unknown_review_ids"], r5
+    print("  PASS reflect: hallucinated / cross-lake review id rejected, not silently applied")
 
     verify.backtest, analyst.run_analysis = real_backtest, real_run
     return True

@@ -219,15 +219,15 @@ Each proposal must pass, in order: the parameter is one of the six known tunable
 value is numeric and inside `PARAM_BOUNDS` → the step is ≤ 25 % of the current value →
 and then a **backtest**: every replayable logged day is re-run under the candidate value
 (`verify.backtest`, sharing `forecast.replay_hour` with production so a backtest can
-never drift from the real path) and it is applied **only if CRPS improves on at least 10
-replayable days**. A change that passes is written to `config/params.json` — the single
-source of truth the forecaster reads — and logged as a `param_change` event with its
+never drift from the real path) and it is applied **only if CRPS improves over at least
+`verify.N_MIN_BACKTEST_DAYS` (currently 10) replayable days**. A change that passes is written to `config/params_<lake>.json` — per-lake, because
+it was only ever verified against that one lake's history — and logged as a `param_change` event with its
 evidence. Anything else is refused, with the reason recorded.
 
 **Currently the gate is effectively dormant**: replayable history (days carrying the
 captured classification inputs) only began accumulating recently, so proposals are logged
 and reviewed but not applied, and the daily report says exactly that
-(`held back … insufficient replayable history (n/10 days)`). Agency — memory,
+(`held back … insufficient replayable history (n/N days)`). Agency — memory,
 self-evaluation, an objective referee — is live now; authority to change the forecaster
 switches on only once the evidence exists. Without a `GEMINI_API_KEY` the whole layer
 skips cleanly and the deterministic forecast is unaffected.
@@ -246,14 +246,24 @@ skips cleanly and the deterministic forecast is unaffected.
 3. STEP 3 — verify: score the logged forecasts with CRPS against persistence and
    climatology and log a `verification` event.
 
-Idempotent (one forecast record per date). Scheduled by a **systemd user timer**
-`wind-agents-daily.timer` at **06:04 local**, `Persistent=true` so a run missed
-while the laptop is asleep fires on next wake. No lingering enabled → runs during
-the login session; `sudo loginctl enable-linger` for always-on.
+Idempotent (one forecast record per date).
+
+**Where it actually runs:** the pipeline runs **in GitHub Actions**, not on the laptop.
+`.github/workflows/daily.yml` is on a `7 3 * * *` **UTC** cron (≈05:07 Berlin in summer,
+04:07 in winter — GitHub cron has no timezone), and it also runs the self-tests before the
+pipeline, then commits `models/`, `logs/` and `config/` back to `main` and publishes Pages.
+
+The local **systemd user timer** `wind-agents-daily.timer` fires at **05:00 local** and
+does *not* run `daily_run.py` — it only dispatches the cloud workflow
+(`gh workflow run daily.yml`), because GitHub's own cron can lag by many minutes and this
+makes the morning publish punctual. `Persistent=true`, so a dispatch missed while the
+laptop slept fires on next wake. Linger is **not** enabled, so the timer only runs while
+you are logged in; the cloud cron is the backstop that guarantees a daily run regardless.
 
 ```
 systemctl --user list-timers wind-agents-daily.timer
 journalctl --user -u wind-agents-daily.service -n 40
+gh run list -R ThomasGmeinder/windforecast_agents -L 5     # what the cloud actually did
 ```
 
 ---
@@ -270,7 +280,7 @@ group:
   **Predicted — today** (the forecast card(s), blue "forecast" chip) from
   **Observed — yesterday** (a distinct "measured" card per lake, grey left-border
   accent, showing the actual measured wind, its source, the regime inferred from the
-  measured direction, and a *vs fc* = measured − forecast column). Below those: a
+  measured direction, and a *vs fc* = forecast − measured column). Below those: a
   **Prediction & learning methodology** section, a **Data sources & how they're
   accessed** section — split into **Prediction inputs (today)** and **Measured inputs
   (yesterday)** with source · role · access-endpoint per lake group — the self-learning

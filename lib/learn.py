@@ -228,15 +228,30 @@ def update_from_day(lake, date):
                              "actual_kn": d["actual_kn"], "err_kn": d["err_issued_kn"],
                              "explanation": explanation, "lesson": lesson, "how_applied": how})
 
+    # NOTE: the bias file (which carries processed_dates, the idempotency marker) is NOT
+    # written here. It is committed by run_and_log AFTER the diffs are safely on disk —
+    # writing the marker first meant a failure in between marked the day "learned" while
+    # its comparison data was lost forever, and idempotency guaranteed it never came back.
     bias.setdefault("processed_dates", []).append(date)
     bias["processed_dates"] = bias["processed_dates"][-400:]
-    with open(fc.bias_path(lake), "w") as f:
-        json.dump(bias, f, indent=2)
 
     return {"lake": lake, "date": date, "source": source, "agg": agg,
             "diffs": diffs, "bucket_updates": bucket_updates, "lessons": lessons,
             "large_misses": large_misses, "large_err_kn": LARGE_ERR_KN,
-            "buckets_total": len(buckets)}
+            "buckets_total": len(buckets), "_bias": bias}
+
+
+def _commit_bias(lake, bias):
+    """Persist the learned state atomically (temp file + os.replace) so an interrupted
+    write cannot leave a truncated bias file."""
+    path = fc.bias_path(lake)
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(bias, f, indent=2)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)
+    return path
 
 
 def format_report(res):
@@ -312,18 +327,25 @@ def run_and_log(lake, date):
     """Learn + write the detailed report and machine-readable diffs. Returns res."""
     res = update_from_day(lake, date)
     if not res.get("skipped"):
-        with open(os.path.join(LEARN_DIR, f"{lake}_{date}.md"), "w") as f:
-            f.write(format_report(res) + "\n")
+        # Order matters: write the DATA first, commit the idempotency marker last. If any
+        # of this fails the day stays unprocessed and will be retried, instead of being
+        # marked done with its diffs missing (which is unrecoverable).
         dp = os.path.join(wd.LOG_DIR, f"{lake}_diffs.jsonl")
         with open(dp, "a") as f:
             for d in res["diffs"]:
                 f.write(json.dumps({"date": date, "lake": lake,
                                     "source": res.get("source"), **d}) + "\n")
+            f.flush()
+            os.fsync(f.fileno())
+        with open(os.path.join(LEARN_DIR, f"{lake}_{date}.md"), "w") as f:
+            f.write(format_report(res) + "\n")
         # durable record of the exact big-miss diff table shown in the HTML for this day
         wd.log_event("diff_table", {
             "lake": lake, "date": date, "source": res.get("source"),
             "threshold_kn": LARGE_ERR_KN, "n_misses": len(res["large_misses"]),
             "misses": res["large_misses"]}, stamp=date)
+        _commit_bias(lake, res.pop("_bias"))     # marker committed only now
+    res.pop("_bias", None)
     return res
 
 
