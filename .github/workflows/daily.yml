@@ -55,7 +55,8 @@ jobs:
         run: |
           git config user.name  "wind-bot"
           git config user.email "wind-bot@users.noreply.github.com"
-          # config/ MUST be included: it holds params.json, the tuned thresholds. Without
+          # config/ MUST be included: it holds params.json (shared defaults) and the per-lake
+          # params_<lake>.json the tuner writes. Without
           # it every backtest-verified parameter change would be silently reverted on the
           # next run while the param_change event claimed success.
           git add models logs config

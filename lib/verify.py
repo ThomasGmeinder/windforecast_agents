@@ -122,12 +122,11 @@ def _load_forecasts(lake):
             # Rank by the PARSED instant, not the raw string: stamps can carry different
             # offsets, so lexical order is not chronological. An unusable stamp ranks LAST
             # so it can never beat a properly stamped record into the verification set.
-            when = parse_stamp(raw)
-            rank = when if when is not None else datetime.datetime.max.replace(tzinfo=wd.BERLIN)
+            rank = _rank(raw)
             if d not in best or rank < best[d][0]:
                 best[d] = (rank, raw, r)
     out = {}
-    for d, (_rank, raw, r) in best.items():
+    for d, (_when, raw, r) in best.items():   # NOT '_rank': that shadows the module fn
         out[d] = {h["hour"]: {**h, "_run_stamp": raw} for h in r["hourly"]}
     return out
 
@@ -150,6 +149,41 @@ def parse_stamp(run_stamp):
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=datetime.timezone.utc)      # legacy: assume UTC
     return dt.astimezone(wd.BERLIN)
+
+
+_LAST_RANK = datetime.datetime.max.replace(tzinfo=datetime.timezone.utc)
+
+
+def _rank(run_stamp):
+    """Sort key for 'which run came first'. In UTC, never Berlin wall-clock: two aware
+    datetimes in the same zone compare on naive fields and ignore `fold`, so 02:30 CEST
+    and 02:30 CET would tie on the autumn changeover. An unusable stamp ranks LAST so it
+    can never win the forecast-of-record slot."""
+    when = parse_stamp(run_stamp)
+    return when.astimezone(datetime.timezone.utc) if when is not None else _LAST_RANK
+
+
+def forecast_of_record(lake, date):
+    """THE single authority for 'which logged forecast counts as the one issued for `date`'.
+
+    Returns (record, run_stamp) or (None, None). Both the verifier and the learner must
+    agree on this; when learn.py kept its own copy of the ranking logic the two disagreed,
+    and the copy still had the string-compare / stampless-record bug this module had
+    already fixed."""
+    path = os.path.join(wd.LOG_DIR, f"{lake}_forecast.jsonl")
+    best = None
+    if os.path.exists(path):
+        for line in open(path):
+            try:
+                r = json.loads(line)
+            except Exception:
+                continue
+            if r.get("date") != date or not r.get("hourly"):
+                continue
+            rank = _rank(r.get("run_stamp"))
+            if best is None or rank < best[0]:
+                best = (rank, r)
+    return (best[1], best[1].get("run_stamp")) if best else (None, None)
 
 
 def is_leaked(date, hour, run_stamp):

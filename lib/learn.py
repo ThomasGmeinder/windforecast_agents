@@ -7,10 +7,11 @@ Every morning, BEFORE the new forecasts are made, for each lake this module:
      against yesterday's ACTUAL measured wind (DWD 10-min obs).
   2. LOGS the per-hour diffs (machine-readable JSONL + a human-readable report).
   3. EXPLAINS the differences and derives plain-language "lessons learned".
-  4. UPDATES the prediction mechanism (EWMA bias per regime x hour-of-day) and logs
+  4. UPDATES the prediction mechanism (RLS regression corrected = a + b*model, per
+     regime x hour-of-day) and logs
      the exact BEFORE -> AFTER change for every bucket it touched.
 
-forecast.apply_bias() then adds bias[regime,hour] to the raw model, so today's
+forecast.apply_bias() then applies that regression to the raw model, so today's
 forecast benefits from what was learned minutes earlier in the same run.
 
 Learning is on RAW model error (actual - raw) so the correction converges instead
@@ -49,27 +50,15 @@ def _dir_err(a, b):
 
 
 def _forecast_for(lake, date):
-    """The forecast OF RECORD for `date` — the EARLIEST one logged for it.
+    """The forecast OF RECORD for `date`, from the SINGLE authority in verify.py.
 
-    Not the last: a same-day re-run is better informed (its model run has already seen
-    part of the day), so learning against it would flatter the correction with hindsight,
-    exactly as it flattered the verifier. The earliest record is what was actually issued
-    and published, so that is what we hold ourselves to."""
-    path = os.path.join(wd.LOG_DIR, f"{lake}_forecast.jsonl")
-    if not os.path.exists(path):
-        return None
-    best = None
-    with open(path) as f:
-        for line in f:
-            try:
-                r = json.loads(line)
-            except Exception:
-                continue
-            if r.get("date") != date or not r.get("hourly"):
-                continue
-            if best is None or (r.get("run_stamp") or "") < (best.get("run_stamp") or ""):
-                best = r
-    return best
+    This module used to rank the candidate records itself. That duplicate carried exactly
+    the bug verify.py had already fixed — lexical comparison of stamps that may hold
+    different UTC offsets, and a missing stamp coerced to "" beating every real one — so
+    the learner and the verifier disagreed about which forecast was issued. One authority,
+    no copies."""
+    rec, _stamp = verify.forecast_of_record(lake, date)
+    return rec
 
 
 def _mean(xs):
@@ -143,7 +132,7 @@ def update_from_day(lake, date):
 
     alpha = bias.get("alpha", 0.3)
     buckets = bias.setdefault("buckets", {})
-    diffs, bucket_updates = [], []
+    diffs, scored, bucket_updates = [], [], []
     ei, er, signed, dir_errs, gratios = [], [], [], [], []
     by_regime = {}
 
@@ -152,13 +141,6 @@ def update_from_day(lake, date):
     for hp in rec["hourly"]:
         hour = hp["hour"]
         if hour not in actual:
-            continue
-        # Do not LEARN from hours that had already elapsed when the forecast was issued.
-        # Scoring them is a hindcast (verify.py refuses to), and training the correction on
-        # them is worse: it fits the buckets to near-nowcast skill the real 05:00 forecast
-        # will never have, and it makes production diverge from what the backtest replays.
-        if verify.is_leaked(date, hour, run_stamp):
-            n_leaked += 1
             continue
         raw = hp.get("raw_kn")
         issued = hp.get("mean_kn", raw)
@@ -173,11 +155,23 @@ def update_from_day(lake, date):
         # true regime from the MEASURED direction (terrain sector) + measured wind
         areg = "calm" if act < 2 else (fc.terrain_regime(lake, actd) or "uncertain")
         rmatch = areg not in ("uncertain",) and areg == regime
+        # An hour that had already elapsed when the forecast was issued is not a forecast:
+        # we must not TRAIN on it (it fits the buckets to nowcast skill the real 05:00 run
+        # will never have). But the MEASUREMENT is still true and is the only copy we keep —
+        # verify's persistence and climatology baselines and the site's measured table all
+        # read this file — so the row is still written, flagged, and merely excluded from
+        # training and from the day's accuracy aggregates.
+        leaked = verify.is_leaked(date, hour, run_stamp)
         diffs.append({"hour": hour, "regime": regime, "actual_regime": areg,
                       "regime_match": rmatch, "issued_kn": issued, "raw_kn": raw,
                       "actual_kn": act, "err_issued_kn": err_issued, "err_raw_kn": err_raw,
                       "issued_gust_kn": hp.get("gust_kn"), "actual_gust_kn": actg,
-                      "dir_pred": hp.get("dir"), "dir_actual": actd, "dir_err_deg": derr})
+                      "dir_pred": hp.get("dir"), "dir_actual": actd, "dir_err_deg": derr,
+                      "leaked": leaked})
+        if leaked:
+            n_leaked += 1
+            continue                       # measurement kept; training and scoring skipped
+        scored.append(diffs[-1])
         ei.append(abs(err_issued)); er.append(abs(err_raw)); signed.append(err_issued)
         if derr is not None:
             dir_errs.append(derr)
@@ -192,7 +186,7 @@ def update_from_day(lake, date):
         st = buckets.setdefault(key, postproc.new_state())
         a0, b0, n0, gr0 = st["a"], st["b"], st["n"], st.get("gust_ratio", 1.0)
         postproc.update(st, raw, act)  # updates a, b, covariance, n, mae in place
-        if rg and rg > 0:              # gust: shrunk multiplicative factor (kept as EWMA)
+        if rg and rg > 0:              # gust: shrunk multiplicative factor (exponentially smoothed)
             ratio = actg / rg
             st["gust_ratio"] = round(ratio if n0 == 0 else (1 - alpha) * gr0 + alpha * ratio, 2)
         bucket_updates.append({
@@ -202,17 +196,28 @@ def update_from_day(lake, date):
             "gust_ratio_before": round(gr0, 2), "gust_ratio_after": st.get("gust_ratio", 1.0),
             "n_after": st["n"]})
 
+    if not scored:
+        # The lead-time filter can legitimately remove every matched hour (e.g. a forecast
+        # issued late in the day). Report that honestly and leave the day UNPROCESSED — the
+        # aggregates would all be None and format_report would crash formatting them, which
+        # killed learning and the tuner for the whole lake.
+        return {"lake": lake, "date": date,
+                "skipped": (f"all {n_leaked} matched hour(s) had already elapsed when the "
+                            f"forecast was issued — measurements logged, nothing to learn from"),
+                "diffs": diffs, "_bias": bias
+                if n_leaked else "no overlapping hours between forecast and measurements"}
+
     for reg, d in by_regime.items():
         d["mbe_kn"] = round(d["sum"] / d["n"], 2)
         d["n"] = d["n"]
-    worst = max(diffs, key=lambda r: abs(r["err_issued_kn"])) if diffs else None
+    worst = max(scored, key=lambda r: abs(r["err_issued_kn"])) if scored else None
     # regime validation: predicted regime vs the measured-direction regime
-    evals = [(d["regime"], d["actual_regime"]) for d in diffs if d["actual_regime"] != "uncertain"]
+    evals = [(d["regime"], d["actual_regime"]) for d in scored if d["actual_regime"] != "uncertain"]
     hits = sum(1 for p, a2 in evals if p == a2)
     confusion = {}
     for p, a2 in evals:
         confusion[f"{p}->{a2}"] = confusion.get(f"{p}->{a2}", 0) + 1
-    agg = {"n_hours": len(diffs), "mae_issued_kn": _mean(ei), "mae_raw_kn": _mean(er),
+    agg = {"n_hours": len(scored), "mae_issued_kn": _mean(ei), "mae_raw_kn": _mean(er),
            "mbe_issued_kn": _mean(signed),
            "dir_mae_deg": (round(sum(dir_errs) / len(dir_errs)) if dir_errs else None),
            "gust_ratio_day": (round(sum(gratios) / len(gratios), 2) if gratios else None),
@@ -226,7 +231,7 @@ def update_from_day(lake, date):
     # each with the difference explained, the lesson, and how the fix is applied.
     bmap = {u["key"]: u for u in bucket_updates}
     large_misses = []
-    for d in diffs:
+    for d in scored:
         if not is_large_miss(d["err_issued_kn"]):
             continue
         under = d["err_issued_kn"] < 0  # err = forecast − measured; <0 ⇒ under-predicted
@@ -286,7 +291,7 @@ def format_report(res):
          "```",
          " Hr | Regime   | Pred | Raw  | Meas | Δiss | Δraw | Pdir Adir Δ°",
          " ---|----------|------|------|------|------|------|-------------"]
-    for d in res["diffs"]:
+    for d in [x for x in res["diffs"] if not x.get("leaked")]:
         L.append(f" {d['hour']:02d} | {d['regime']:<8} | {d['issued_kn']:>4.1f} | "
                  f"{d['raw_kn']:>4.1f} | {d['actual_kn']:>4.1f} | {d['err_issued_kn']:>+4.1f} | "
                  f"{d['err_raw_kn']:>+4.1f} | {fc.compass(d['dir_pred']):>4} {fc.compass(d['dir_actual']):>4} "
@@ -310,8 +315,9 @@ def format_report(res):
 
     L += ["", "**2. Accuracy summary**",
           f"- Mean abs error: issued forecast **{a['mae_issued_kn']} kn** vs raw model {a['mae_raw_kn']} kn",
-          f"- Mean signed error (bias): {a['mbe_issued_kn']:+} kn "
-          f"({'under' if (a['mbe_issued_kn'] or 0) > 0 else 'over'}-predicting)",
+          (f"- Mean signed error (bias): {a['mbe_issued_kn']:+} kn "
+           f"({'under' if (a['mbe_issued_kn'] or 0) > 0 else 'over'}-predicting)"
+           if a['mbe_issued_kn'] is not None else "- Mean signed error (bias): n/a"),
           f"- Direction mean abs error: {a['dir_mae_deg']}°" if a["dir_mae_deg"] is not None else "- Direction: n/a",
           f"- Gust ratio (measured/model): {a['gust_ratio_day']}×" if a["gust_ratio_day"] is not None else "- Gust: n/a",
           "- By regime: " + "; ".join(f"{k} {v['mbe_kn']:+} kn ({v['n']}h)" for k, v in sorted(a["by_regime"].items()))]
@@ -321,7 +327,7 @@ def format_report(res):
               f"({int(a['regime_acc']*100)}%)**",
               "- Confusion (predicted→measured): " +
               ("; ".join(f"{k} ×{v}" for k, v in sorted(a["confusion"].items())) or "none")]
-        mism = [d for d in res["diffs"] if d["actual_regime"] != "uncertain"
+        mism = [d for d in res["diffs"] if not d.get("leaked") and d["actual_regime"] != "uncertain"
                 and not d["regime_match"]]
         if mism:
             L.append("- Mismatched hours: " +
@@ -343,20 +349,46 @@ def format_report(res):
     return "\n".join(L)
 
 
+def _write_diffs(lake, date, source, diffs):
+    """Persist the day's measured-vs-forecast rows, IDEMPOTENTLY per (lake, date).
+
+    A bare append meant that a retry after a mid-write failure duplicated every row —
+    corrupting the measured table and double-feeding the baselines. Existing rows for the
+    date are dropped first, mirroring how the forecast log and the event log behave."""
+    path = os.path.join(wd.LOG_DIR, f"{lake}_diffs.jsonl")
+    kept = []
+    if os.path.exists(path):
+        for line in open(path):
+            line = line.rstrip("\n")
+            if not line.strip():
+                continue
+            try:
+                r = json.loads(line)
+            except Exception:
+                kept.append(line)          # never discard something we cannot parse
+                continue
+            if r.get("date") != date:
+                kept.append(line)
+    for d in diffs:
+        kept.append(json.dumps({"date": date, "lake": lake, "source": source, **d}))
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        f.write("\n".join(kept) + "\n")
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)
+    return len(diffs)
+
+
 def run_and_log(lake, date):
     """Learn + write the detailed report and machine-readable diffs. Returns res."""
     res = update_from_day(lake, date)
+    # Measurements are persisted even when there was nothing to LEARN (e.g. every hour had
+    # already elapsed at issue time): the diffs log is the only store of measured truth and
+    # feeds verify's persistence/climatology baselines and the site's measured table.
+    if res.get("diffs"):
+        _write_diffs(lake, date, res.get("source"), res["diffs"])
     if not res.get("skipped"):
-        # Order matters: write the DATA first, commit the idempotency marker last. If any
-        # of this fails the day stays unprocessed and will be retried, instead of being
-        # marked done with its diffs missing (which is unrecoverable).
-        dp = os.path.join(wd.LOG_DIR, f"{lake}_diffs.jsonl")
-        with open(dp, "a") as f:
-            for d in res["diffs"]:
-                f.write(json.dumps({"date": date, "lake": lake,
-                                    "source": res.get("source"), **d}) + "\n")
-            f.flush()
-            os.fsync(f.fileno())
         with open(os.path.join(LEARN_DIR, f"{lake}_{date}.md"), "w") as f:
             f.write(format_report(res) + "\n")
         # durable record of the exact big-miss diff table shown in the HTML for this day
@@ -364,7 +396,11 @@ def run_and_log(lake, date):
             "lake": lake, "date": date, "source": res.get("source"),
             "threshold_kn": LARGE_ERR_KN, "n_misses": len(res["large_misses"]),
             "misses": res["large_misses"]}, stamp=date)
-        _commit_bias(lake, res.pop("_bias"))     # marker committed only now
+    # Order matters: the DATA is written above, the idempotency marker only now. If any of
+    # it fails the day stays unprocessed and is retried, instead of being marked done with
+    # its diffs missing (which was unrecoverable).
+    if res.get("_bias") is not None:
+        _commit_bias(lake, res["_bias"])
     res.pop("_bias", None)
     return res
 

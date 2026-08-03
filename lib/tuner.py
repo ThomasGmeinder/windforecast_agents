@@ -296,8 +296,9 @@ def _selftest():
     assert fc.params_for("ammersee")["THERMAL_CLOUD_MAX"] == fc._DEFAULTS["THERMAL_CLOUD_MAX"]
     # the stale calibration must be retired, since it was fit under the OLD labels
     assert json.load(open(fc.bias_path("walchensee")))["buckets"] == {}, "stale buckets kept"
-    assert json.load(open(fc.bias_path("walchensee")))["processed_dates"] == ["2026-07-31"], \
-        "processed dates must survive so days are not re-learned twice"
+    assert json.load(open(fc.bias_path("walchensee")))["processed_dates"] == [], \
+        "processed_dates must be cleared so the logged history can be re-learned under " \
+        "the new labels — otherwise the wipe is permanent"
     print("  PASS apply: per-lake write, other lakes untouched, stale buckets retired")
 
     # --- memory loop: proposal recorded, then reviewed and resolved next run

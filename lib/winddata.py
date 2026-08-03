@@ -177,6 +177,15 @@ def _circ_mean_deg(degs):
     return round((math.degrees(math.atan2(s, c)) + 360) % 360)
 
 
+def _mess_datum_local(stamp):
+    """DWD MESS_DATUM ('YYYYMMDDHHMM', UTC) -> naive Europe/Berlin datetime, or None."""
+    try:
+        dt = datetime.datetime.strptime(stamp[:12], "%Y%m%d%H%M")
+    except Exception:
+        return None
+    return dt.replace(tzinfo=datetime.timezone.utc).astimezone(BERLIN)
+
+
 def dwd_obs_hourly(station, yyyymmdd):
     """Hourly-aggregated actual wind for one DWD station and one date (YYYYMMDD),
     from the `recent` 10-min archive (covers through yesterday 23:50). Returns
@@ -189,16 +198,24 @@ def dwd_obs_hourly(station, yyyymmdd):
         raise FileNotFoundError(f"no recent 10-min wind file for station {station}")
     z = zipfile.ZipFile(io.BytesIO(_get(base + fn[0])))
     name = [n for n in z.namelist() if n.startswith("produkt")][0]
+    # DWD MESS_DATUM is UTC ("The time stamp is given in UTC" — CDC 10-minute wind
+    # description). Every consumer of this dict joins it to Europe/Berlin forecast hours,
+    # so bucket on the LOCAL hour and filter on the LOCAL date; keying on the raw stamp
+    # shifted every measured value by 2 h in summer / 1 h in winter. Same trap as the
+    # foehn dp join and the run_stamp comparison.
+    want = f"{yyyymmdd[:4]}-{yyyymmdd[4:6]}-{yyyymmdd[6:8]}"
     buckets = {}
     for line in z.read(name).decode("latin-1").splitlines()[1:]:
         p = [x.strip() for x in line.split(";")]
-        if len(p) < 5 or not p[1].startswith(yyyymmdd):
+        if len(p) < 5:
+            continue
+        local = _mess_datum_local(p[1])
+        if local is None or local.strftime("%Y-%m-%d") != want:
             continue
         ff, dd = float(p[3]), float(p[4])
         if ff <= -999 or dd <= -999:
             continue
-        hh = int(p[1][8:10])
-        buckets.setdefault(hh, []).append((ff, dd))
+        buckets.setdefault(local.hour, []).append((ff, dd))
     out = {}
     for hh, vals in buckets.items():
         ff = [v[0] for v in vals]

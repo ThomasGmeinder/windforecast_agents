@@ -94,7 +94,6 @@ helper instead of re-deriving fetch/parse/decode each run:
   ens  = wd.openmeteo_ensemble(47.65, 11.35, ["wind_speed_10m"])  # spread -> confidence
   gust = wd.icon_d2_grib_point("vmax_10m", 24, 47.65, 11.35)      # raw GRIB (best), cached
   dp   = wd.foehn_delta_p()                     # Bozen - Muenchen dp series (MOSMIX)
-  wd.log_record("kochelsee", "forecast", {...}) # append to logs/ for bias history
   ```
 - **Networking:** curl is sandbox-blocked here; the helper uses Python urllib with
   the system CA bundle (`/etc/ssl/certs/ca-certificates.crt`), which verifies cleanly
@@ -216,10 +215,10 @@ stability**, and surfaces them in the table Note column:
   Use these to explain *why* (thermal onset timing, föhn breakthrough), not just how much.
 
 A self-learning bias correction improves the engine every morning:
-- `daily_run.py` runs ~06:00 via the systemd user timer `wind-agents-daily.timer`
-  (`Persistent=true`, so a run missed while the laptop is asleep fires on wake). It
+- `daily_run.py` runs in GitHub Actions (cron 03:07 UTC ~ 05:07 Berlin); the local
+systemd timer `wind-agents-daily.timer` fires at 05:00 and only DISPATCHES that workflow.
   (1) **learns** from yesterday — compares the logged forecast to DWD actual obs and
-  updates `models/<lake>_bias.json` by EWMA per (regime × hour-of-day) — and
+  updates `models/<lake>_bias.json` by RLS regression per (regime × hour-of-day) — and
   (2) writes today's tables to `logs/tables/` + `logs/latest_report.txt`.
 - Until a lake accrues history, rows are flagged "raw (no local calib yet)" and
   confidence is capped — say so honestly.
@@ -249,10 +248,8 @@ Do all fetching with the project venv + `winddata.py` (see "Data access" above).
 6. Produce a **per-lake hourly table** (see output). Because foehn and thermal give
    opposite results, ALWAYS report Kochelsee and Walchensee separately.
 7. **Log the forecast** for later bias-correction: call
-   `wd.log_record("kochelsee"/"walchensee", "forecast", {...})` with the run stamp,
    target date, and the hourly predictions. On a later run, when observations for a
    past target date are available, fetch them and
-   `wd.log_record(lake, "actual", {...})` so a forecast-vs-actual history accrues —
    this is what turns the heuristic correction in step 4 into a calibrated one.
 
 ## Output format

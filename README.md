@@ -184,6 +184,10 @@ morning the logged forecasts are scored out of sample against the measured wind:
   scored using only strictly earlier data.
 - **Skill score** `SS = 1 − CRPS/CRPS_baseline`; `SS > 0` means we beat that baseline.
   Reported overall, per regime and per hour.
+- **Lead time**: hours that had already elapsed when the forecast was issued are not
+  scored or learned from — a 05:00 run does not "predict" 00:00–04:00. The forecast *of
+  record* for a date is the EARLIEST one logged, so a better-informed same-day re-run
+  cannot replace it. Their measurements are still recorded (the baselines need them).
 
 `python lib/verify.py` runs the self-tests (three independent CRPS implementations agree,
 plus a discrimination test that a good forecaster outranks a biased one);
@@ -211,8 +215,9 @@ and gated. One call (`tuner.run`) performs a full cycle:
    with reasoning; the verdict is written back to the ledger (`logs/ledger.jsonl`). This
    is the memory that makes it accountable rather than a fresh opinion each morning.
 2. **Proposals** — at most two small parameter changes, each with a rationale and an
-   `expected_effect` it will be judged against next time. Each is recorded as a new open
-   hypothesis.
+   `expected_effect` it will be judged against next time. A proposal that passes the gate becomes an open
+   hypothesis; one that is refused is recorded with the gate's reason instead, so the
+   analyst is never graded on a change that never took effect.
 
 **What happens to a proposal (the gate).** Nothing is applied on the model's say-so.
 Each proposal must pass, in order: the parameter is one of the six known tunables → the
@@ -335,7 +340,8 @@ wind-agents/
 
 ```bash
 # environment (Zscaler: curl is sandbox-blocked; helpers use urllib + system CA)
-export SSL_CERT_FILE=REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+export REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
 
 # full daily cycle (learn yesterday → forecast today)
 .venv/bin/python daily_run.py

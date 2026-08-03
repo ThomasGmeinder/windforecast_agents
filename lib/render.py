@@ -65,9 +65,13 @@ def _latest_learning(lake):
 
 
 def _generated():
+    """Build time in Europe/Berlin, LABELLED. A naive fromtimestamp renders in the build
+    machine's zone — UTC on the GitHub runner — next to tables whose hours are all Berlin."""
     lrp = os.path.join(wd.LOG_DIR, "latest_report.txt")
-    return (datetime.datetime.fromtimestamp(os.path.getmtime(lrp)).strftime("%Y-%m-%d %H:%M")
-            if os.path.exists(lrp) else "—")
+    if not os.path.exists(lrp):
+        return "—"
+    return datetime.datetime.fromtimestamp(os.path.getmtime(lrp),
+                                           wd.BERLIN).strftime("%Y-%m-%d %H:%M %Z")
 
 
 def _dir_arrow(deg):
@@ -308,9 +312,17 @@ def _learning_section(lakes):
 
 def _methodology(group):
     nmin = verify.N_MIN_BACKTEST_DAYS
-    lowconf = verify.LOW_CONF_DAYS
-    # thresholds are tuner-writable and per-lake: never hardcode them into the page
-    P = fc.params_for(GROUPS[group]["lakes"][0])
+    # thresholds are tuner-writable and PER-LAKE. Reading only lakes[0] published one
+    # lake's tuned numbers as if they governed both, which is exactly what the per-lake
+    # split exists to prevent. Show a single value only while the lakes agree.
+    _lk = GROUPS[group]["lakes"]
+    _ps = {l: fc.params_for(l) for l in _lk}
+    def P_(key, unit=""):
+        vals = {l: _ps[l][key] for l in _lk}
+        if len(set(vals.values())) == 1:
+            return f"{vals[_lk[0]]:g}{unit}"
+        return " / ".join(f"{l.title()} {v:g}{unit}" for l, v in vals.items())
+    P = {k: P_(k) for k in fc.TUNABLE}
     if group == "kochel-walchensee":
         return f"""
     <section class="card method">
@@ -325,9 +337,9 @@ def _methodology(group):
         <li><b>Diagnose drivers.</b> Cross-Alpine Δp (Bozen−München), 850 hPa wind, föhn-gradient,
             radiation, and the Kochel−Walchensee <b>Δθ</b> stability index.</li>
         <li><b>Classify the regime</b> — terrain then fixes direction (N–NE thermal · S–SE föhn ·
-            W–NW gradient): <b>föhn</b> (Δp ≥ {P['FOEHN_DP_RIM']:g} hPa + SE–S 850 wind; confirmed by morning S/SE at
-            Hohenpeißenberg) → <b>gradient</b> (925 hPa ≥ {P['GRADIENT_925_KN']:g} kn) → <b>thermal</b> (sun + weak gradient
-            + no cold pool, Δθ &lt; {P['COLD_POOL_DTHETA']:g} K) → <b>calm</b>.</li>
+            W–NW gradient): <b>föhn</b> (Δp ≥ {P['FOEHN_DP_RIM']} hPa + SE–S 850 wind; confirmed by morning S/SE at
+            Hohenpeißenberg) → <b>gradient</b> (925 hPa ≥ {P['GRADIENT_925_KN']} kn) → <b>thermal</b> (sun + weak gradient
+            + no cold pool, Δθ &lt; {P['COLD_POOL_DTHETA']} K) → <b>calm</b>.</li>
         <li><b>Correct.</b> A learned regression <b>corrected = a + b·model</b> that scales with the
             model (no föhn double-count), evidence-gated and capped.</li>
       </ol>

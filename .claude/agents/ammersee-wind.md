@@ -68,7 +68,6 @@ helper instead of re-deriving fetch/parse/decode each run:
         "wind_direction_10m"], models="icon_eu")             # ICON-EU cross-check
   ens = wd.openmeteo_ensemble(LAT, LON, ["wind_speed_10m"])  # spread -> confidence
   gust= wd.icon_d2_grib_point("vmax_10m", 30, LAT, LON)      # raw GRIB (best), cached
-  wd.log_record("ammersee", "forecast", {...})               # bias history
   ```
 - **Networking:** curl is sandbox-blocked; the helper uses Python urllib + the
   system CA bundle (`/etc/ssl/certs/ca-certificates.crt`), verified through the
@@ -143,10 +142,10 @@ print(format_table(res))                          # or use res["rows"] / res["su
 Call the engine for the table, then add your judgement and caveats around it.
 
 A self-learning bias correction improves the engine every morning:
-- `daily_run.py` runs ~06:00 via the systemd user timer `wind-agents-daily.timer`
-  (`Persistent=true`, so a run missed while the laptop is asleep fires on wake). It
+- `daily_run.py` runs in GitHub Actions (cron 03:07 UTC ~ 05:07 Berlin); the local
+systemd timer `wind-agents-daily.timer` fires at 05:00 and only DISPATCHES that workflow.
   (1) **learns** from yesterday — compares the logged forecast to DWD actual obs and
-  updates `models/ammersee_bias.json` by EWMA per (regime × hour-of-day) — and
+  updates `models/ammersee_bias.json` by RLS regression per (regime × hour-of-day) — and
   (2) writes today's table to `logs/tables/` + `logs/latest_report.txt`.
 - Until history accrues, rows are flagged "raw (no local calib yet)" and confidence
   is capped — say so honestly.
@@ -168,9 +167,7 @@ Do all fetching with the project venv + `winddata.py`.
    in `logs/`, use it; until then correct heuristically and SAY SO.
 5. Attach confidence from ensemble spread + model/obs agreement.
 6. Produce the hourly table (below).
-7. **Log** the forecast: `wd.log_record("ammersee", "forecast", {...})` with run
    stamp, target date, and hourly predictions. On a later run, when observations
-   for a past target date are available, `wd.log_record("ammersee", "actual", {...})`
    so a forecast-vs-actual history accrues for calibrated bias-correction.
 
 ## Output format

@@ -83,14 +83,26 @@ def _overlay(base, path):
         if not isinstance(data, dict):
             return base, f"{name}: not a JSON object ({type(data).__name__}) — keeping previous values"
         bad = []
+        merged = dict(base)     # merge into a COPY: a mid-loop error must not half-apply
         for k, v in data.items():
-            # bare NaN/Infinity parse as floats and would poison every comparison in
-            # classify_regime (NaN compares False against everything), so require finite
-            if (k in _DEFAULTS and isinstance(v, (int, float))
-                    and not isinstance(v, bool) and math.isfinite(v)):
-                base[k] = v
+            if not (k in _DEFAULTS and isinstance(v, (int, float))
+                    and not isinstance(v, bool)):
+                bad.append(k)
+                continue
+            try:
+                # bare NaN/Infinity parse as floats and would poison every comparison in
+                # classify_regime (NaN compares False against everything). An int too large
+                # for a float makes isfinite raise, so this is guarded per key rather than
+                # per file — one bad key must not be reported as an unreadable file.
+                ok = math.isfinite(v)
+            except (OverflowError, TypeError, ValueError):
+                ok = False
+            lo, hi = PARAM_BOUNDS.get(k, (float("-inf"), float("inf")))
+            if ok and lo <= v <= hi:        # same envelope the tuner's gate enforces
+                merged[k] = v
             else:
                 bad.append(k)
+        base.update(merged)
         return base, (f"{name}: ignored keys {bad}" if bad else None)
     except Exception as e:
         return base, f"{name} unreadable ({type(e).__name__}) — keeping previous values"
@@ -237,13 +249,19 @@ def load_bias(lake):
 
 
 def reset_bias(lake):
-    """Retire the learned per-(regime x hour) buckets for a lake, keeping the processed
-    dates so nothing is re-learned twice. Called when a regime THRESHOLD changes: the
-    buckets were fit under the old labels, so an hour may now land in a different bucket
-    and the old calibration no longer describes it. Returns how many were dropped."""
+    """Retire the learned per-(regime x hour) buckets for a lake AND clear processed_dates
+    so the logged history is re-learned under the new labels.
+
+    Called when a regime THRESHOLD changes: the buckets were fit under the old labels, so
+    an hour may now land in a different bucket and the old calibration no longer describes
+    it. Keeping processed_dates (the first attempt at this) was worse than useless — it
+    wiped the calibration and then made it impossible to rebuild, cold-starting production
+    permanently, which is not the state the backtest measured. Returns how many buckets
+    were dropped."""
     bias = load_bias(lake)
     n = len(bias.get("buckets") or {})
     bias["buckets"] = {}
+    bias["processed_dates"] = []
     path = bias_path(lake)
     tmp = path + ".tmp"
     with open(tmp, "w") as f:
