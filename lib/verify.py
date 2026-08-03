@@ -128,7 +128,9 @@ def _load_forecasts(lake):
                 best[d] = (rank, raw, r)
     out = {}
     for d, (_when, raw, r) in best.items():   # NOT '_rank': that shadows the module fn
-        out[d] = {h["hour"]: {**h, "_run_stamp": raw} for h in r["hourly"]}
+        out[d] = {h["hour"]: {**h, "_run_stamp": raw,
+                              "_backfilled": bool(r.get("backfilled"))}
+                  for h in r["hourly"]}
     return out
 
 
@@ -231,13 +233,16 @@ def evaluate(lake, forecasts=None, actuals=None):
     forecasts = _load_forecasts(lake) if forecasts is None else forecasts
     actuals = _load_actuals(lake) if actuals is None else actuals
     recs = []
-    n_leaked = n_clim_archive = 0
+    n_leaked = n_clim_archive = n_backfilled = 0
     for date in sorted(forecasts):
         if date not in actuals:
             continue
         for hour, hr in forecasts[date].items():
             if hour not in actuals[date]:
                 continue
+            if hr.get("_backfilled"):
+                n_backfilled += 1          # reconstructed: valid for the PAIRED backtest,
+                continue                   # but it would flatter a published skill score
             if is_leaked(date, hour, hr.get("_run_stamp")):
                 n_leaked += 1              # already-elapsed hour: not a forecast, don't score it
                 continue
@@ -268,6 +273,7 @@ def evaluate(lake, forecasts=None, actuals=None):
     sc = _summarize(lake, recs)
     sc["n_leaked_skipped"] = n_leaked
     sc["n_clim_from_archive"] = n_clim_archive
+    sc["n_backfilled_skipped"] = n_backfilled
     return sc
 
 

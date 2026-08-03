@@ -158,9 +158,21 @@ def consider(lake, param, value):
     # whole bootstrap interval of the PAIRED per-hour difference sits below zero, and that
     # the effect is big enough to be worth acting on.
     if not bt.get("significant"):
-        return False, (f"not statistically significant (Δ {bt['delta_kn']:+.3f} kn, "
-                       f"95% CI [{bt['ci_lo']}, {bt['ci_hi']}], need CI<0 and "
-                       f"Δ≤-{verify.MIN_EFFECT_KN})"), bt
+        # Three genuinely different verdicts. Reporting them all as "not significant" is
+        # wrong: a change can be statistically solid and still too small to act on, and a
+        # change can have literally no effect because the regime it governs never fires in
+        # the replayed period (Ammersee foehn, for instance).
+        d, lo, hi = bt["delta_kn"], bt["ci_lo"], bt["ci_hi"]
+        if d == 0 and lo == 0 and hi == 0:
+            why = ("no effect at all — this parameter changed no hour in the replayed "
+                   "period, so there is nothing to verify")
+        elif hi is not None and hi < 0:
+            why = (f"real but too small to act on (Δ {d:+.3f} kn, 95% CI [{lo}, {hi}] is "
+                   f"below zero, but |Δ| < MIN_EFFECT_KN={verify.MIN_EFFECT_KN})")
+        else:
+            why = (f"not statistically significant (Δ {d:+.3f} kn, 95% CI [{lo}, {hi}] "
+                   f"includes zero)")
+        return False, why, bt
     return True, (f"CRPS -{abs(bt['delta_kn']):.3f} kn, 95% CI [{bt['ci_lo']}, {bt['ci_hi']}]"
                   f" over {bt['n_days']} days / {bt['n_pairs']} hours "
                   f"(SS {bt['crps_ss']:+.4f})"), bt
@@ -299,11 +311,20 @@ def _selftest():
         (bt(0.15, delta=-0.30, lo=-0.75, hi=0.20), False, "positive but CI straddles zero"),
         # ...and an effect too small to be worth acting on, even if significant
         (bt(0.01, delta=-0.01, lo=-0.02, hi=-0.005), False, "significant but trivial effect"),
+        (bt(0.0, delta=0.0, lo=0.0, hi=0.0), False, "parameter changed nothing at all"),
     ]
     for fake, expect_ok, label in cases:
         verify.backtest = (lambda _f: (lambda *a, **k: dict(_f)))(fake)
         ok, reason, _ = consider("walchensee", "THERMAL_CLOUD_MAX", 40)
         assert ok is expect_ok, f"{label}: expected ok={expect_ok}, got {ok} ({reason})"
+        if not ok and fake["enough_data"]:   # refusal must name the REAL reason
+            d, hi = fake["delta_kn"], fake["ci_hi"]
+            if d == 0 and hi == 0:
+                assert "no effect at all" in reason, reason
+            elif hi < 0:
+                assert "too small to act on" in reason, reason
+            else:
+                assert "includes zero" in reason, reason
     print("  PASS gate: applies only a SIGNIFICANT, non-trivial win; refuses regressions,\n"
           "             flat results, thin history, CI-straddles-zero noise, and tiny effects")
 
