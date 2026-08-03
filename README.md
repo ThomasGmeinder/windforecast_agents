@@ -105,8 +105,23 @@ The forecast VALUE is the **equal-weight mean of several sources**, not one run:
   (valley proxy) for the southern lakes, Wielenbach 05538 for Ammersee (lake-level but
   ~11 km inland). **Measured against the buoy over 68 overlapping hours, Wielenbach reads
   just 53 % of the on-lake wind (mean gap 6.0 kn)** — so while the buoy is down, Ammersee
-  is being calibrated against a systematically low truth. This is the leading explanation
-  for its poor verification skill.
+  is being calibrated against a systematically low truth.
+- **Fallback calibration** (`lib/obs_calib.py`, `models/ammersee_fallback_calib.json`):
+  while the buoy is down, the Wielenbach reading is mapped onto lake-equivalent wind by a
+  per-hour-of-day linear fit `lake ≈ a_h + b_h·station`, learned from **11,774 paired
+  hours** and validated on held-out later dates: **MAE 4.67 → 2.71 kn (+42 %)**. The fit
+  is mostly an *offset* (global `+5.06 + 1.06·x`) — above a baseline the two track ~1:1,
+  but the lake carries wind the sheltered station never sees, which is why naive ratio
+  scaling gained only 6 %. The correction is applied ONLY if that out-of-sample check
+  passed (`apply` flag in the model file), never to buoy data, and the source string
+  always says when a value was corrected. Rebuild:
+  `python lib/obs_calib.py build ammersee`.
+
+  **This made the scorecard look worse, which is the point.** Graded against the honest
+  lake-equivalent truth Ammersee's CRPS went 1.46 → 4.19 kn and a **−3.97 kn
+  under-forecast bias** became visible that the low inland truth had been hiding. An
+  independent consistency check supports the correction: the on-lake climatology now fits
+  the truth 36 % better (CRPS 2.45 → 1.57) than it did against raw inland values.
 - `winddata.actual_hourly(lake, date)` picks on-lake first, DWD as fallback, and
   reports which source it used.
 

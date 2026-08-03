@@ -217,6 +217,40 @@ def gkd_wind_hourly(basin, slug, yyyy_mm_dd, param="wind"):
             if iso == yyyy_mm_dd}
 
 
+def dwd_obs_all(station):
+    """Every hourly mean in the DWD `recent` 10-min archive in ONE download ->
+    {(iso_date, hour): {'mean_kn','gust_kn','dir'}}. dwd_obs_hourly re-downloads the zip
+    per call, which is fine for one day and hopeless for the ~500 days a calibration
+    needs. Same UTC->Europe/Berlin rule as dwd_obs_hourly."""
+    base = ("https://opendata.dwd.de/climate_environment/CDC/observations_germany/"
+            "climate/10_minutes/wind/recent/")
+    html = _get(base).decode("latin-1", "replace")
+    fn = re.findall(rf'10minutenwerte_wind_{station}[^"]*\.zip', html)
+    if not fn:
+        raise FileNotFoundError(f"no recent 10-min wind file for station {station}")
+    z = zipfile.ZipFile(io.BytesIO(_get(base + fn[0])))
+    name = [n for n in z.namelist() if n.startswith("produkt")][0]
+    buck = {}
+    for line in z.read(name).decode("latin-1").splitlines()[1:]:
+        p = [x.strip() for x in line.split(";")]
+        if len(p) < 5:
+            continue
+        loc = _mess_datum_local(p[1])
+        if loc is None:
+            continue
+        ff, dd = float(p[3]), float(p[4])
+        if ff <= -999 or dd <= -999:
+            continue
+        buck.setdefault((loc.strftime("%Y-%m-%d"), loc.hour), []).append((ff, dd))
+    out = {}
+    for k, vals in buck.items():
+        ff = [v[0] for v in vals]
+        out[k] = {"mean_kn": round(sum(ff) / len(ff) * MS_TO_KN, 1),
+                  "gust_kn": round(max(ff) * MS_TO_KN, 1),
+                  "dir": _circ_mean_deg([v[1] for v in vals])}
+    return out
+
+
 def _mess_datum_local(stamp):
     """DWD MESS_DATUM ('YYYYMMDDHHMM', UTC) -> naive Europe/Berlin datetime, or None."""
     try:
@@ -391,6 +425,27 @@ def actual_hourly(lake, yyyy_mm_dd):
     if dwd is None:
         dwd = dwd_obs_hourly(st, yyyy_mm_dd.replace("-", ""))
     note = "lake-level, ~11 km inland" if lake == "ammersee" else "valley proxy"
+
+    # The fallback station under-reads the lake badly (Wielenbach measured a mean 3.2 kn
+    # where the buoy had 8.2 kn). Where a VALIDATED calibration exists, map the reading
+    # onto lake-equivalent wind so we do not train and grade against a truth that is wrong
+    # by more than the forecast error. Import is local: obs_calib imports forecast, which
+    # would otherwise be a cycle at module load.
+    try:
+        import obs_calib
+    except Exception:
+        obs_calib = None
+    if obs_calib is not None and obs_calib.load(lake):
+        out, n = {}, 0
+        for h, v in dwd.items():
+            cm, cg, ok = obs_calib.correct(lake, h, v.get("mean_kn"), v.get("gust_kn"))
+            out[h] = {**v, "mean_kn": cm, "gust_kn": cg}
+            n += bool(ok)
+        if n:
+            m = obs_calib.load(lake)
+            gain = m["validation"]["improvement"] * 100
+            return out, (f"{dwd_src} ({note}) calibrated to on-lake "
+                         f"(+{gain:.0f}% vs raw, {m['n_pairs']} paired hrs)")
     return dwd, f"{dwd_src} ({note})"
 
 
