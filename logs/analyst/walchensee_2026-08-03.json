@@ -1,0 +1,61 @@
+{
+  "lake": "walchensee",
+  "date": "2026-08-03",
+  "result": {
+    "narrative": "The forecaster exhibits a consistent positive bias, particularly overpredicting wind speeds during transitions from thermal to calm conditions in the late morning/early afternoon, and from gradient to calm in the evening. Regime classification accuracy is low, with frequent misclassifications of thermal and gradient conditions as calm. There are also instances of late-day thermal underprediction and significant directional errors in gradient regimes.",
+    "diagnosis": [
+      {
+        "pattern": "Significant overprediction and misclassification of 'thermal' as 'calm' in late morning/early afternoon (hours 11-13).",
+        "cause": "Thermal onset timing issue, likely due to the model being too aggressive in breaking the cold pool, leading to premature or overly strong thermal wind forecasts."
+      },
+      {
+        "pattern": "Significant overprediction and misclassification of 'gradient' as 'calm' in the evening (hour 19).",
+        "cause": "The threshold for identifying gradient wind conditions might be too low, causing the model to predict gradient winds when the conditions are actually calm."
+      }
+    ],
+    "proposals": [
+      {
+        "param": "COLD_POOL_DTHETA",
+        "proposed": 1.8,
+        "rationale": "To address the consistent overprediction and misclassification of 'thermal' as 'calm' in the late morning (hours 11-13), indicating premature thermal onset. Increasing this threshold will make it harder for the thermal regime to activate, delaying or suppressing its onset.",
+        "expected_effect": "Reduced positive bias and MAE during late morning/early afternoon hours, specifically for instances where thermal winds are currently overpredicted or misclassified as calm. Improved regime accuracy for thermal/calm transitions."
+      },
+      {
+        "param": "GRADIENT_925_KN",
+        "proposed": 14.0,
+        "rationale": "To mitigate the significant overprediction and misclassification of 'gradient' as 'calm' in the evening (e.g., hour 19). A higher threshold for 925hPa wind speed should reduce false positives for gradient conditions when the actual wind is calm.",
+        "expected_effect": "Reduced positive bias and MAE during evening hours, particularly for gradient conditions that are currently overpredicted or misclassified as calm. Improved regime accuracy for gradient/calm transitions."
+      }
+    ],
+    "reviews": [],
+    "reviewed": [],
+    "unknown_review_ids": [],
+    "applied": [],
+    "refused": [
+      {
+        "param": "COLD_POOL_DTHETA",
+        "proposed": 1.8,
+        "reason": "insufficient replayable history (1/10 days, 13/60 hours)"
+      },
+      {
+        "param": "GRADIENT_925_KN",
+        "proposed": 14.0,
+        "reason": "insufficient replayable history (1/10 days, 13/60 hours)"
+      }
+    ],
+    "n_open": 0,
+    "verification": {
+      "n_pairs": 15,
+      "n_days": 2,
+      "crps": 2.3056,
+      "mae": 2.590333333333333,
+      "rmse": 3.8802393074826367,
+      "bias": -0.11366666666666654,
+      "crps_pers": 5.041666666666667,
+      "crps_clim": null,
+      "ss_pers": 0.6317355371900826,
+      "ss_clim": null,
+      "n_leaked_skipped": 26
+    }
+  }
+}

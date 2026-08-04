@@ -1,0 +1,61 @@
+{
+  "lake": "kochelsee",
+  "date": "2026-08-03",
+  "result": {
+    "narrative": "The forecaster is currently struggling with significant underprediction of wind speeds, particularly during periods of strong winds, leading to a Mean Bias Error of -2.33 kn. This is largely driven by a failure to accurately detect and classify Foehn events, which are often misidentified as 'calm' or 'thermal' regimes. The regime classification accuracy is very low at 0.33, and directional errors are high (MAE 64 degrees). To address the primary issue of missed Foehn events and subsequent underprediction, two parameter adjustments are proposed to make Foehn detection more sensitive.",
+    "diagnosis": [
+      {
+        "pattern": "Frequent and significant underprediction of wind speeds, particularly during hours with strong actual winds (10-17 knots). The overall Mean Bias Error (MBE) is -2.33 kn, with the thermal regime showing a severe -5.5 kn MBE.",
+        "cause": "The forecaster is consistently failing to detect or properly quantify Foehn events, often misclassifying them as 'calm' or 'thermal' regimes. This indicates that the Foehn detection thresholds are too strict, preventing the model from assigning the correct, stronger wind regime."
+      },
+      {
+        "pattern": "Very low regime classification accuracy (0.33) and high directional errors (MAE 64 degrees).",
+        "cause": "Misclassification of regimes, especially the failure to identify Foehn, leads to incorrect wind speed and direction predictions. The complex terrain of Kochelsee likely exacerbates directional errors when the regime is misidentified or the wind channeling is not accurately modeled."
+      }
+    ],
+    "proposals": [
+      {
+        "param": "FOEHN_DP_RIM",
+        "proposed": 3.5,
+        "rationale": "The model frequently underpredicts strong winds, especially when the actual regime is Foehn but classified as Calm or Thermal. Lowering this pressure difference threshold should make Foehn detection more sensitive, leading to earlier or more frequent Foehn classifications.",
+        "expected_effect": "Reduced underprediction of strong Foehn events, particularly in the morning hours, and improved regime classification accuracy for Foehn."
+      },
+      {
+        "param": "FOEHN_850_KN",
+        "proposed": 6.0,
+        "rationale": "To further improve the detection of Foehn events, especially when upper-level winds are present but might not meet the current threshold. This should help capture more Foehn instances that are currently misclassified as weaker regimes.",
+        "expected_effect": "Increased classification of Foehn regime, particularly when upper-level winds are moderate, leading to reduced underprediction in these scenarios and improved overall wind speed accuracy."
+      }
+    ],
+    "reviews": [],
+    "reviewed": [],
+    "unknown_review_ids": [],
+    "applied": [],
+    "refused": [
+      {
+        "param": "FOEHN_DP_RIM",
+        "proposed": 3.5,
+        "reason": "insufficient replayable history (2/10 days, 13/60 hours)"
+      },
+      {
+        "param": "FOEHN_850_KN",
+        "proposed": 6.0,
+        "reason": "insufficient replayable history (2/10 days, 13/60 hours)"
+      }
+    ],
+    "n_open": 0,
+    "verification": {
+      "n_pairs": 19,
+      "n_days": 3,
+      "crps": 2.1176842105263156,
+      "mae": 2.3625657894736842,
+      "rmse": 3.5743171849761444,
+      "bias": -1.4825657894736841,
+      "crps_pers": 3.776923076923077,
+      "crps_clim": null,
+      "ss_pers": 0.3169857433808554,
+      "ss_clim": null,
+      "n_leaked_skipped": 45
+    }
+  }
+}

@@ -1,0 +1,27 @@
+Walchensee — 2026-08-04
+  dominant thermal; peak 7.1 kn (3 Bft) SSW ~19h · gusts to 39.1 kn ~19h  FOEHN 00-09h (NE thermal suppressed)
+  Hour | Dir  | Mean kn (Bft) | Gust kn | Regime   | Conf | Note
+  00   | S    |     4.3 (2) |   8.2   | foehn    | low  | raw (no local calib yet) fg-0.6 unconfirmed @Peißenberg (WSW 7kn)
+  01   | SSE  |     4.2 (2) |   8.7   | foehn    | low  | raw (no local calib yet) fg+0.0 unconfirmed @Peißenberg (WSW 7kn)
+  02   | S    |     4.3 (2) |   8.9   | foehn    | low  | raw (no local calib yet) fg-0.3 unconfirmed @Peißenberg (WSW 7kn)
+  03   | SSE  |     4.5 (2) |   9.2   | foehn    | low  | raw (no local calib yet) fg-0.3 unconfirmed @Peißenberg (WSW 7kn)
+  04   | SSE  |     3.9 (1) |   8.7   | foehn    | low  | raw (no local calib yet) fg+0.0 unconfirmed @Peißenberg (WSW 7kn)
+  05   | SSE  |     3.9 (1) |   8.1   | foehn    | low  | raw (no local calib yet) fg+0.0 unconfirmed @Peißenberg (WSW 7kn)
+  06   | SSE  |     4.1 (2) |   8.2   | foehn    | low  | raw (no local calib yet) fg+0.1 unconfirmed @Peißenberg (WSW 7kn)
+  07   | S    |     4.0 (2) |   7.5   | foehn    | low  | raw (no local calib yet) fg+0.2 unconfirmed @Peißenberg (WSW 7kn)
+  08   | S    |     2.7 (1) |   6.5   | foehn    | low  | raw (no local calib yet) fg+0.6 unconfirmed @Peißenberg (WSW 7kn)
+  09   | S    |     2.2 (1) |   5.7   | foehn    | low  | raw (no local calib yet) fg+0.9 unconfirmed @Peißenberg (WSW 7kn)
+  10   | NE   |     1.4 (1) |   5.9   | thermal  | med  | raw (no local calib yet) Δθ+0.2
+  11   | NNE  |     1.9 (1) |   6.1   | calm     | med  | glassy Δθ-0.9
+  12   | N    |     2.6 (1) |   5.4   | thermal  | med  | raw (no local calib yet) Δθ-0.4
+  13   | N    |     3.7 (1) |   7.1   | thermal  | med  | raw (no local calib yet) Δθ-0.6
+  14   | N    |     5.9 (2) |  12.5   | thermal  | med  | raw (no local calib yet) Δθ-0.7
+  15   | N    |     6.5 (2) |  12.0   | thermal  | med  | raw (no local calib yet) Δθ-0.8
+  16   | NNW  |     5.6 (2) |  10.3   | gradient | med  | raw (no local calib yet)
+  17   | NNW  |     5.4 (2) |  11.0   | gradient | med  | raw (no local calib yet)
+  18   | WNW  |     4.0 (2) |  10.3   | gradient | low  | raw (no local calib yet)
+  19   | SSW  |     7.1 (3) |  39.1   | gradient | low  | raw (no local calib yet)
+  20   | SW   |     3.8 (1) |   8.1   | gradient | med  | raw (no local calib yet)
+  21   | S    |     4.2 (2) |   7.4   | gradient | med  | raw (no local calib yet)
+  22   | S    |     4.2 (2) |   7.9   | gradient | med  | raw (no local calib yet)
+  23   | WNW  |     2.8 (1) |   7.5   | gradient | med  | raw (no local calib yet)
