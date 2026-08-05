@@ -393,9 +393,10 @@ def _walk_forward(lake, params, forecasts, actuals, dates):
             raw_s = h.get("raw_kn")
             raw_g = h.get("raw_gust_kn") or raw_s
             y = actuals[date][hour]
-            regime, cs, _, _ = fc.replay_hour(lake, hour, fc.row_from_logged(h),
-                                              h.get("dp"), {"dtheta": h.get("dtheta")},
-                                              raw_s, raw_g, params=params, bias=bias)
+            regime, cs, _, _, _ = fc.replay_hour(lake, hour, fc.row_from_logged(h),
+                                                 h.get("dp"), {"dtheta": h.get("dtheta")},
+                                                 raw_s, raw_g, params=params, bias=bias,
+                                                 gust_ceiling_kn=h.get("gust_ceiling_kn"))
             errs.append((date, abs(cs - y)))    # predicted knowing only up to yesterday
             learned_today.append((regime, hour, raw_s, y))
         for regime, hour, raw_s, y in learned_today:   # ...only now learn from today

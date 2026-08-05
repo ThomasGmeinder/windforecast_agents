@@ -20,6 +20,20 @@ PRIOR_A, PRIOR_B = 0.0, 1.0        # start at corrected = raw (trust the model)
 PRIOR_VAR_A, PRIOR_VAR_B = 4.0, 0.30  # a may drift ~±2 kn early; b stays near 1 until evidence
 FORGET = 0.98                       # RLS forgetting factor: long memory, still tracks drift
 
+# --- gust ratio: the MULTIPLICATIVE half of the correction -------------------------
+# measured_gust / model_gust, smoothed per bucket. Unlike the regression above it has no
+# covariance and no built-in shrinkage, so it needs its own guards. Both of these were
+# learned from a real failure: the walchensee `gradient|19` bucket reached gust_ratio 3.18
+# on THREE observations and published a 67.9 kn gust from a 21.4 kn model gust.
+GUST_MIN_LEARN_KN = 3.0             # below this the model gust is noise and measured/model explodes
+GUST_ALPHA = 0.3                    # smoothing weight on each new observation
+# The plausible band for a REAL systematic gust bias. Not guessed: Ammersee is the only
+# lake with a proper ground truth (the on-lake buoy) and enough history, and across its 23
+# buckets every ratio falls in [0.68, 1.62], median 1.11. This is that range with modest
+# padding. ONE band, used twice — update_gust clamps what may be learned into it, and
+# forecast.apply_bias refuses to apply anything outside it. Two separate bands would drift.
+GUST_RATIO_LO, GUST_RATIO_HI = 0.6, 1.8
+
 
 def new_state():
     return {"n": 0, "a": PRIOR_A, "b": PRIOR_B,
@@ -47,6 +61,23 @@ def update(st, raw, measured):
     resid = abs(measured - (a + b * raw))
     st["mae_kn"] = round(resid if st["n"] == 1 else 0.7 * st["mae_kn"] + 0.3 * resid, 2)
     return st
+
+
+def update_gust(st, raw_gust, measured_gust, alpha=GUST_ALPHA):
+    """Fold one (model gust, measured gust) pair into st['gust_ratio']. Returns True if
+    the observation was used.
+
+    Mirrors the prior discipline of the regression above: the ratio ALWAYS shrinks from
+    its current value toward the observation, starting from the prior 1.0 ("trust the
+    model"). The previous version assigned the first observation outright — `ratio if
+    n == 0 else smoothed` — so a single day with no evidence behind it could pin a bucket
+    at 3.5x forever after. It also divided by the model gust with no floor, so a near-calm
+    model hour against an ordinary measurement produced an unbounded ratio."""
+    if raw_gust is None or measured_gust is None or raw_gust < GUST_MIN_LEARN_KN:
+        return False
+    gr = (1 - alpha) * st.get("gust_ratio", 1.0) + alpha * (measured_gust / raw_gust)
+    st["gust_ratio"] = round(max(GUST_RATIO_LO, min(GUST_RATIO_HI, gr)), 2)
+    return True
 
 
 def apply(st, raw, cap_kn):
@@ -80,4 +111,34 @@ if __name__ == "__main__":
         update(st, r, 10 * r)                       # absurd relationship
     assert abs(apply(st, 10, 8) - 10) <= 8 + 1e-9, "cap_kn did not bound the correction"
     assert apply(st, 0.0, 8) >= 0.0, "corrected wind must never be negative"
+
+    # ---- gust ratio ----------------------------------------------------------------
+    # 1. a single observation must NOT be able to pin the bucket at its raw ratio.
+    st = new_state()
+    assert update_gust(st, 10.0, 35.0), "a valid observation should be used"
+    assert st["gust_ratio"] < 2.0, \
+        f"one day pinned the gust ratio at {st['gust_ratio']} — prior shrinkage is gone"
+    # 2. the stored ratio can never leave the sane band, however persistent the signal.
+    st = new_state()
+    for _ in range(200):
+        update_gust(st, 10.0, 100.0)                       # a relentless 10x
+    assert st["gust_ratio"] <= GUST_RATIO_HI + 1e-9, \
+        f"gust ratio escaped the cap: {st['gust_ratio']}"
+    st = new_state()
+    for _ in range(200):
+        update_gust(st, 10.0, 0.1)                         # relentless near-zero
+    assert st["gust_ratio"] >= GUST_RATIO_LO - 1e-9, \
+        f"gust ratio escaped the floor: {st['gust_ratio']}"
+    # 3. a near-calm model gust is noise: dividing by it is refused, not clamped.
+    st = new_state()
+    before = st["gust_ratio"]
+    assert not update_gust(st, 0.4, 12.0), "a 0.4 kn model gust must not train the ratio"
+    assert st["gust_ratio"] == before, "a refused observation must not mutate the state"
+    assert not update_gust(st, None, 12.0) and not update_gust(st, 8.0, None)
+    # 4. a genuine, moderate bias is still learned — the guards must not deafen it.
+    st = new_state()
+    for _ in range(40):
+        update_gust(st, 10.0, 14.0)                        # a real, believable 1.4x
+    assert abs(st["gust_ratio"] - 1.4) < 0.05, \
+        f"a real 1.4x gust bias was not learned: {st['gust_ratio']}"
     print("ALL SELF-TESTS PASSED")

@@ -194,9 +194,16 @@ def _forecast_card(rec):
             note.append(r["foehn_note"])
         if not r.get("mean_kn") and reg == "calm":
             note.append("glassy")
+        # a gust that a guard bounded must say so — the old +/-8 kn clamp fired on 8.7% of
+        # Walchensee hours and left no trace anywhere, so a clamped value read as a forecast
+        note += [fc.GUST_FLAG_NOTE[f] for f in (r.get("gust_flags") or [])
+                 if f in fc.GUST_FLAG_NOTE]
         rows.append(
             f'<tr><td class="hr">{r["hour"]:02d}</td>'
-            f'<td class="dir">{_dir_arrow(r.get("dir"))} {fc.compass(r.get("dir"))}</td>'
+            # No arrow when the direction is flagged variable — a rotated arrow reads as a
+            # firm bearing even next to the word "VAR". fc.dir_label is the one authority.
+            f'<td class="dir">{_dir_arrow(None if r.get("dir_variable") else r.get("dir"))} '
+            f'{fc.dir_label(r)}</td>'
             f'<td class="wind" style="{_wind_cell_style(kn)}">{kn:{fc.KN_FMT}}'
             f'<span class="bft">{fc.beaufort(kn)}</span></td>'
             f'<td class="gust" style="{_wind_cell_style(r.get("gust_kn") or 0)}">'

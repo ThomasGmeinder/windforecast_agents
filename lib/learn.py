@@ -176,7 +176,10 @@ def update_from_day(lake, date):
         if derr is not None:
             dir_errs.append(derr)
         rg = hp.get("raw_gust_kn") or raw
-        if rg and rg > 0:
+        # Same floor the learned ratio uses (postproc.update_gust): a reported "gusts ran
+        # 3.2x the model" derived from a 0.4 kn model gust is not a finding, and it must
+        # not disagree with what the bucket actually learned.
+        if rg and rg >= postproc.GUST_MIN_LEARN_KN and actg is not None:
             gratios.append(actg / rg)
         rr = by_regime.setdefault(regime, {"n": 0, "sum": 0.0})
         rr["n"] += 1; rr["sum"] += err_issued
@@ -186,9 +189,11 @@ def update_from_day(lake, date):
         st = buckets.setdefault(key, postproc.new_state())
         a0, b0, n0, gr0 = st["a"], st["b"], st["n"], st.get("gust_ratio", 1.0)
         postproc.update(st, raw, act)  # updates a, b, covariance, n, mae in place
-        if rg and rg > 0:              # gust: shrunk multiplicative factor (exponentially smoothed)
-            ratio = actg / rg
-            st["gust_ratio"] = round(ratio if n0 == 0 else (1 - alpha) * gr0 + alpha * ratio, 2)
+        # gust: the multiplicative half of the correction. postproc owns the bucket state
+        # and therefore owns this update — including the near-zero-denominator refusal and
+        # the sane-range clamp. Doing the arithmetic here was how an unguarded actg/rg got
+        # in, and a second copy of the rule would drift from the one postproc self-tests.
+        postproc.update_gust(st, rg, actg, alpha)
         bucket_updates.append({
             "key": key, "regime": regime, "hour": hour,
             "raw_kn": raw, "actual_kn": act, "model_err_kn": round(act - raw, 2),

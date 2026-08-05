@@ -41,7 +41,20 @@ SW_SECTOR = (120, 240)  # southerly 850 hPa sector for foehn
 COLD_POOL_DTHETA = 1.5  # K; Kochel-Walchensee dtheta above this = stable cold pool caps the thermal
                         # (provisional pivot ~ dry-adiabatic 2.0 K minus margin; recalibrated by learn.py)
 N_MIN_OBS = 3           # matching days before a (regime×hour) correction is fully trusted/applied
-BIAS_CAP_KN = 8.0       # clamp on the learned bias so one anomalous day can't swing it
+BIAS_CAP_KN = 8.0       # clamp on the learned MEAN bias so one anomalous day can't swing it
+# Gust output ceiling. GUST_ENS_CEIL_MULT is how far above the ensemble's OWN highest
+# member a corrected gust may go — the point of a bias correction is that the model can be
+# systematically wrong, so the bound must be loose enough not to defeat it, while still
+# catching an order-of-magnitude error. GUST_ABS_MAX_KN is Beaufort 12: a hard physical
+# backstop for a pre-alpine lake, used when no ensemble is available.
+GUST_ENS_CEIL_MULT = 1.5
+GUST_ABS_MAX_KN = 64.0
+# How a gust guard is explained to a reader. ONE wording, used by the text table and the
+# HTML, so a bounded gust always reads the same wherever it is shown.
+GUST_FLAG_NOTE = {
+    "gust_ratio_refused": "gust uncorrected (implausible learned ratio)",
+    "gust_capped": "gust capped at ensemble ceiling",
+}
 BLEND_DISAGREE_KN = 6.0 # kn; range (max−min) across blend sources above this = notable disagreement
 
 # ONE authority for how a wind speed is printed. Mean wind and gusts must use the SAME
@@ -188,6 +201,31 @@ def compass(deg):
     return dirs[int((deg % 360) / 22.5 + 0.5) % 16]
 
 
+# Ensemble-spread bands (knots). ONE authority: _confidence turns these into the hour's
+# label, and dir_is_variable uses the SAME numbers to decide whether a wind direction
+# carries any information. Two independent spread thresholds would drift apart.
+SPREAD_HIGH_KN = 1.5    # below this the ensemble members agree
+SPREAD_LOW_KN = 3.0     # at or above this they disagree, and the bearing is noise
+
+
+def dir_is_variable(spread_kn):
+    """True when the ensemble disagrees enough that the wind DIRECTION means nothing.
+
+    At an evening thermal reversal the wind passes through near-zero on its way from the
+    up-valley to the down-valley direction, and the modelled bearing swings freely. On
+    2026-08-05 at 19:00 Walchensee read 201° and Kochelsee 284° — 8 km apart, in the same
+    model run, with ensemble spread of ~5 kn on a ~5 kn wind. Both settled to ~172° by
+    21:00. Printing a crisp compass point during that hour claims precision the forecast
+    does not have; the honest output is 'variable'."""
+    return spread_kn is not None and spread_kn >= SPREAD_LOW_KN
+
+
+def dir_label(row):
+    """How a built row's direction should be DISPLAYED. Single authority, so the text
+    table, the HTML table and the landing-page headline can never disagree."""
+    return "VAR" if row.get("dir_variable") else compass(row.get("dir"))
+
+
 # Terrain-locked wind-direction sectors (direction the wind comes FROM, at the lake),
 # confirmed with local knowledge. In this basin the surface wind is channelled into a
 # few conduits, so direction maps to regime. Kochelsee inherits Urfeld's sectors
@@ -281,33 +319,85 @@ def _bucket_key(regime, hour):
     return f"{regime}|{hour:02d}"
 
 
-def apply_bias(bias, regime, hour, speed_kn, gust_kn):
-    """Return (corrected_speed, corrected_gust, learned_flag). The correction is
-    ramped in over N_MIN_OBS observations (a single day barely moves it) and the
-    bias is capped, so one anomalous day can't poison future forecasts."""
+def apply_bias(bias, regime, hour, speed_kn, gust_kn, gust_ceiling_kn=None):
+    """Return (corrected_speed, corrected_gust, learned_flag, flags).
+
+    The MEAN correction is `a + b·raw`, ramped in over N_MIN_OBS observations and bounded
+    by ±BIAS_CAP_KN. That bound is additive because the correction is additive, and it
+    binds on ~1% of well-calibrated hours — a proper safety net. Left as it is.
+
+    The GUST correction is multiplicative (`raw × ratio`) and gets two different guards,
+    because an additive ±kn bound on a multiplicative correction is the wrong instrument:
+    it permitted 3.7x on a 3 kn gust while truncating a legitimate 0.75x correction on a
+    43 kn one, and it silently published `raw + cap` as though it had been learned.
+
+      1. PLAUSIBILITY — a stored ratio outside postproc's band is refused outright and the
+         raw model gust is published instead. `raw` is a true number; a clamped value is an
+         invented one. Since update_gust now clamps what can be LEARNED into the same band,
+         this only ever fires on state learned by the old rule, and goes quiet as it relearns.
+      2. CEILING — the published gust is bounded by `gust_ceiling_kn` (derived by the caller
+         from the ensemble's own gust members for that hour) and hard-limited by
+         GUST_ABS_MAX_KN. This is the only guard that catches pathologies which never touch
+         the ratio at all: the worst outlier on record is a 54.8 kn RAW blend gust at
+         Ammersee, on a lake whose highest measured gust in 1552 hours is 20.8 kn.
+
+    `flags` names any guard that fired, so a bounded value is never mistaken for a learned
+    one — it is persisted on the row and rendered as a note."""
+    flags = []
+    ceiling = GUST_ABS_MAX_KN if gust_ceiling_kn is None else min(gust_ceiling_kn, GUST_ABS_MAX_KN)
     b = bias.get("buckets", {}).get(_bucket_key(regime, hour))
     n = (b or {}).get("n", 0)
     if not b or n < 1:
-        return speed_kn, gust_kn, False
-    conf = min(1.0, n / N_MIN_OBS)                                  # ramp the APPLIED correction by evidence
-    cs_full = postproc.apply(b, speed_kn, BIAS_CAP_KN)              # corrected = a + b·raw, capped
-    cs = speed_kn + conf * (cs_full - speed_kn)                     # one day barely moves it; full after N_MIN_OBS
-    gr = 1.0 + (b.get("gust_ratio", 1.0) - 1.0) * conf             # gust: shrunk multiplicative factor
-    cg = max(cs, gust_kn * gr)
-    return round(cs, 1), round(cg, 1), n >= N_MIN_OBS
+        # Rounded on THIS path too. It used to return the blended mean untouched, so any
+        # hour whose bucket did not exist yet leaked a raw float — 2.9112500000000003 —
+        # into the table and the headline, defeating KN_FMT.
+        cs, cg, learned = speed_kn, gust_kn, False
+    else:
+        conf = min(1.0, n / N_MIN_OBS)                              # ramp the correction by evidence
+        cs_full = postproc.apply(b, speed_kn, BIAS_CAP_KN)          # corrected = a + b·raw, capped
+        cs = speed_kn + conf * (cs_full - speed_kn)                 # one day barely moves it
+        ratio = b.get("gust_ratio", 1.0)
+        if postproc.GUST_RATIO_LO <= ratio <= postproc.GUST_RATIO_HI:
+            cg = max(cs, gust_kn * (1.0 + (ratio - 1.0) * conf))
+        else:
+            flags.append("gust_ratio_refused")                      # implausible: trust the model
+            cg = max(cs, gust_kn)
+        learned = n >= N_MIN_OBS
+    if cg > ceiling:
+        flags.append("gust_capped")
+        cg = max(cs, ceiling)          # the ceiling binds, but gust may never fall below mean
+    return round(cs, 1), round(cg, 1), learned, tuple(flags)
+
+
+def gust_ceiling(ens_gusts):
+    """The upper bound on a publishable gust for one hour, from that hour's ICON-D2-EPS
+    gust members — which the blend already downloads and otherwise reduces to a mean.
+
+    Season- and location-adaptive by construction: tight on a calm August evening, wide in
+    a January storm. A fixed constant cannot be both, and every hour of logged history here
+    is June-August, so a constant tuned on it would clip real winter gusts. Falls back to
+    the absolute physical limit when no ensemble is available."""
+    if not ens_gusts:
+        return GUST_ABS_MAX_KN
+    return min(GUST_ABS_MAX_KN, GUST_ENS_CEIL_MULT * max(ens_gusts))
 
 
 # ------------------------------------------------- the single regime+correction path
-def replay_hour(lake, hour, row, dp, feat, raw_s, raw_g, params=None, bias=None):
+def replay_hour(lake, hour, row, dp, feat, raw_s, raw_g, params=None, bias=None,
+                gust_ceiling_kn=None):
     """Pure per-hour core: classify the regime, then apply the learned correction.
-    Returns (regime, corrected_speed, corrected_gust, learned).
+    Returns (regime, corrected_speed, corrected_gust, learned, flags).
 
     THE single authority for "raw model + inputs -> issued forecast": used by
     build_table for the live run AND by verify.backtest to replay past days under a
-    candidate parameter set, so a backtest can never drift from what production does."""
+    candidate parameter set, so a backtest can never drift from what production does.
+    The gust ceiling is threaded through here rather than applied by build_table, for
+    exactly that reason — a bound that existed only in production would make every
+    replayed gust disagree with the one actually issued."""
     regime = classify_regime(lake, hour, row, dp, feat, params)
-    cs, cg, learned = apply_bias(bias or {}, regime, hour, raw_s, raw_g)
-    return regime, cs, cg, learned
+    cs, cg, learned, flags = apply_bias(bias or {}, regime, hour, raw_s, raw_g,
+                                        gust_ceiling_kn)
+    return regime, cs, cg, learned, flags
 
 
 def row_from_logged(h):
@@ -326,9 +416,9 @@ def _confidence(regime, spread_kn, learned):
     # ensemble spread (kn) -> base label; foehn/fallwind capped; learned nudges up
     if spread_kn is None:
         base = "med"
-    elif spread_kn < 1.5:
+    elif spread_kn < SPREAD_HIGH_KN:
         base = "high"
-    elif spread_kn < 3.0:
+    elif spread_kn < SPREAD_LOW_KN:
         base = "med"
     else:
         base = "low"
@@ -423,8 +513,11 @@ def build_table(lake, target_date, run_stamp=None):
             gsrcs.append(af["boe_kn"])
         raw_g = sum(gsrcs) / len(gsrcs) if gsrcs else (row.get("wind_gusts_10m") or raw_s)
         row["wind_speed_10m"] = raw_s
-        regime, cs, cg, learned = replay_hour(lake, hour, row, dp, feat, raw_s, raw_g,
-                                              params=lake_params, bias=bias)
+        # the ensemble's own gust members bound what this hour may publish (see gust_ceiling)
+        ceil_kn = gust_ceiling(ens_g)
+        regime, cs, cg, learned, gflags = replay_hour(lake, hour, row, dp, feat, raw_s, raw_g,
+                                                      params=lake_params, bias=bias,
+                                                      gust_ceiling_kn=ceil_kn)
         spread = None
         if len(ens_s) > 2:
             m_ = sum(ens_s) / len(ens_s)
@@ -449,7 +542,13 @@ def build_table(lake, target_date, run_stamp=None):
                 conf = "low"
         rows.append({
             "hour": hour, "dir": row["wind_direction_10m"],
+            # decided ONCE here from the ensemble spread; every display path reads this
+            # flag via dir_label() rather than re-deriving a threshold of its own
+            "dir_variable": dir_is_variable(spread),
             "raw_kn": round(raw_s, 1), "raw_gust_kn": round(raw_g, 1),
+            # persisted so a replayed day reproduces the gust that was actually issued,
+            # and so a bounded value is never later mistaken for a learned one
+            "gust_ceiling_kn": round(ceil_kn, 1), "gust_flags": list(gflags),
             "mean_kn": cs, "gust_kn": cg,
             "bft": beaufort(cs), "regime": regime, "learned": learned,
             "dp": None if dp is None else round(dp, 1),
@@ -501,7 +600,7 @@ def _summary(lake, rows):
     g = gust.get("gust_kn")
     gtxt = (f" · gusts to {g:{KN_FMT}} kn ~{gust['hour']:02d}h" if g else "")
     return (f"dominant {dom}; peak {peak['mean_kn']:{KN_FMT}} kn "
-            f"({beaufort(peak['mean_kn'])} Bft) {compass(peak['dir'])} "
+            f"({beaufort(peak['mean_kn'])} Bft) {dir_label(peak)} "
             f"~{peak['hour']:02d}h{gtxt}{extra}")
 
 
@@ -524,10 +623,11 @@ def format_table(res):
             extra.append(f"fg{r['foehn_grad']:+.1f}")
         if r.get("foehn_note"):
             extra.append(r["foehn_note"])
+        extra += [GUST_FLAG_NOTE[f] for f in (r.get("gust_flags") or []) if f in GUST_FLAG_NOTE]
         note = " ".join(([note] if note else []) + extra)
         mean = f"{r['mean_kn']:{KN_FMT}} ({r['bft']})"
         lines.append(
-            f"  {r['hour']:02d}   | {compass(r['dir']):<4} | "
+            f"  {r['hour']:02d}   | {dir_label(r):<4} | "
             f"{mean:>11} | {r['gust_kn']:>5{KN_FMT}}   | "
             f"{r['regime']:<8} | {r['conf']:<4} | {note}")
     return "\n".join(lines)
@@ -552,11 +652,78 @@ def _selftest_summary():
     return s
 
 
+def _selftest_gust_guards():
+    """The two gust guards, each on the real case that motivated it."""
+    # 1. PLAUSIBILITY. walchensee gradient|19 held gust_ratio 3.18 on n=3; the evidence
+    #    ramp saturated at n/N_MIN_OBS = 1.0 and published 67.9 kn off a 21.4 kn model
+    #    gust. An implausible ratio must be refused, not clamped: the raw model gust is a
+    #    true number, `raw + cap` is an invented one.
+    bias = {"buckets": {"gradient|19": {"n": 3, "a": 5.231, "b": 0.276,
+                                        "P": [1.55, -0.43, 0.15], "gust_ratio": 3.18}}}
+    cs, cg, learned, flags = apply_bias(bias, "gradient", 19, 9.4, 21.4)
+    assert learned and "gust_ratio_refused" in flags, f"implausible ratio not refused: {flags}"
+    assert cg == 21.4, f"refusal must publish the raw model gust, got {cg}"
+    assert cg >= cs, "gust must never fall below the mean"
+    # 2. a ratio INSIDE the band must still be applied in full — the guard must not
+    #    deafen the correction. This is the Ammersee case the old +/-8 kn cap distorted:
+    #    43.0 kn raw with a perfectly sane 0.75 ratio belongs at 32.2, not 35.0.
+    bias = {"buckets": {"gradient|19": {"n": 3, "a": 0.0, "b": 1.0,
+                                        "P": [1.0, 0.0, 0.1], "gust_ratio": 0.75}}}
+    _, cg2, _, f2 = apply_bias(bias, "gradient", 19, 30.0, 43.0)
+    assert not f2 and abs(cg2 - 32.2) < 0.05, \
+        f"a sane 0.75x correction on a 43 kn gust was distorted: {cg2} kn {f2}"
+    # 3. CEILING. Catches what no ratio bound can: a pathological RAW blend value with a
+    #    blameless ratio. Ammersee's worst on record is a 54.8 kn raw gust on a lake whose
+    #    highest measured gust in 1552 hours is 20.8 kn.
+    _, cg3, _, f3 = apply_bias({"buckets": {}}, "gradient", 16, 12.0, 54.8,
+                               gust_ceiling_kn=gust_ceiling([16.0, 18.0, 20.0]))
+    assert "gust_capped" in f3, "a 54.8 kn raw gust against a 20 kn ensemble was not capped"
+    assert abs(cg3 - 30.0) < 1e-9, f"ceiling should be 1.5 x 20.0 = 30.0, got {cg3}"
+    # 4. the ceiling must never be so tight that it fires on ordinary hours
+    _, cg4, _, f4 = apply_bias({"buckets": {}}, "thermal", 14, 6.0, 11.0,
+                               gust_ceiling_kn=gust_ceiling([9.0, 11.0, 12.0]))
+    assert not f4 and cg4 == 11.0, f"ceiling fired on a normal hour: {cg4} {f4}"
+    # 5. no ensemble -> the absolute physical backstop, not an unbounded gust
+    assert gust_ceiling([]) == GUST_ABS_MAX_KN and gust_ceiling(None) == GUST_ABS_MAX_KN
+    assert gust_ceiling([100.0]) == GUST_ABS_MAX_KN, "ensemble may not raise the hard limit"
+    # 6. an hour with NO bucket must still come back rounded (KN_FMT is one resolution)
+    s6, g6, l6, _ = apply_bias({"buckets": {}}, "gradient", 20,
+                               2.9112500000000003, 7.614999999999999)
+    assert not l6 and (s6, g6) == (2.9, 7.6), f"unrounded values leaked: {s6}, {g6}"
+    # 7. every guard that fires must be explainable to a reader
+    for f in ("gust_ratio_refused", "gust_capped"):
+        assert f in GUST_FLAG_NOTE, f"{f} would be applied with no explanation shown"
+    print(f"  PASS gust guards: ratio 3.18 refused -> raw 21.4 kn (was 67.9); "
+          f"sane 0.75x preserved at 32.2 kn (old cap gave 35.0); 54.8 kn raw capped to 30.0")
+
+
+def _selftest_dir_variable():
+    """Direction must be withheld exactly when the ensemble says it is meaningless.
+    Values are the real 2026-08-05 spreads for the two lakes."""
+    assert dir_is_variable(4.9) and dir_is_variable(5.2), "the 19:00 reversal must be flagged"
+    assert dir_is_variable(4.1), "the 20:00 hour must be flagged"
+    assert not dir_is_variable(1.7) and not dir_is_variable(2.6), "21:00 settled — must NOT be flagged"
+    assert not dir_is_variable(1.5), "an agreeing ensemble must keep its direction"
+    assert not dir_is_variable(None), "no ensemble is not evidence of variability"
+    # the flag, not the raw bearing, drives every display path
+    assert dir_label({"dir": 201, "dir_variable": True}) == "VAR"
+    assert dir_label({"dir": 201, "dir_variable": False}) == "SSW"
+    assert dir_label({"dir": 201}) == "SSW", "records logged before the flag existed must still render"
+    # and the headline must use the same authority as the table
+    rows = [{"hour": 19, "mean_kn": 7.8, "gust_kn": 29.4, "dir": 201, "dir_variable": True,
+             "regime": "gradient", "bft": beaufort(7.8)}]
+    assert "VAR" in _summary("walchensee", rows), "headline still claims a bearing the table withholds"
+    print("  PASS direction: flagged at spread>=%.1f kn, withheld from table AND headline"
+          % SPREAD_LOW_KN)
+
+
 if __name__ == "__main__":
     import datetime
     if len(sys.argv) > 1 and sys.argv[1] == "selftest":
         print("=== forecast.py self-tests ===")
         print("  ", _selftest_summary())
+        _selftest_gust_guards()
+        _selftest_dir_variable()
         print("ALL SELF-TESTS PASSED")
         sys.exit(0)
     lake = sys.argv[1] if len(sys.argv) > 1 else "walchensee"

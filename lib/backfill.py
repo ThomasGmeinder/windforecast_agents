@@ -91,9 +91,10 @@ def build(lake, start, end):
         rows = []
         for r in sorted(hours, key=lambda x: x["hour"]):
             rowlike = fc.row_from_logged(r)
-            regime, cs, cg, learned = fc.replay_hour(
+            regime, cs, cg, learned, _ = fc.replay_hour(
                 lake, r["hour"], rowlike, r["dp"], {"dtheta": r["dtheta"]},
-                r["raw_kn"], r["raw_gust_kn"], params=params, bias=bias)
+                r["raw_kn"], r["raw_gust_kn"], params=params, bias=bias,
+                gust_ceiling_kn=r.get("gust_ceiling_kn"))
             rows.append({**r, "regime": regime, "mean_kn": cs, "gust_kn": cg,
                          "conf": "med", "foehn_note": None,
                          "spread_kn": None, "q_kn": None, "lapse": None})
