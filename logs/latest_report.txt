@@ -1,4 +1,4 @@
-=== Bavarian lake wind — daily run 2026-08-05 06:10 CEST ===
+=== Bavarian lake wind — daily run 2026-08-05 14:38 CEST ===
 forecast day: 2026-08-05   |   learning from: 2026-08-04
 
 ========================================================================
@@ -15,64 +15,91 @@ STEP 2 — NEW FORECASTS  (built from the just-updated model)
 ========================================================================
 
 Ammersee — 2026-08-05
-  dominant thermal; peak 9.8 kn (3 Bft) SSE ~22h · gusts to 14.9 kn ~21h
+  dominant thermal; peak 9.8 kn (3 Bft) VAR ~20h · gusts to 15.3 kn ~21h
   Hour | Dir  | Mean kn (Bft) | Gust kn | Regime   | Conf | Note
   00   | N    |     4.1 (2) |  10.7   | gradient | med  | raw (no local calib yet)
   01   | SW   |     3.1 (1) |   8.1   | gradient | med  | raw (no local calib yet)
   02   | S    |     3.9 (1) |   6.6   | gradient | med  | raw (no local calib yet)
   03   | SSW  |     5.1 (2) |  10.7   | gradient | med  | raw (no local calib yet)
   04   | WSW  |     5.7 (2) |  11.5   | gradient | med  | raw (no local calib yet)
-  05   | SW   |     4.9 (2) |  11.8   | gradient | med  | raw (no local calib yet)
-  06   | S    |     6.5 (2) |  11.5   | gradient | med  | raw (no local calib yet)
-  07   | S    |     7.6 (3) |  12.9   | gradient | med  | raw (no local calib yet)
-  08   | SSW  |     5.5 (2) |   9.4   | gradient | med  | raw (no local calib yet)
-  09   | SW   |     5.5 (2) |  11.0   | thermal  | med  | raw (no local calib yet)
-  10   | WNW  |     5.4 (2) |  10.2   | thermal  | med  | raw (no local calib yet)
-  11   | WNW  |     5.1 (2) |  10.4   | thermal  | med  | raw (no local calib yet)
-  12   | NW   |     6.5 (2) |   9.8   | thermal  | med  | raw (no local calib yet)
-  13   | NW   |     5.8 (2) |   9.2   | thermal  | med  | raw (no local calib yet)
-  14   | NW   |     7.1 (3) |  10.9   | thermal  | med  | raw (no local calib yet)
-  15   | W    |     6.6 (2) |  10.9   | thermal  | med  | raw (no local calib yet)
-  16   | W    |     6.2 (2) |  10.5   | thermal  | med  | raw (no local calib yet)
-  17   | NW   |     6.5 (2) |   9.3   | thermal  | med  | raw (no local calib yet)
-  18   | NNW  |     8.6 (3) |  12.5   | gradient | med  | 
-  19   | WNW  |     6.5 (2) |   7.5   | gradient | high | 
-  20   | S    |     6.8 (2) |   7.6   | gradient | low  | 
-  21   | SSE  |     9.3 (3) |  14.9   | gradient | med  | raw (no local calib yet)
-  22   | SSE  |     9.8 (3) |  12.6   | gradient | med  | 
-  23   | WSW  |     8.7 (3) |  12.9   | gradient | high | 
+  05   | SW   |     4.6 (2) |  11.8   | gradient | med  | raw (no local calib yet)
+  06   | S    |     6.4 (2) |  11.1   | gradient | med  | raw (no local calib yet)
+  07   | S    |     7.8 (3) |  13.1   | gradient | med  | raw (no local calib yet)
+  08   | S    |     6.1 (2) |   9.5   | gradient | med  | raw (no local calib yet)
+  09   | SSW  |     5.9 (2) |  11.8   | thermal  | med  | raw (no local calib yet)
+  10   | W    |     5.4 (2) |  10.9   | thermal  | med  | raw (no local calib yet)
+  11   | WNW  |     4.4 (2) |  11.2   | thermal  | med  | raw (no local calib yet)
+  12   | NW   |     6.7 (2) |   9.6   | thermal  | med  | raw (no local calib yet)
+  13   | NW   |     7.0 (3) |  10.7   | thermal  | med  | raw (no local calib yet)
+  14   | NW   |     8.5 (3) |  13.0   | thermal  | med  | raw (no local calib yet)
+  15   | WNW  |     7.9 (3) |  12.8   | thermal  | med  | raw (no local calib yet)
+  16   | NNW  |     6.5 (2) |  11.3   | thermal  | med  | raw (no local calib yet)
+  17   | NNW  |     3.3 (1) |  11.0   | gradient | med  | raw (no local calib yet)
+  18   | NNW  |     8.9 (3) |  15.2   | gradient | high | 
+  19   | NW   |     6.6 (2) |   8.2   | gradient | med  | 
+  20   | VAR  |     9.8 (3) |  14.2   | gradient | low  | 
+  21   | SSE  |     8.8 (3) |  15.3   | gradient | med  | raw (no local calib yet)
+  22   | SSE  |     8.8 (3) |  11.7   | gradient | med  | 
+  23   | SSW  |     9.0 (3) |  10.6   | gradient | high | 
 
-[kochelsee] forecast FAILED: <urlopen error _ssl.c:983: The handshake operation timed out>
+Kochelsee — 2026-08-05
+  dominant thermal; peak 7.8 kn (3 Bft) S ~20h · gusts to 26.8 kn ~19h
+  Hour | Dir  | Mean kn (Bft) | Gust kn | Regime   | Conf | Note
+  00   | NE   |     3.1 (1) |   7.1   | gradient | med  | raw (no local calib yet)
+  01   | SSE  |     2.2 (1) |   5.7   | gradient | med  | raw (no local calib yet)
+  02   | SSE  |     3.0 (1) |   4.9   | gradient | med  | raw (no local calib yet)
+  03   | SSE  |     2.5 (1) |   4.9   | gradient | med  | raw (no local calib yet)
+  04   | E    |     3.9 (1) |   8.4   | gradient | med  | raw (no local calib yet)
+  05   | ESE  |     4.0 (2) |   7.2   | gradient | med  | raw (no local calib yet)
+  06   | ESE  |     3.4 (1) |   6.9   | gradient | med  | raw (no local calib yet)
+  07   | SE   |     2.4 (1) |   5.4   | gradient | med  | raw (no local calib yet)
+  08   | S    |     1.4 (1) |   3.7   | calm     | med  | glassy Δθ+0.4 gust uncorrected (implausible learned ratio)
+  09   | W    |     1.5 (1) |   4.2   | thermal  | med  | raw (no local calib yet) Δθ-0.0
+  10   | NNW  |     1.6 (1) |   4.3   | thermal  | med  | raw (no local calib yet) Δθ-0.6
+  11   | N    |     4.9 (2) |   5.1   | thermal  | med  | raw (no local calib yet) Δθ-1.2 gust uncorrected (implausible learned ratio)
+  12   | NNW  |     5.5 (2) |   7.4   | thermal  | med  | raw (no local calib yet) Δθ-0.9 gust uncorrected (implausible learned ratio)
+  13   | NNW  |     4.4 (2) |   7.8   | thermal  | med  | raw (no local calib yet) Δθ-1.0
+  14   | NNW  |     3.5 (1) |   8.1   | thermal  | med  | raw (no local calib yet) Δθ-1.4
+  15   | NE   |     5.1 (2) |   9.4   | thermal  | med  | raw (no local calib yet) Δθ-0.9
+  16   | NNE  |     5.1 (2) |  10.1   | thermal  | med  | raw (no local calib yet) Δθ-0.2
+  17   | NE   |     3.8 (1) |   8.9   | thermal  | med  | raw (no local calib yet) Δθ-0.7
+  18   | VAR  |     4.5 (2) |   9.8   | gradient | low  | raw (no local calib yet) gust uncorrected (implausible learned ratio)
+  19   | VAR  |     6.4 (2) |  26.8   | gradient | low  | raw (no local calib yet)
+  20   | S    |     7.8 (3) |  14.4   | gradient | med  | raw (no local calib yet) gust uncorrected (implausible learned ratio)
+  21   | SSE  |     4.3 (2) |  12.5   | gradient | med  | 
+  22   | SW   |     3.0 (1) |   8.2   | gradient | med  | raw (no local calib yet)
+  23   | SW   |     2.7 (1) |   7.4   | gradient | med  | raw (no local calib yet)
 
+  ⚠ blend disagreement > 6 kn at 19h(9)
 Walchensee — 2026-08-05
-  dominant thermal; peak 9.2 kn (3 Bft) NNE ~12h · gusts to 67.9 kn ~19h
+  dominant thermal; peak 8.9 kn (3 Bft) N ~13h · gusts to 19.1 kn ~19h
   Hour | Dir  | Mean kn (Bft) | Gust kn | Regime   | Conf | Note
   00   | SSW  |     3.6 (1) |   9.0   | gradient | med  | raw (no local calib yet)
   01   | SSW  |     3.7 (1) |   7.1   | gradient | med  | raw (no local calib yet)
   02   | S    |     3.6 (1) |   7.7   | gradient | med  | raw (no local calib yet)
   03   | SSW  |     3.1 (1) |   6.8   | gradient | med  | raw (no local calib yet)
   04   | SSW  |     2.1 (1) |   5.7   | gradient | med  | raw (no local calib yet)
-  05   | SSE  |     1.6 (1) |   4.1   | calm     | med  | glassy
-  06   | SE   |     1.7 (1) |   3.5   | calm     | med  | glassy
-  07   | S    |     2.5 (1) |   4.8   | gradient | med  | raw (no local calib yet)
-  08   | SSW  |     1.7 (1) |   4.6   | calm     | med  | glassy
-  09   | SW   |     1.2 (1) |   4.9   | thermal  | med  | raw (no local calib yet)
-  10   | N    |     1.9 (1) |   5.3   | thermal  | med  | raw (no local calib yet)
-  11   | NNE  |     4.4 (2) |   7.8   | thermal  | med  | raw (no local calib yet)
-  12   | NNE  |     9.2 (3) |   9.2   | thermal  | med  | raw (no local calib yet)
-  13   | N    |     8.5 (3) |   8.5   | thermal  | med  | raw (no local calib yet)
-  14   | N    |     8.0 (3) |  12.0   | thermal  | med  | raw (no local calib yet)
-  15   | N    |     7.8 (3) |  12.2   | thermal  | med  | raw (no local calib yet)
-  16   | NNE  |     6.0 (2) |  10.2   | gradient | med  | raw (no local calib yet)
-  17   | NNE  |     4.9 (2) |  15.8   | thermal  | med  | raw (no local calib yet)
-  18   | NNE  |     5.4 (2) |   8.9   | gradient | med  | raw (no local calib yet)
-  19   | SSW  |     7.8 (3) |  67.9   | gradient | low  | 
-  20   | E    |     4.0 (1) |  17.2   | gradient | low  | raw (no local calib yet)
-  21   | S    |     3.2 (1) |   9.3   | gradient | med  | raw (no local calib yet)
-  22   | S    |     3.3 (1) |   7.0   | gradient | med  | raw (no local calib yet)
-  23   | S    |     3.5 (1) |   7.1   | gradient | med  | raw (no local calib yet)
+  05   | SW   |     1.9 (1) |   4.0   | calm     | med  | glassy Δθ+1.3
+  06   | SSW  |     1.8 (1) |   3.6   | calm     | med  | cold-pool capped Δθ+1.8
+  07   | S    |     2.6 (1) |   4.5   | gradient | med  | raw (no local calib yet)
+  08   | SSW  |     2.5 (1) |   5.2   | gradient | med  | raw (no local calib yet)
+  09   | SW   |     1.7 (1) |   5.5   | thermal  | med  | raw (no local calib yet) Δθ-0.0
+  10   | N    |     1.5 (1) |   5.2   | thermal  | med  | raw (no local calib yet) Δθ-0.6 gust uncorrected (implausible learned ratio)
+  11   | NNE  |     2.9 (1) |   6.2   | thermal  | med  | raw (no local calib yet) Δθ-1.2
+  12   | N    |     7.8 (3) |   8.1   | thermal  | med  | raw (no local calib yet) Δθ-0.9
+  13   | N    |     8.9 (3) |   8.9   | thermal  | med  | raw (no local calib yet) Δθ-1.0
+  14   | N    |     8.5 (3) |  12.7   | thermal  | med  | raw (no local calib yet) Δθ-1.4
+  15   | NNE  |     8.1 (3) |  12.8   | thermal  | med  | raw (no local calib yet) Δθ-0.9
+  16   | NE   |     6.5 (2) |  11.6   | thermal  | med  | raw (no local calib yet) Δθ-0.2
+  17   | N    |     6.2 (2) |  11.4   | gradient | med  | raw (no local calib yet)
+  18   | VAR  |     7.7 (3) |  12.0   | gradient | low  | raw (no local calib yet)
+  19   | VAR  |     6.7 (2) |  19.1   | gradient | low  | gust uncorrected (implausible learned ratio)
+  20   | SSW  |     3.7 (1) |  11.0   | gradient | med  | raw (no local calib yet)
+  21   | S    |     3.3 (1) |   6.9   | gradient | med  | raw (no local calib yet)
+  22   | SSW  |     3.2 (1) |   6.7   | gradient | med  | raw (no local calib yet)
+  23   | S    |     3.2 (1) |   6.2   | gradient | med  | raw (no local calib yet)
 
-  ⚠ blend disagreement > 6 kn at 11h(7), 12h(7), 19h(18)
+  ⚠ blend disagreement > 6 kn at 12h(7), 18h(16), 19h(7)
 
 ========================================================================
 STEP 3 — VERIFICATION  (CRPS out-of-sample vs baselines — the referee)

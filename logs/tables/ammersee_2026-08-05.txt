@@ -1,27 +1,27 @@
 Ammersee — 2026-08-05
-  dominant thermal; peak 9.8 kn (3 Bft) SSE ~22h · gusts to 14.9 kn ~21h
+  dominant thermal; peak 9.8 kn (3 Bft) VAR ~20h · gusts to 15.3 kn ~21h
   Hour | Dir  | Mean kn (Bft) | Gust kn | Regime   | Conf | Note
   00   | N    |     4.1 (2) |  10.7   | gradient | med  | raw (no local calib yet)
   01   | SW   |     3.1 (1) |   8.1   | gradient | med  | raw (no local calib yet)
   02   | S    |     3.9 (1) |   6.6   | gradient | med  | raw (no local calib yet)
   03   | SSW  |     5.1 (2) |  10.7   | gradient | med  | raw (no local calib yet)
   04   | WSW  |     5.7 (2) |  11.5   | gradient | med  | raw (no local calib yet)
-  05   | SW   |     4.9 (2) |  11.8   | gradient | med  | raw (no local calib yet)
-  06   | S    |     6.5 (2) |  11.5   | gradient | med  | raw (no local calib yet)
-  07   | S    |     7.6 (3) |  12.9   | gradient | med  | raw (no local calib yet)
-  08   | SSW  |     5.5 (2) |   9.4   | gradient | med  | raw (no local calib yet)
-  09   | SW   |     5.5 (2) |  11.0   | thermal  | med  | raw (no local calib yet)
-  10   | WNW  |     5.4 (2) |  10.2   | thermal  | med  | raw (no local calib yet)
-  11   | WNW  |     5.1 (2) |  10.4   | thermal  | med  | raw (no local calib yet)
-  12   | NW   |     6.5 (2) |   9.8   | thermal  | med  | raw (no local calib yet)
-  13   | NW   |     5.8 (2) |   9.2   | thermal  | med  | raw (no local calib yet)
-  14   | NW   |     7.1 (3) |  10.9   | thermal  | med  | raw (no local calib yet)
-  15   | W    |     6.6 (2) |  10.9   | thermal  | med  | raw (no local calib yet)
-  16   | W    |     6.2 (2) |  10.5   | thermal  | med  | raw (no local calib yet)
-  17   | NW   |     6.5 (2) |   9.3   | thermal  | med  | raw (no local calib yet)
-  18   | NNW  |     8.6 (3) |  12.5   | gradient | med  | 
-  19   | WNW  |     6.5 (2) |   7.5   | gradient | high | 
-  20   | S    |     6.8 (2) |   7.6   | gradient | low  | 
-  21   | SSE  |     9.3 (3) |  14.9   | gradient | med  | raw (no local calib yet)
-  22   | SSE  |     9.8 (3) |  12.6   | gradient | med  | 
-  23   | WSW  |     8.7 (3) |  12.9   | gradient | high | 
+  05   | SW   |     4.6 (2) |  11.8   | gradient | med  | raw (no local calib yet)
+  06   | S    |     6.4 (2) |  11.1   | gradient | med  | raw (no local calib yet)
+  07   | S    |     7.8 (3) |  13.1   | gradient | med  | raw (no local calib yet)
+  08   | S    |     6.1 (2) |   9.5   | gradient | med  | raw (no local calib yet)
+  09   | SSW  |     5.9 (2) |  11.8   | thermal  | med  | raw (no local calib yet)
+  10   | W    |     5.4 (2) |  10.9   | thermal  | med  | raw (no local calib yet)
+  11   | WNW  |     4.4 (2) |  11.2   | thermal  | med  | raw (no local calib yet)
+  12   | NW   |     6.7 (2) |   9.6   | thermal  | med  | raw (no local calib yet)
+  13   | NW   |     7.0 (3) |  10.7   | thermal  | med  | raw (no local calib yet)
+  14   | NW   |     8.5 (3) |  13.0   | thermal  | med  | raw (no local calib yet)
+  15   | WNW  |     7.9 (3) |  12.8   | thermal  | med  | raw (no local calib yet)
+  16   | NNW  |     6.5 (2) |  11.3   | thermal  | med  | raw (no local calib yet)
+  17   | NNW  |     3.3 (1) |  11.0   | gradient | med  | raw (no local calib yet)
+  18   | NNW  |     8.9 (3) |  15.2   | gradient | high | 
+  19   | NW   |     6.6 (2) |   8.2   | gradient | med  | 
+  20   | VAR  |     9.8 (3) |  14.2   | gradient | low  | 
+  21   | SSE  |     8.8 (3) |  15.3   | gradient | med  | raw (no local calib yet)
+  22   | SSE  |     8.8 (3) |  11.7   | gradient | med  | 
+  23   | SSW  |     9.0 (3) |  10.6   | gradient | high | 

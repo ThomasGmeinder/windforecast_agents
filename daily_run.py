@@ -126,14 +126,10 @@ def main():
         _log_forecast(lake, {
             "date": today, "run_stamp": now.isoformat(timespec="minutes"),
             "summary": res["summary"], "label": res["label"],
-            "hourly": [{"hour": r["hour"], "regime": r["regime"],
-                        "raw_kn": r["raw_kn"], "raw_gust_kn": r["raw_gust_kn"],
-                        "mean_kn": r["mean_kn"], "gust_kn": r["gust_kn"],
-                        "dir": r["dir"], "conf": r["conf"], "foehn_note": r.get("foehn_note"),
-                        "spread_kn": r.get("spread_kn"), "q_kn": r.get("q_kn"),
-                        "dtheta": r.get("dtheta"), "foehn_grad": r.get("foehn_grad"),
-                        "lapse": r.get("lapse"), "dp": r.get("dp"),
-                        "inputs": r.get("inputs")} for r in res["rows"]],
+            # fc.LOGGED_ROW_FIELDS is the ONE definition of what survives to disk. It used
+            # to be a whitelist hand-maintained here, which meant every new row field had
+            # to be remembered in a second place or it silently never reached the site.
+            "hourly": [fc.logged_row(r) for r in res["rows"]],
         })
         # log hours where the blended source models disagree by more than the threshold
         hits = [r for r in res["rows"]

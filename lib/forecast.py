@@ -369,6 +369,22 @@ def apply_bias(bias, regime, hour, speed_kn, gust_kn, gust_ceiling_kn=None):
     return round(cs, 1), round(cg, 1), learned, tuple(flags)
 
 
+# Fields of a built row that MUST survive into the forecast log. The site renders from
+# that log, NEVER from a live build_table, so a field missing here is a change that
+# silently never reaches the page. dir_variable and gust_flags were nearly lost exactly
+# that way: the row carried them, the hand-maintained payload in daily_run did not.
+LOGGED_ROW_FIELDS = ("hour", "regime", "raw_kn", "raw_gust_kn", "mean_kn", "gust_kn",
+                     "dir", "dir_variable", "conf", "foehn_note", "spread_kn", "q_kn",
+                     "dtheta", "foehn_grad", "lapse", "dp",
+                     "gust_ceiling_kn", "gust_flags", "inputs")
+
+
+def logged_row(r):
+    """Project a built row down to what gets persisted. ONE definition, used by daily_run
+    when writing and by the self-test that proves nothing display-critical is dropped."""
+    return {k: r.get(k) for k in LOGGED_ROW_FIELDS}
+
+
 def gust_ceiling(ens_gusts):
     """The upper bound on a publishable gust for one hour, from that hour's ICON-D2-EPS
     gust members — which the blend already downloads and otherwise reduces to a mean.
@@ -697,6 +713,30 @@ def _selftest_gust_guards():
           f"sane 0.75x preserved at 32.2 kn (old cap gave 35.0); 54.8 kn raw capped to 30.0")
 
 
+def _selftest_logged_row():
+    """A fix that never reaches the page is not a fix.
+
+    The site renders from the forecast LOG, so every field the display paths read must
+    survive the projection to disk. dir_variable and gust_flags were nearly dropped here:
+    build_table set them on the row, and the payload written by daily_run listed fields by
+    hand and did not include them. This asserts the CONSEQUENCE, not just the list."""
+    row = {"hour": 19, "regime": "gradient", "raw_kn": 9.4, "raw_gust_kn": 21.4,
+           "mean_kn": 7.8, "gust_kn": 21.4, "dir": 201, "dir_variable": True,
+           "conf": "low", "spread_kn": 4.9, "gust_ceiling_kn": 64.0,
+           "gust_flags": ["gust_ratio_refused"], "inputs": {"cloud": 40},
+           "blend_kn": {"eps": 9.0}}          # deliberately not persisted
+    out = logged_row(row)
+    assert dir_label(out) == "VAR", "a withheld direction did not survive being logged"
+    assert out["gust_flags"] == ["gust_ratio_refused"], "gust guard flags lost on the way to disk"
+    assert all(f in GUST_FLAG_NOTE for f in out["gust_flags"]), "a flag would render with no note"
+    assert out["gust_ceiling_kn"] == 64.0, "the ceiling must persist so a replay reproduces the gust"
+    assert "blend_kn" not in out, "logged_row should project, not copy wholesale"
+    # a row straight from build_table must not carry a display field the projection drops
+    for f in ("dir_variable", "gust_flags", "gust_ceiling_kn"):
+        assert f in LOGGED_ROW_FIELDS, f"{f} is set on the row but would never reach the site"
+    print("  PASS persistence: withheld direction and gust guards survive into the log")
+
+
 def _selftest_dir_variable():
     """Direction must be withheld exactly when the ensemble says it is meaningless.
     Values are the real 2026-08-05 spreads for the two lakes."""
@@ -724,6 +764,7 @@ if __name__ == "__main__":
         print("  ", _selftest_summary())
         _selftest_gust_guards()
         _selftest_dir_variable()
+        _selftest_logged_row()
         print("ALL SELF-TESTS PASSED")
         sys.exit(0)
     lake = sys.argv[1] if len(sys.argv) > 1 else "walchensee"
