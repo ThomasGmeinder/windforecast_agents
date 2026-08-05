@@ -1,0 +1,57 @@
+{
+  "lake": "ammersee",
+  "date": "2026-08-04",
+  "result": {
+    "narrative": "The wind forecaster for Ammersee is currently exhibiting a severe and widespread underprediction of wind speeds across both gradient and thermal regimes, as indicated by a mean bias error of -2.97 kn for thermal and -2.74 kn for gradient yesterday, and a cumulative bias of -3.91 kn over the past four days. This underprediction is leading to extremely poor skill scores against both persistence and climatology. The worst individual errors are also significant underpredictions, such as -6.1 kn in a gradient regime at hour 21 yesterday. Wind direction errors are also high (55 degrees yesterday), suggesting potential issues with terrain channeling, but the primary and most impactful error is the magnitude of wind speed underestimation.",
+    "diagnosis": [
+      {
+        "pattern": "Consistent and significant underprediction of wind speed across all active regimes (gradient and thermal), leading to a large negative mean bias error.",
+        "cause": "General underestimation of the synoptic forcing and/or thermal circulation strength, potentially exacerbated by an overly aggressive cold-pool capping effect."
+      }
+    ],
+    "proposals": [
+      {
+        "param": "GRADIENT_925_KN",
+        "proposed": 14.0,
+        "rationale": "The forecaster consistently underpredicts wind speeds, particularly in the gradient regime, which is the most frequent. Increasing this parameter will directly scale up the forecast gradient wind speeds to reduce the observed negative bias.",
+        "expected_effect": "A significant reduction in the negative bias for gradient wind speeds, leading to an overall improvement in MAE and CRPS."
+      },
+      {
+        "param": "COLD_POOL_DTHETA",
+        "proposed": 2.0,
+        "rationale": "The widespread underprediction suggests that the model might be overestimating the wind-suppressing effect of cold pools. Increasing COLD_POOL_DTHETA will make the cold pool capping less likely to be applied or less impactful, allowing for stronger surface wind forecasts in relevant situations. This aligns with a previous, unapplied proposal.",
+        "expected_effect": "A reduction in underprediction, especially during morning/evening transitions or periods influenced by cold pools, contributing to an overall decrease in negative bias and improved CRPS."
+      }
+    ],
+    "reviews": [],
+    "reviewed": [],
+    "unknown_review_ids": [],
+    "applied": [],
+    "refused": [
+      {
+        "param": "GRADIENT_925_KN",
+        "proposed": 14.0,
+        "reason": "not statistically significant (\u0394 -0.000 kn, 95% CI [-0.006, 0.0036] includes zero)"
+      },
+      {
+        "param": "COLD_POOL_DTHETA",
+        "proposed": 2.0,
+        "reason": "step too large (>25% of 1.5)"
+      }
+    ],
+    "n_open": 0,
+    "verification": {
+      "n_pairs": 42,
+      "n_days": 4,
+      "crps": 3.649714285714286,
+      "mae": 3.956309523809524,
+      "rmse": 4.322519940678832,
+      "bias": -3.913452380952381,
+      "crps_pers": 2.0452380952380955,
+      "crps_clim": 1.2815941168711251,
+      "ss_pers": -0.7844935972060536,
+      "ss_clim": -1.8477926339305242,
+      "n_leaked_skipped": 54
+    }
+  }
+}

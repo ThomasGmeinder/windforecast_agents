@@ -1,0 +1,27 @@
+Ammersee — 2026-08-05
+  dominant thermal; peak 10.0 kn (3 Bft) SSE ~22h · gusts to 17.2 kn ~18h
+  Hour | Dir  | Mean kn (Bft) | Gust kn | Regime   | Conf | Note
+  00   | N    |     4.1 (2) |  10.7   | gradient | med  | raw (no local calib yet)
+  01   | SW   |     3.1 (1) |   8.1   | gradient | med  | raw (no local calib yet)
+  02   | S    |     3.9 (1) |   6.6   | gradient | med  | raw (no local calib yet)
+  03   | SSW  |     5.1 (2) |  10.8   | gradient | med  | raw (no local calib yet)
+  04   | WSW  |     5.6 (2) |  11.6   | gradient | med  | raw (no local calib yet)
+  05   | SW   |     4.8 (2) |  11.6   | gradient | med  | raw (no local calib yet)
+  06   | S    |     6.5 (2) |  11.2   | gradient | med  | raw (no local calib yet)
+  07   | S    |     7.6 (3) |  12.5   | gradient | med  | raw (no local calib yet)
+  08   | SSW  |     5.6 (2) |   9.5   | gradient | med  | raw (no local calib yet)
+  09   | SW   |     5.5 (2) |  10.9   | thermal  | med  | raw (no local calib yet)
+  10   | WNW  |     5.2 (2) |  10.0   | thermal  | med  | raw (no local calib yet)
+  11   | WNW  |     4.5 (2) |  10.1   | thermal  | med  | raw (no local calib yet)
+  12   | NW   |     5.7 (2) |   8.9   | thermal  | med  | raw (no local calib yet)
+  13   | NW   |     5.3 (2) |   8.1   | thermal  | med  | raw (no local calib yet)
+  14   | NW   |     6.5 (2) |  10.6   | thermal  | med  | raw (no local calib yet)
+  15   | W    |     6.3 (2) |   9.7   | thermal  | med  | raw (no local calib yet)
+  16   | W    |     6.5 (2) |  10.4   | thermal  | med  | raw (no local calib yet)
+  17   | NW   |     6.8 (2) |   9.9   | thermal  | med  | raw (no local calib yet)
+  18   | NNW  |     9.0 (3) |  17.2   | gradient | med  | 
+  19   | WNW  |     6.8 (2) |   7.4   | gradient | high | 
+  20   | S    |     7.3 (3) |   8.8   | gradient | low  | 
+  21   | SSE  |     9.8 (3) |  15.6   | gradient | med  | raw (no local calib yet)
+  22   | SSE  |    10.0 (3) |  13.2   | gradient | med  | 
+  23   | WSW  |     8.2 (3) |  12.7   | gradient | high | 
