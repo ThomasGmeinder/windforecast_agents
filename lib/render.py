@@ -579,24 +579,43 @@ def _legend():
     <b>gradient</b> frontal / pressure-driven flow · <b>calm</b> little or no wind.</div>"""
 
 
+def _overview_date(recs):
+    """The date the overview heading states, taken from the RECORDS BEING SHOWN rather
+    than from the clock.
+
+    datetime.date.today() would be a second authority for the same fact: the first morning
+    the daily job fails to run, a clock-derived heading would announce today's date above
+    yesterday's numbers. Reading it off the records means the heading can only ever be
+    wrong if the numbers under it are wrong too. If the lakes somehow disagree (one lake's
+    run failed), say so as a range instead of silently picking one."""
+    dates = sorted({r.get("date") for r in recs if r and r.get("date")})
+    if not dates:
+        return None
+    return dates[0] if len(dates) == 1 else f"{dates[0]} – {dates[-1]}"
+
+
 def index_html(static=False):
-    tiles = []
+    tiles, shown = [], []
     for key, g in GROUPS.items():
         teaser = []
         for lake in g["lakes"]:
             rec = _latest_forecast(lake)
             if rec:
+                shown.append(rec)
                 teaser.append(f'<div><b>{html.escape(rec.get("label", lake.title()))}:</b> '
                               f'{html.escape(rec.get("summary",""))}</div>')
         tiles.append(f'<a class="tile" href="{_href(key, static)}"><h2>{html.escape(g["title"])} →</h2>'
                      f'<p class="blurb">{html.escape(g["blurb"])}</p>'
                      f'<div class="teaser">{"".join(teaser)}</div></a>')
+    day = _overview_date(shown)
+    heading = (f'<h2>Forecast overview for {html.escape(day)}</h2>' if day else
+               '<h2>Forecast overview — no forecast on record yet</h2>')
     return f"""<!doctype html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Bavarian lake wind</title><style>{_css()}</style></head><body>
 <header><h1>Bavarian lake wind forecasts</h1>
 <div class="sub">generated {_generated()} · updates ~05:00 daily · self-learning</div></header>
-<main><div class="tiles">{''.join(tiles)}</div></main>
+<main>{heading}<div class="tiles">{''.join(tiles)}</div></main>
 <footer>Choose a report. Each has its own hourly forecast, self-learning history, and the
 prediction methodology for those lakes.</footer></body></html>"""
 
@@ -637,6 +656,25 @@ self-learning loop; "raw (no local calib yet)" hours are uncalibrated. Residual 
 worst in thermal/föhn.</footer></body></html>"""
 
 
+def _selftest():
+    """The overview heading must describe the records it sits above, never the clock."""
+    assert _overview_date([{"date": "2026-08-05"}, {"date": "2026-08-05"}]) == "2026-08-05"
+    # a stale record must drag the heading back with it, not be papered over
+    assert _overview_date([{"date": "2026-08-05"}, {"date": "2026-08-04"}]) == "2026-08-04 – 2026-08-05"
+    assert _overview_date([]) is None and _overview_date([None, {}]) is None
+    h = index_html()
+    day = _overview_date([_latest_forecast(l) for l in ("ammersee", "kochelsee", "walchensee")])
+    if day:
+        assert f"Forecast overview for {day}" in h, "heading missing from the rendered index"
+        assert h.index("Forecast overview") < h.index('class="tiles"'), \
+            "heading must come BEFORE the prediction overview"
+    print(f"  PASS index heading: 'Forecast overview for {day}', placed above the tiles")
+    print("ALL SELF-TESTS PASSED")
+
+
 if __name__ == "__main__":
     which = sys.argv[1] if len(sys.argv) > 1 else "index"
-    print(index_html() if which == "index" else report_html(which))
+    if which == "selftest":
+        _selftest()
+    else:
+        print(index_html() if which == "index" else report_html(which))
