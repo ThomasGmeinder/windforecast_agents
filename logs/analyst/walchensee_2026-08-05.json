@@ -1,0 +1,8 @@
+{
+  "lake": "walchensee",
+  "date": "2026-08-05",
+  "result": {
+    "skipped": "gemini call failed: HTTP Error 503: Service Unavailable",
+    "n_open": 0
+  }
+}
