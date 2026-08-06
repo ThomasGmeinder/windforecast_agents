@@ -1,0 +1,27 @@
+Kochelsee — 2026-08-06
+  dominant gradient; peak 6.1 kn (2 Bft) SSE ~02h · gusts to 11.3 kn ~02h
+  Hour | Dir  | Mean kn (Bft) | Gust kn | Regime   | Conf | Note
+  00   | SSE  |     2.9 (1) |   8.3   | gradient | med  | raw (no local calib yet)
+  01   | WSW  |     2.5 (1) |   8.9   | gradient | med  | raw (no local calib yet)
+  02   | SSE  |     6.1 (2) |  11.3   | gradient | med  | raw (no local calib yet)
+  03   | W    |     1.8 (1) |   8.7   | calm     | med  | glassy
+  04   | ESE  |     1.1 (1) |   4.4   | calm     | med  | glassy
+  05   | S    |     1.3 (1) |   3.2   | calm     | med  | glassy
+  06   | SSE  |     1.0 (1) |   3.3   | calm     | med  | glassy
+  07   | ENE  |     3.1 (1) |   3.7   | calm     | high | glassy
+  08   | SE   |     1.8 (1) |   5.5   | calm     | high | glassy
+  09   | W    |     0.7 (0) |   2.8   | calm     | med  | glassy
+  10   | NW   |     4.4 (2) |   4.7   | calm     | med  | glassy gust uncorrected (implausible learned ratio)
+  11   | N    |     2.6 (1) |   6.4   | gradient | med  | raw (no local calib yet)
+  12   | N    |     2.6 (1) |   7.4   | gradient | med  | raw (no local calib yet)
+  13   | NW   |     3.4 (1) |   8.1   | gradient | med  | raw (no local calib yet)
+  14   | W    |     2.8 (1) |   8.8   | gradient | med  | raw (no local calib yet)
+  15   | SSE  |     1.6 (1) |   6.4   | calm     | med  | glassy
+  16   | W    |     1.4 (1) |   4.7   | calm     | med  | glassy
+  17   | W    |     1.5 (1) |   5.2   | calm     | med  | glassy
+  18   | S    |     2.7 (1) |   5.2   | gradient | med  | raw (no local calib yet) gust uncorrected (implausible learned ratio)
+  19   | SSE  |     1.6 (1) |   7.7   | gradient | high | 
+  20   | SSE  |     4.7 (2) |   8.6   | gradient | med  | raw (no local calib yet)
+  21   | SSE  |     2.8 (1) |   9.8   | gradient | high | 
+  22   | SSE  |     1.6 (1) |   5.3   | calm     | med  | glassy gust uncorrected (implausible learned ratio)
+  23   | SSE  |     2.0 (1) |   3.4   | calm     | med  | glassy gust uncorrected (implausible learned ratio)
