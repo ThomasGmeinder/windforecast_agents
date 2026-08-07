@@ -1,0 +1,27 @@
+Kochelsee — 2026-08-07
+  dominant gradient; peak 3.9 kn (1 Bft) NNE ~18h · gusts to 12.4 kn ~18h
+  Hour | Dir  | Mean kn (Bft) | Gust kn | Regime   | Conf | Note
+  00   | SE   |     1.7 (1) |   4.8   | calm     | med  | glassy
+  01   | ESE  |     1.5 (1) |   3.7   | calm     | med  | glassy
+  02   | SE   |     1.3 (1) |   3.3   | calm     | med  | glassy
+  03   | S    |     1.3 (1) |   2.8   | calm     | med  | glassy
+  04   | SW   |     0.9 (0) |   3.0   | calm     | med  | glassy
+  05   | WSW  |     0.9 (0) |   1.9   | calm     | med  | glassy
+  06   | S    |     1.1 (1) |   2.4   | calm     | med  | glassy
+  07   | S    |     3.2 (1) |   3.7   | calm     | high | glassy
+  08   | NW   |     1.0 (1) |   3.9   | calm     | high | glassy
+  09   | NNW  |     1.3 (1) |   3.5   | calm     | med  | glassy
+  10   | N    |     3.5 (1) |   7.7   | calm     | high | glassy
+  11   | NNE  |     2.2 (1) |   5.0   | gradient | med  | raw (no local calib yet)
+  12   | N    |     2.8 (1) |   9.7   | thermal  | high | 
+  13   | N    |     2.3 (1) |   5.3   | gradient | med  | raw (no local calib yet)
+  14   | N    |     2.7 (1) |   6.1   | gradient | med  | raw (no local calib yet)
+  15   | N    |     3.3 (1) |   7.8   | gradient | med  | raw (no local calib yet)
+  16   | N    |     3.0 (1) |   8.0   | gradient | med  | raw (no local calib yet)
+  17   | NNE  |     3.1 (1) |   6.7   | gradient | med  | raw (no local calib yet)
+  18   | NNE  |     3.9 (1) |  12.4   | gradient | high | 
+  19   | NNE  |     1.5 (1) |   7.2   | gradient | high | 
+  20   | NE   |     3.1 (1) |  10.6   | gradient | high | 
+  21   | E    |     1.8 (1) |   5.2   | calm     | med  | glassy
+  22   | SE   |     0.7 (0) |   2.5   | calm     | med  | glassy
+  23   | ESE  |     1.7 (1) |   5.4   | calm     | high | glassy

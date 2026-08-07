@@ -1,0 +1,27 @@
+Walchensee — 2026-08-07
+  dominant gradient; peak 9.1 kn (3 Bft) N ~16h · gusts to 15.4 kn ~19h
+  Hour | Dir  | Mean kn (Bft) | Gust kn | Regime   | Conf | Note
+  00   | S    |     2.8 (1) |   5.7   | gradient | med  | raw (no local calib yet)
+  01   | S    |     3.0 (1) |   5.3   | gradient | med  | raw (no local calib yet)
+  02   | SW   |     2.1 (1) |   5.7   | gradient | med  | raw (no local calib yet)
+  03   | WNW  |     2.0 (1) |   4.9   | calm     | med  | glassy Δθ+1.2
+  04   | NNW  |     3.3 (1) |   6.5   | gradient | med  | raw (no local calib yet)
+  05   | NNW  |     3.3 (1) |   6.1   | gradient | med  | raw (no local calib yet)
+  06   | NNW  |     4.1 (2) |   6.8   | gradient | med  | raw (no local calib yet)
+  07   | NNW  |     3.1 (1) |   5.9   | gradient | med  | raw (no local calib yet)
+  08   | NNE  |     3.2 (1) |   6.3   | gradient | med  | raw (no local calib yet)
+  09   | NNE  |     3.3 (1) |   7.1   | gradient | med  | raw (no local calib yet)
+  10   | NNE  |     3.9 (1) |   8.0   | gradient | med  | raw (no local calib yet)
+  11   | NNE  |     7.2 (3) |   9.4   | gradient | med  | raw (no local calib yet)
+  12   | NNE  |     7.4 (3) |  10.0   | gradient | med  | raw (no local calib yet)
+  13   | N    |     7.8 (3) |  10.8   | gradient | med  | raw (no local calib yet)
+  14   | N    |     7.3 (3) |  11.1   | gradient | med  | raw (no local calib yet)
+  15   | N    |     6.7 (2) |  10.1   | gradient | med  | raw (no local calib yet)
+  16   | N    |     9.1 (3) |  12.3   | gradient | high | 
+  17   | N    |     4.6 (2) |   9.5   | gradient | med  | raw (no local calib yet)
+  18   | NNW  |     5.4 (2) |   8.5   | gradient | med  | 
+  19   | N    |     5.9 (2) |  15.4   | gradient | high | 
+  20   | N    |     3.6 (1) |   8.0   | gradient | med  | raw (no local calib yet)
+  21   | NNW  |     2.9 (1) |   7.0   | gradient | med  | raw (no local calib yet)
+  22   | WSW  |     2.3 (1) |   4.5   | gradient | med  | raw (no local calib yet)
+  23   | S    |     2.6 (1) |   4.6   | gradient | med  | raw (no local calib yet)
