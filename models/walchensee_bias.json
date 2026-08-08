@@ -10,7 +10,7 @@
         -0.4042,
         0.2589
       ],
-      "gust_ratio": 0.81,
+      "gust_ratio": 0.79,
       "mae_kn": 0.2
     },
     "gradient|19": {
@@ -22,7 +22,7 @@
         -0.1368,
         0.0324
       ],
-      "gust_ratio": 1.68,
+      "gust_ratio": 1.2,
       "mae_kn": 1.45
     },
     "foehn|07": {
@@ -34,7 +34,7 @@
         -0.5383,
         0.1509
       ],
-      "gust_ratio": 0.84,
+      "gust_ratio": 0.94,
       "mae_kn": 0.06
     },
     "foehn|08": {
@@ -46,7 +46,7 @@
         -0.5179,
         0.171
       ],
-      "gust_ratio": 0.63,
+      "gust_ratio": 0.81,
       "mae_kn": 0.16
     },
     "foehn|09": {
@@ -58,7 +58,7 @@
         -0.4643,
         0.1863
       ],
-      "gust_ratio": 0.66,
+      "gust_ratio": 0.83,
       "mae_kn": 0.06
     },
     "foehn|10": {
@@ -70,7 +70,7 @@
         -0.4783,
         0.1985
       ],
-      "gust_ratio": 0.68,
+      "gust_ratio": 0.9,
       "mae_kn": 0.09
     },
     "thermal|11": {
@@ -82,7 +82,7 @@
         -0.3956,
         0.1212
       ],
-      "gust_ratio": 0.88,
+      "gust_ratio": 1.07,
       "mae_kn": 0.62
     },
     "thermal|12": {
@@ -94,7 +94,7 @@
         -0.2898,
         0.0841
       ],
-      "gust_ratio": 1.01,
+      "gust_ratio": 1.25,
       "mae_kn": 0.88
     },
     "thermal|13": {
@@ -106,7 +106,7 @@
         -0.3397,
         0.0817
       ],
-      "gust_ratio": 0.89,
+      "gust_ratio": 1.14,
       "mae_kn": 0.7
     },
     "thermal|14": {
@@ -118,7 +118,7 @@
         -0.4119,
         0.0858
       ],
-      "gust_ratio": 1.25,
+      "gust_ratio": 1.18,
       "mae_kn": 0.23
     },
     "thermal|15": {
@@ -130,7 +130,7 @@
         -0.4869,
         0.1036
       ],
-      "gust_ratio": 1.26,
+      "gust_ratio": 1.16,
       "mae_kn": 0.46
     },
     "thermal|16": {
@@ -142,7 +142,7 @@
         -0.4994,
         0.1413
       ],
-      "gust_ratio": 1.29,
+      "gust_ratio": 1.09,
       "mae_kn": 0.37
     },
     "thermal|17": {
@@ -154,7 +154,7 @@
         -0.5023,
         0.1187
       ],
-      "gust_ratio": 1.8,
+      "gust_ratio": 1.55,
       "mae_kn": 0.2
     },
     "gradient|18": {
@@ -166,7 +166,7 @@
         -0.5543,
         0.139
       ],
-      "gust_ratio": 0.89,
+      "gust_ratio": 0.91,
       "mae_kn": 0.55
     },
     "foehn|06": {
@@ -178,7 +178,7 @@
         -0.5009,
         0.1521
       ],
-      "gust_ratio": 1.12,
+      "gust_ratio": 1.04,
       "mae_kn": 0.02
     },
     "thermal|10": {
@@ -190,7 +190,7 @@
         -0.3812,
         0.2305
       ],
-      "gust_ratio": 0.6,
+      "gust_ratio": 0.82,
       "mae_kn": 0.28
     },
     "calm|11": {
@@ -202,7 +202,7 @@
         -0.3837,
         0.2514
       ],
-      "gust_ratio": 1.95,
+      "gust_ratio": 1.29,
       "mae_kn": 0.42
     },
     "gradient|16": {
@@ -214,7 +214,7 @@
         -0.5065,
         0.1108
       ],
-      "gust_ratio": 1.4,
+      "gust_ratio": 1.36,
       "mae_kn": 0.87
     },
     "gradient|17": {
@@ -226,7 +226,7 @@
         -0.3834,
         0.102
       ],
-      "gust_ratio": 1.16,
+      "gust_ratio": 1.13,
       "mae_kn": 0.49
     },
     "gradient|06": {

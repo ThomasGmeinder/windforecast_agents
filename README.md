@@ -1,5 +1,15 @@
 # Kochelsee / Walchensee wind-prediction agent
 
+## 🌬️ [**→ Live forecast: thomasgmeinder.github.io/windforecast_agents**](https://thomasgmeinder.github.io/windforecast_agents/)
+
+**[Kochelsee & Walchensee](https://thomasgmeinder.github.io/windforecast_agents/kochel-walchensee.html)**
+ · **[Ammersee](https://thomasgmeinder.github.io/windforecast_agents/ammersee.html)**
+— rebuilt and republished every morning at ~05:00 Berlin by the daily GitHub Actions run.
+Each page shows today's hourly forecast, yesterday's measured wind beside it, and the
+self-learning report that connects the two.
+
+---
+
 Hourly, next-day surface-wind forecasting for two windsurf lakes at the northern
 Alpine rim in Bavaria — **Kochelsee** (~604 m) and **Walchensee** (~800 m) — with a
 deterministic forecast engine, a self-learning bias correction that updates every

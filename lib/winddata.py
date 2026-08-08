@@ -383,16 +383,57 @@ def hohenpeissenberg_now():
         return None
 
 
-def actual_hourly(lake, yyyy_mm_dd):
-    """Preferred measured actuals for a lake/date. Uses the on-lake addicted-sports
-    station where available, else falls back to DWD 10-min obs. Returns (data, source)."""
+# Lakes with an on-lake private weather station (module name -> handled in measured_source).
+# Ammersee only: BSV Herrsching, a sailing club's Davis on the east shore. It measures
+# speed, GUSTS and DIRECTION at 15-minute resolution with ~4 years of queryable history.
+BSV_LAKES = ("ammersee",)
+
+
+def measured_source(lake, yyyy_mm_dd):
+    """THE authority for which measured source a lake/date uses, and its data.
+
+    Returns {'id', 'label', 'data'}, where id is a stable machine token:
+        ads   | buoy | buoy+bsv | buoy+dwd | bsv | dwd | none
+
+    Preference order for Ammersee, best first:
+      1. the GKD Ammerseeboje — actually ON the water. Speed only, so direction and gusts
+         come from the best available companion (BSV, else DWD).
+      2. BSV Herrsching, calibrated — while the buoy is down. r=0.486 against the buoy.
+      3. DWD Wielenbach, calibrated — last resort only. r=0.171: on 2026-06-05 its highest
+         reading of the day landed on the lake's CALMEST hour. It is kept solely so the
+         pipeline still produces something if both better sources are unreachable.
+
+    The buoy is retried EVERY day and wins automatically the moment it reports again, so
+    recovery needs no intervention; buoywatch.py turns that into a logged, loud event.
+    Both actual_hourly and the watcher call this one function — the choice is never
+    re-derived anywhere else."""
     if lake in ADS_SPOT:
         try:
             data = addicted_measured_hourly(ADS_SPOT[lake], yyyy_mm_dd)
             if len(data) >= 3:
-                return data, f"addicted-sports on-lake ({ADS_SPOT[lake]})"
+                return {"id": "ads", "data": data,
+                        "label": f"addicted-sports on-lake ({ADS_SPOT[lake]})"}
         except Exception:
             pass  # fall back below
+
+    # on-lake private station (speed + gust + direction), calibrated onto lake-equivalent
+    bsv_h, bsv_label = {}, None
+    if lake in BSV_LAKES:
+        try:
+            import bsv as _bsv
+            import obs_calib as _oc
+            raw = _bsv.hourly(yyyy_mm_dd)
+            if len(raw) >= _bsv.MIN_HOURS_DAY:
+                m = _oc.load(lake, "bsv")
+                bsv_h = {}
+                for h, v in raw.items():
+                    cm, cg, ok = _oc.correct(lake, h, v["mean_kn"], v["gust_kn"], "bsv")
+                    bsv_h[h] = {"mean_kn": cm, "gust_kn": cg, "dir": v["dir"]}
+                bsv_label = _bsv.STATION + (
+                    f" calibrated to on-lake (+{m['validation']['improvement']*100:.0f}%,"
+                    f" {m['n_pairs']} paired hrs)" if m else " (uncalibrated)")
+        except Exception:
+            bsv_h, bsv_label = {}, None
 
     st = STA_OBS[lake]
     dwd, dwd_src = None, f"DWD station {st}"
@@ -409,21 +450,31 @@ def actual_hourly(lake, yyyy_mm_dd):
         except Exception:
             buoy = {}
         if len(buoy) >= GKD_MIN_HOURS:
-            try:
-                dwd = dwd_obs_hourly(st, yyyy_mm_dd.replace("-", ""))
-            except Exception:
-                dwd = {}
+            # The buoy is back (or never left): it wins on SPEED, unconditionally.
+            # Direction and gusts it does not measure, so they come from the best companion
+            # available — BSV first (r=0.486, real gust sensor), DWD only if BSV is down.
+            if bsv_h:
+                aux_src, aux, sid = "BSV Herrsching", bsv_h, "buoy+bsv"
+            else:
+                try:
+                    dwd = dwd_obs_hourly(st, yyyy_mm_dd.replace("-", ""))
+                except Exception:
+                    dwd = {}
+                aux_src, aux, sid = dwd_src, (dwd or {}), "buoy+dwd"
             data = {}
             for h, kn in buoy.items():
-                aux = (dwd or {}).get(h, {})
+                a = aux.get(h, {})
                 data[h] = {"mean_kn": kn,
-                           "gust_kn": aux.get("gust_kn", kn),   # no gust sensor on the buoy
-                           "dir": aux.get("dir")}
-            extra = f" + {dwd_src} for dir/gust" if dwd else " (no direction available)"
-            return data, f"{label}{extra}"
+                           "gust_kn": a.get("gust_kn", kn),   # no gust sensor on the buoy
+                           "dir": a.get("dir")}
+            extra = f" + {aux_src} for dir/gust" if aux else " (no direction available)"
+            return {"id": sid, "data": data, "label": f"{label}{extra}"}
 
     if dwd is None:
-        dwd = dwd_obs_hourly(st, yyyy_mm_dd.replace("-", ""))
+        try:
+            dwd = dwd_obs_hourly(st, yyyy_mm_dd.replace("-", ""))
+        except Exception:
+            dwd = {}
     note = "lake-level, ~11 km inland" if lake == "ammersee" else "valley proxy"
 
     # The fallback station under-reads the lake badly (Wielenbach measured a mean 3.2 kn
@@ -435,18 +486,57 @@ def actual_hourly(lake, yyyy_mm_dd):
         import obs_calib
     except Exception:
         obs_calib = None
+    dwd_cal = {}
     if obs_calib is not None and obs_calib.load(lake):
-        out, n = {}, 0
-        for h, v in dwd.items():
+        for h, v in (dwd or {}).items():
             cm, cg, ok = obs_calib.correct(lake, h, v.get("mean_kn"), v.get("gust_kn"))
-            out[h] = {**v, "mean_kn": cm, "gust_kn": cg}
-            n += bool(ok)
-        if n:
-            m = obs_calib.load(lake)
-            gain = m["validation"]["improvement"] * 100
-            return out, (f"{dwd_src} ({note}) calibrated to on-lake "
-                         f"(+{gain:.0f}% vs raw, {m['n_pairs']} paired hrs)")
-    return dwd, f"{dwd_src} ({note})"
+            if ok:
+                dwd_cal[h] = {**v, "mean_kn": cm, "gust_kn": cg}
+
+    # BLEND. Neither shore station wins on its own — measured on 1273 held-out hours
+    # against the buoy, calibrated DWD scored MAE 2.788 kn and calibrated BSV 2.915, but
+    # the MEAN OF THE TWO scored 2.639, better than either. They sit on opposite sides of
+    # the lake, so a good deal of their error is independent local noise that averaging
+    # cancels. (An earlier claim here that BSV tracked three times better than DWD came
+    # from a 109-hour sample and did not survive the full 4,746-hour test: r=0.651 vs
+    # 0.660, i.e. the same. Small samples lie.)
+    # Speed is the blend; direction and gusts come from BSV, which has a real sensor at
+    # the lake — the buoy has none and DWD's is 11 km inland. That part is a physical
+    # argument, not a measured one: the buoy provides no direction or gust to validate against.
+    if bsv_h and dwd_cal:
+        both = sorted(set(bsv_h) & set(dwd_cal))
+        if both:
+            data = {}
+            for h in both:
+                b, d = bsv_h[h], dwd_cal[h]
+                data[h] = {"mean_kn": round((b["mean_kn"] + d["mean_kn"]) / 2, 1),
+                           "gust_kn": b.get("gust_kn") or d.get("gust_kn"),
+                           "dir": b.get("dir") if b.get("dir") is not None else d.get("dir")}
+            for h, v in bsv_h.items():
+                data.setdefault(h, v)          # hours only one source covers still count
+            for h, v in dwd_cal.items():
+                data.setdefault(h, v)
+            return {"id": "blend", "data": data,
+                    "label": ("blend of BSV Herrsching + DWD Wielenbach, both calibrated "
+                              f"to on-lake ({len(both)}/{len(data)} h blended; measured "
+                              "2.64 kn MAE vs 2.79 best single source)")}
+
+    if bsv_h:
+        return {"id": "bsv", "data": bsv_h, "label": bsv_label + " — DWD unavailable"}
+    if dwd_cal:
+        m = obs_calib.load(lake)
+        gain = m["validation"]["improvement"] * 100
+        return {"id": "dwd", "data": dwd_cal,
+                "label": (f"{dwd_src} ({note}) calibrated to on-lake "
+                          f"(+{gain:.0f}% vs raw, {m['n_pairs']} paired hrs) — BSV unavailable")}
+    return {"id": "dwd" if dwd else "none", "data": dwd or {}, "label": f"{dwd_src} ({note})"}
+
+
+def actual_hourly(lake, yyyy_mm_dd):
+    """Preferred measured actuals for a lake/date -> (data, source_label).
+    Thin wrapper over measured_source, which owns the choice."""
+    s = measured_source(lake, yyyy_mm_dd)
+    return s["data"], s["label"]
 
 
 # --------------------------------------------------------------- foehn/thermal cause drivers + valley stability

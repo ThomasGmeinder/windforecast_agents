@@ -52,6 +52,7 @@ jobs:
           .venv/bin/python lib/verify.py
           .venv/bin/python lib/tuner.py selftest
           .venv/bin/python lib/render.py selftest
+          .venv/bin/python lib/buoywatch.py selftest
 
       # The whole loop: propose -> gate -> APPLY -> open hypothesis -> withhold from early
       # review -> review. On real data the gate correctly refuses everything, so this

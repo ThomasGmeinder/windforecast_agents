@@ -1,27 +1,27 @@
 Ammersee — 2026-08-08
-  dominant thermal; peak 13.7 kn (4 Bft) E ~23h · gusts to 18.4 kn ~23h
+  dominant thermal; peak 15.7 kn (4 Bft) ESE ~23h · gusts to 20.7 kn ~23h
   Hour | Dir  | Mean kn (Bft) | Gust kn | Regime   | Conf | Note
   00   | E    |     2.9 (1) |   6.9   | gradient | med  | raw (no local calib yet)
   01   | E    |     2.8 (1) |   5.4   | gradient | med  | raw (no local calib yet)
   02   | ENE  |     3.6 (1) |   6.7   | gradient | med  | raw (no local calib yet)
   03   | E    |     3.6 (1) |   7.5   | gradient | med  | raw (no local calib yet)
   04   | E    |     2.8 (1) |   7.4   | gradient | med  | raw (no local calib yet)
-  05   | E    |     2.8 (1) |   5.8   | gradient | med  | raw (no local calib yet)
-  06   | ESE  |     6.4 (2) |   6.8   | gradient | high | 
-  07   | ESE  |     1.9 (1) |   4.5   | calm     | med  | glassy
-  08   | NNE  |     3.3 (1) |   6.3   | calm     | med  | glassy
-  09   | NNE  |     4.4 (2) |   6.8   | thermal  | med  | raw (no local calib yet)
-  10   | ENE  |     5.0 (2) |   8.0   | thermal  | med  | raw (no local calib yet)
-  11   | NE   |     6.4 (2) |   9.1   | thermal  | med  | raw (no local calib yet)
-  12   | ENE  |    11.6 (4) |  13.1   | thermal  | high | 
-  13   | ENE  |    10.2 (3) |  13.4   | thermal  | high | 
-  14   | E    |     9.3 (3) |  14.7   | thermal  | high | 
-  15   | E    |     8.8 (3) |  14.6   | thermal  | high | 
-  16   | NE   |    10.4 (3) |  12.7   | thermal  | high | 
-  17   | NE   |     9.6 (3) |  11.6   | thermal  | med  | 
-  18   | NE   |     6.3 (2) |  13.3   | thermal  | med  | raw (no local calib yet)
-  19   | NNE  |     5.0 (2) |  13.0   | thermal  | med  | raw (no local calib yet)
-  20   | E    |     8.0 (3) |  10.3   | gradient | high | 
-  21   | E    |    11.2 (4) |  11.2   | gradient | high | 
-  22   | E    |    12.8 (4) |  12.8   | gradient | med  | 
-  23   | E    |    13.7 (4) |  18.4   | gradient | med  | 
+  05   | E    |     2.6 (1) |   5.8   | gradient | med  | raw (no local calib yet)
+  06   | ESE  |     6.4 (2) |   6.4   | gradient | high | 
+  07   | ESE  |     6.5 (2) |   6.5   | gradient | high | 
+  08   | NE   |     2.7 (1) |   5.2   | calm     | med  | glassy
+  09   | NNE  |     3.8 (1) |   5.0   | thermal  | med  | raw (no local calib yet)
+  10   | NE   |     4.7 (2) |   6.7   | thermal  | med  | raw (no local calib yet)
+  11   | NE   |     6.4 (2) |   9.2   | thermal  | med  | raw (no local calib yet)
+  12   | ENE  |    12.1 (4) |  13.7   | thermal  | high | 
+  13   | ENE  |    10.4 (3) |  13.5   | thermal  | high | 
+  14   | NE   |     9.3 (3) |  14.5   | thermal  | high | 
+  15   | E    |     9.0 (3) |  14.7   | thermal  | high | 
+  16   | NE   |     8.9 (3) |  12.2   | thermal  | high | 
+  17   | ENE  |    10.2 (3) |  12.3   | thermal  | high | 
+  18   | ENE  |     5.8 (2) |  13.1   | thermal  | med  | raw (no local calib yet)
+  19   | E    |     5.9 (2) |  12.8   | thermal  | med  | raw (no local calib yet)
+  20   | E    |     8.6 (3) |  11.9   | gradient | high | 
+  21   | E    |    12.4 (4) |  12.4   | gradient | high | 
+  22   | ESE  |    14.1 (4) |  14.1   | gradient | high | 
+  23   | ESE  |    15.7 (4) |  20.7   | gradient | high | 

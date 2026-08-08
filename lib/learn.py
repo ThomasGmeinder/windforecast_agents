@@ -269,6 +269,78 @@ def update_from_day(lake, date):
             "buckets_total": len(buckets), "_bias": bias}
 
 
+def rebuild_gust_ratios(lake, dry_run=True):
+    """Re-derive every bucket's gust_ratio from logged history under the CURRENT rule.
+
+    The ratios in the shipped models were learned by the old rule, which divided by the
+    model gust with no floor and assigned the first observation outright instead of
+    shrinking it toward the 1.0 prior. postproc.apply_bias now REFUSES anything outside
+    the plausible band, so those values are harmless — but a refused bucket jumps to the
+    band ceiling on its next observation and spends ~6 days converging, where one rebuilt
+    from the prior converges cleanly from below.
+
+    Touches ONLY gust_ratio. The RLS regression (a, b, n, P) is left exactly as it is: it
+    was never affected by the bug, and it is the part docs/LEVERAGE.md measures at +37 %.
+
+    Offline — reads the diffs log and the forecasts of record, no network. Leaked hours
+    are skipped, matching what update_from_day trains on."""
+    bias = fc.load_bias(lake)
+    buckets = bias.get("buckets") or {}
+    before = {k: v.get("gust_ratio", 1.0) for k, v in buckets.items()}
+    for st in buckets.values():                     # back to the prior, then relearn
+        st["gust_ratio"] = 1.0
+
+    by_date = {}
+    path = os.path.join(wd.LOG_DIR, f"{lake}_diffs.jsonl")
+    if os.path.exists(path):
+        for line in open(path):
+            try:
+                r = json.loads(line)
+            except Exception:
+                continue
+            if not r.get("leaked") and r.get("actual_gust_kn") is not None:
+                by_date.setdefault(r["date"], []).append(r)
+
+    used = skipped = backfilled = 0
+    for date in sorted(by_date):                    # chronological: smoothing is ordered
+        rec = _forecast_for(lake, date)
+        if not rec:
+            continue
+        if rec.get("backfilled"):
+            # Reconstructed from the Open-Meteo archive: shorter-lead and single-source,
+            # not the four-source 05:00 blend (see docs/LEVERAGE.md). Its model gust comes
+            # from a different distribution, so measured/model means something different.
+            # Ammersee is 61/79 backfilled — rebuilding on it would have trained the gust
+            # ratios on a pipeline production never runs.
+            backfilled += 1
+            continue
+        raw_g = {h["hour"]: h.get("raw_gust_kn") for h in rec["hourly"]}
+        for d in sorted(by_date[date], key=lambda x: x["hour"]):
+            key = fc._bucket_key(d.get("regime", "gradient"), d["hour"])
+            st = buckets.get(key)
+            if st is None:
+                continue                            # no regression bucket -> nothing to attach to
+            if postproc.update_gust(st, raw_g.get(d["hour"]), d["actual_gust_kn"]):
+                used += 1
+            else:
+                skipped += 1
+
+    changed = {k: (round(before[k], 2), buckets[k]["gust_ratio"])
+               for k in buckets if abs(before[k] - buckets[k]["gust_ratio"]) > 0.005}
+    if not dry_run:
+        _commit_bias(lake, bias)
+    return {"lake": lake, "dry_run": dry_run, "n_buckets": len(buckets),
+            "obs_used": used, "obs_skipped": skipped, "days_backfilled_skipped": backfilled,
+            "n_changed": len(changed), "changed": changed,
+            "out_of_band_before": sorted(
+                k for k, v in before.items()
+                if not (postproc.GUST_RATIO_LO <= v <= postproc.GUST_RATIO_HI)),
+            "out_of_band_after": sorted(
+                k for k, v in buckets.items()
+                if not (postproc.GUST_RATIO_LO <= v.get("gust_ratio", 1.0)
+                        <= postproc.GUST_RATIO_HI))}
+
+
 def _commit_bias(lake, bias):
     """Persist the learned state atomically (temp file + os.replace) so an interrupted
     write cannot leave a truncated bias file."""
@@ -411,6 +483,26 @@ def run_and_log(lake, date):
 
 
 if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] == "rebuild-gusts":
+        # python lib/learn.py rebuild-gusts <lake> [--apply]
+        lk = sys.argv[2] if len(sys.argv) > 2 else "walchensee"
+        apply_it = "--apply" in sys.argv
+        r = rebuild_gust_ratios(lk, dry_run=not apply_it)
+        print(f"=== gust-ratio rebuild — {r['lake']} "
+              f"({'APPLIED' if not r['dry_run'] else 'DRY RUN'}) ===")
+        print(f"  {r['n_buckets']} buckets · {r['obs_used']} observations used, "
+              f"{r['obs_skipped']} skipped (model gust below "
+              f"{postproc.GUST_MIN_LEARN_KN:g} kn or missing)")
+        if r["days_backfilled_skipped"]:
+            print(f"  {r['days_backfilled_skipped']} day(s) skipped as BACKFILLED "
+                  f"(archive-reconstructed, not the real 05:00 blend)")
+        print(f"  out of band before: {r['out_of_band_before'] or 'none'}")
+        print(f"  out of band after:  {r['out_of_band_after'] or 'none'}")
+        for k, (b, a) in sorted(r["changed"].items()):
+            print(f"    {k:14s} {b:5.2f} -> {a:5.2f}")
+        if r["dry_run"]:
+            print("  (nothing written — re-run with --apply)")
+        sys.exit(0)
     lake = sys.argv[1] if len(sys.argv) > 1 else "ammersee"
     date = sys.argv[2] if len(sys.argv) > 2 else \
         (datetime.date.today() - datetime.timedelta(days=1)).isoformat()

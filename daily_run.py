@@ -73,6 +73,25 @@ def main():
     for w in fc.PARAM_WARNINGS:
         out.append(f"⚠ CONFIG: {w}")   # a corrupt params file must never revert silently
 
+    # 0. WHICH TRUTH ARE WE ABOUT TO LEARN FROM? Probe the Ammerseeboje and announce any
+    # change. The switch back to the buoy is automatic (measured_source retries it every
+    # call); this makes the day it happens visible instead of silent. Runs BEFORE learning
+    # because learning consumes whatever this reports.
+    out.append("=" * 72)
+    out.append("STEP 0 — MEASUREMENT SOURCE WATCH  (is the on-lake buoy back?)")
+    out.append("=" * 72)
+    try:
+        import buoywatch
+        for r in buoywatch.run_all(yesterday, stamp=now.isoformat(timespec="minutes"),
+                                   verbose=False):
+            b = buoywatch.banner(r)
+            out.append(b if b else
+                       f"  {r['lake']}: {buoywatch.SOURCE_LABEL.get(r['source_id'], r['source_id'])}"
+                       f" — {r['n_hours']} h" + ("  (buoy still down)" if not r["buoy_up"] else ""))
+    except Exception as e:
+        out.append(f"  buoy watch ERROR — {e}")
+    out.append("")
+
     # 1. LEARN from yesterday — detailed comparison + mechanism update, BEFORE forecasting
     out.append("=" * 72)
     out.append("STEP 1 — SELF-LEARNING FROM YESTERDAY  (runs before any new forecast)")
