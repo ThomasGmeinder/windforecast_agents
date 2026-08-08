@@ -1,0 +1,61 @@
+{
+  "lake": "ammersee",
+  "date": "2026-08-07",
+  "result": {
+    "narrative": "The wind forecaster is currently performing worse than both persistence and climatology, indicating a critical need for adjustment. The primary issues identified are a consistent under-forecasting of wind speeds during gradient regimes, particularly in the early morning and around noon, and a significant over-forecasting of wind speeds during thermal regimes in the afternoon. High direction errors are also prevalent. The proposed parameter changes aim to directly address these speed biases.",
+    "diagnosis": [
+      {
+        "pattern": "Consistent under-forecasting of wind speeds during gradient regimes, especially in early morning and around noon.",
+        "cause": "Underestimation of the effective strength of the 925 hPa gradient wind, likely due to an insufficient scaling factor."
+      },
+      {
+        "pattern": "Consistent over-forecasting of wind speeds during thermal regimes in the afternoon.",
+        "cause": "Overestimation of thermal wind development, possibly due to an insufficient capping effect from cold pools."
+      }
+    ],
+    "proposals": [
+      {
+        "param": "GRADIENT_925_KN",
+        "proposed": 13.5,
+        "rationale": "The model consistently under-forecasts wind speeds in gradient regimes, as evidenced by the negative mean bias error for gradient winds and large negative errors in individual hours. Increasing this parameter should scale up gradient wind forecasts.",
+        "expected_effect": "Reduce the negative bias in gradient wind speed forecasts, leading to improved overall MAE and CRPS."
+      },
+      {
+        "param": "COLD_POOL_DTHETA",
+        "proposed": 1.2,
+        "rationale": "Thermal wind forecasts show a significant positive bias, indicating over-prediction of thermal activity. Lowering COLD_POOL_DTHETA will make it easier for cold pools to cap thermal development, thereby reducing forecasted thermal wind speeds.",
+        "expected_effect": "Reduce the positive bias in thermal wind speed forecasts, leading to improved overall MAE and CRPS."
+      }
+    ],
+    "reviews": [],
+    "reviewed": [],
+    "unknown_review_ids": [],
+    "applied": [],
+    "refused": [
+      {
+        "param": "GRADIENT_925_KN",
+        "proposed": 13.5,
+        "reason": "not statistically significant (\u0394 -0.000 kn, 95% CI [-0.0057, 0.0034] includes zero)"
+      },
+      {
+        "param": "COLD_POOL_DTHETA",
+        "proposed": 1.2,
+        "reason": "not statistically significant (\u0394 -0.001 kn, 95% CI [-0.0058, 0.005] includes zero)"
+      }
+    ],
+    "n_open": 0,
+    "verification": {
+      "n_pairs": 94,
+      "n_days": 7,
+      "crps": 2.5863829787234045,
+      "mae": 2.9155851063829785,
+      "rmse": 3.4724531502404257,
+      "bias": -2.2730319148936173,
+      "crps_pers": 2.027659574468085,
+      "crps_clim": 1.4444238816526196,
+      "ss_pers": -0.27555089192025184,
+      "ss_clim": -0.7905983219858053,
+      "n_leaked_skipped": 74
+    }
+  }
+}

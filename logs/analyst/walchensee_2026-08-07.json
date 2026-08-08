@@ -1,0 +1,61 @@
+{
+  "lake": "walchensee",
+  "date": "2026-08-07",
+  "result": {
+    "narrative": "The forecaster for Walchensee is exhibiting significant issues with regime classification, particularly misidentifying actual 'thermal' wind conditions as 'gradient' regimes during the afternoon hours. This misclassification, which occurred for 11 out of 12 hours yesterday, leads to a substantial under-forecasting of wind speeds. Additionally, even when thermal regimes are correctly identified, there is a consistent pattern of under-forecasting thermal wind speeds. To address these issues, two parameter changes are proposed: increasing the 'GRADIENT_925_KN' threshold to reduce misclassification, and increasing 'THERMAL_CLOUD_MAX' to allow for stronger thermal wind development.",
+    "diagnosis": [
+      {
+        "pattern": "Widespread misclassification of actual 'thermal' wind conditions as 'gradient' regimes during afternoon hours, leading to significant under-forecasting.",
+        "cause": "The threshold for classifying 'gradient' wind (GRADIENT_925_KN) is likely too low, making it too easy for the model to default to a 'gradient' regime even when thermal forcing is dominant."
+      },
+      {
+        "pattern": "Persistent under-forecasting of wind speeds during actual 'thermal' wind regimes, even when the regime is correctly identified.",
+        "cause": "The THERMAL_CLOUD_MAX parameter might be too restrictive, causing the model to underestimate the strength or duration of thermal winds by prematurely suppressing their development due to perceived cloud cover."
+      }
+    ],
+    "proposals": [
+      {
+        "param": "GRADIENT_925_KN",
+        "proposed": 13.5,
+        "rationale": "To reduce the frequent misclassification of thermal regimes as gradient. Increasing this threshold will make it harder to trigger a 'gradient' classification, allowing the 'thermal' regime to be correctly identified more often when thermal forcing is present.",
+        "expected_effect": "Improved regime classification accuracy, specifically reducing 'gradient->thermal' confusion. This should lead to a decrease in the negative bias (under-forecasting) observed during actual thermal periods."
+      },
+      {
+        "param": "THERMAL_CLOUD_MAX",
+        "proposed": 55.0,
+        "rationale": "To allow thermal winds to develop under slightly more cloudy conditions, addressing the observed under-forecasting of thermal wind speeds even when the regime is correctly identified.",
+        "expected_effect": "Increased forecast wind speeds during thermal regimes, reducing the negative bias and improving accuracy for correctly identified thermal periods."
+      }
+    ],
+    "reviews": [],
+    "reviewed": [],
+    "unknown_review_ids": [],
+    "applied": [],
+    "refused": [
+      {
+        "param": "GRADIENT_925_KN",
+        "proposed": 13.5,
+        "reason": "insufficient replayable history (5/10 days, 68/60 hours)"
+      },
+      {
+        "param": "THERMAL_CLOUD_MAX",
+        "proposed": 55.0,
+        "reason": "insufficient replayable history (5/10 days, 68/60 hours)"
+      }
+    ],
+    "n_open": 0,
+    "verification": {
+      "n_pairs": 70,
+      "n_days": 6,
+      "crps": 2.0089714285714284,
+      "mae": 2.3186428571428572,
+      "rmse": 3.104859454491114,
+      "bias": -1.111357142857143,
+      "crps_pers": 2.706060606060606,
+      "crps_clim": 1.510730235042735,
+      "ss_pers": 0.28284434490481514,
+      "ss_clim": -0.31973874919689527,
+      "n_leaked_skipped": 26
+    }
+  }
+}

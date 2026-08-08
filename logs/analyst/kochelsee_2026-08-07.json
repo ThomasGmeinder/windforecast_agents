@@ -1,0 +1,61 @@
+{
+  "lake": "kochelsee",
+  "date": "2026-08-07",
+  "result": {
+    "narrative": "The forecaster exhibits a persistent positive bias, consistently over-predicting wind speeds, particularly during calm conditions and when misclassifying actual calm periods as gradient winds. This is evident in the high mean bias error for calm and gradient regimes, and numerous instances of significant over-prediction in the daily diffs and error window. Conversely, Foehn events are frequently under-predicted, leading to large negative errors and missed strong wind episodes. The overall skill score against climatology is low, indicating substantial room for improvement in both regime classification and magnitude forecasting.",
+    "diagnosis": [
+      {
+        "pattern": "Frequent over-prediction of wind speeds, especially during late afternoon/evening hours, often due to misclassification of actual 'calm' conditions as 'gradient'. This leads to a significant positive bias in these regimes.",
+        "cause": "The GRADIENT_925_KN threshold might be too low, causing the model to incorrectly trigger the 'gradient' regime when winds are actually light or calm, leading to inflated forecasts."
+      },
+      {
+        "pattern": "Consistent and substantial under-prediction of Foehn wind speeds, with many actual Foehn events being missed or significantly underestimated in magnitude.",
+        "cause": "The FOEHN_850_KN threshold might be too high, making the model less sensitive to the onset or strength of Foehn conditions."
+      }
+    ],
+    "proposals": [
+      {
+        "param": "GRADIENT_925_KN",
+        "proposed": 13.0,
+        "rationale": "To reduce the over-prediction of wind speeds during calm conditions, particularly when the model incorrectly classifies them as 'gradient'. Increasing this threshold will make the model more conservative in identifying gradient winds.",
+        "expected_effect": "A reduction in positive bias during calm and gradient regimes, specifically fewer instances of high wind speed forecasts when actual conditions are calm, leading to improved CRPS."
+      },
+      {
+        "param": "FOEHN_850_KN",
+        "proposed": 6.0,
+        "rationale": "To improve the detection and magnitude forecasting of Foehn events, which are currently being significantly under-predicted. Lowering this threshold will make the model more sensitive to Foehn conditions.",
+        "expected_effect": "A reduction in negative bias during Foehn events, leading to more accurate Foehn wind speed forecasts and an overall improvement in CRPS."
+      }
+    ],
+    "reviews": [],
+    "reviewed": [],
+    "unknown_review_ids": [],
+    "applied": [],
+    "refused": [
+      {
+        "param": "GRADIENT_925_KN",
+        "proposed": 13.0,
+        "reason": "insufficient replayable history (6/10 days, 68/60 hours)"
+      },
+      {
+        "param": "FOEHN_850_KN",
+        "proposed": 6.0,
+        "reason": "insufficient replayable history (6/10 days, 68/60 hours)"
+      }
+    ],
+    "n_open": 0,
+    "verification": {
+      "n_pairs": 74,
+      "n_days": 7,
+      "crps": 1.6494054054054055,
+      "mae": 2.0086486486486486,
+      "rmse": 2.7826852734510026,
+      "bias": 0.335472972972973,
+      "crps_pers": 2.678688524590164,
+      "crps_clim": 1.723774231678487,
+      "ss_pers": 0.33973072215422273,
+      "ss_clim": 0.07284101561187484,
+      "n_leaked_skipped": 73
+    }
+  }
+}
