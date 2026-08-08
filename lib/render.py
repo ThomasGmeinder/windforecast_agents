@@ -16,6 +16,7 @@ import winddata as wd
 import forecast as fc
 import learn   # shared large-miss threshold (LARGE_ERR_KN)
 import verify  # shared gate/confidence thresholds (N_MIN_BACKTEST_DAYS, LOW_CONF_DAYS)
+import postproc  # shared gust-ratio plausibility band (GUST_RATIO_LO/HI)
 
 GROUPS = {
     "kochel-walchensee": {
@@ -318,7 +319,7 @@ def _learning_section(lakes):
             + "".join(blocks) + "</section>")
 
 
-def _methodology(group):
+def _methodology(group, static=False):
     nmin = verify.N_MIN_BACKTEST_DAYS
     # thresholds are tuner-writable and PER-LAKE. Reading only lakes[0] published one
     # lake's tuned numbers as if they governed both, which is exactly what the per-lake
@@ -349,7 +350,16 @@ def _methodology(group):
             Hohenpeißenberg) → <b>gradient</b> (925 hPa ≥ {P['GRADIENT_925_KN']} kn) → <b>thermal</b> (sun + weak gradient
             + no cold pool, Δθ &lt; {P['COLD_POOL_DTHETA']} K) → <b>calm</b>.</li>
         <li><b>Correct.</b> A learned regression <b>corrected = a + b·model</b> that scales with the
-            model (no föhn double-count), evidence-gated and capped.</li>
+            model (no föhn double-count), evidence-gated, bounded by ±{fc.BIAS_CAP_KN:g} kn.</li>
+        <li><b>Guard the gust.</b> The gust correction is a multiplier, so an additive bound is the
+            wrong tool for it: a learned ratio outside {postproc.GUST_RATIO_LO}–{postproc.GUST_RATIO_HI}
+            is <b>refused</b> and the raw model gust published instead, and the published gust is
+            capped at {fc.GUST_ENS_CEIL_MULT:g}× the hour's own ensemble gust members. Whenever a
+            guard fires the row says so rather than passing a bounded number off as a learned one.</li>
+        <li><b>Withhold the direction</b> as <b>VAR</b> when the ensemble disagrees by more than
+            {fc.SPREAD_LOW_KN:g} kn. At the evening thermal reversal the wind passes through
+            near-zero and the modelled bearing swings freely — these two lakes read 201° and 284°
+            for the same hour on 2026-08-05, 8 km apart, and both settled to ~172° by 21:00.</li>
       </ol>
       <p class="muted"><b>Föhn caveat:</b> its strength/timing isn't reliably predictable (often blows
       only till ~09:00); flagged "unconfirmed" until Hohenpeißenberg shows S/SE.</p>
@@ -381,11 +391,17 @@ def _methodology(group):
             (sunny, weak-gradient afternoons) → <b>föhn</b> (only on strong Δp + southerly 850, rare)
             → <b>calm</b>.</li>
         <li><b>Correct.</b> A learned regression <b>corrected = a + b·model</b> (scales with the
-            model), evidence-gated and capped.</li>
+            model), evidence-gated, and bounded by ±{fc.BIAS_CAP_KN:g} kn.</li>
+        <li><b>Guard the gust.</b> The gust correction is a multiplier, so it gets different
+            bounds than the mean: a learned ratio outside {postproc.GUST_RATIO_LO}–{postproc.GUST_RATIO_HI}
+            is <b>refused</b> and the raw model gust published instead, and the result is capped at
+            {fc.GUST_ENS_CEIL_MULT:g}× the hour's own ensemble gust members. Whenever a guard fires
+            the row says so.</li>
+        <li><b>Withhold the direction</b> as <b>VAR</b> when the ensemble disagrees more than
+            {fc.SPREAD_LOW_KN:g} kn — at a wind reversal the bearing swings freely and a crisp
+            compass point would claim precision the forecast does not have.</li>
       </ol>
-      <p class="muted">Measured truth: DWD Wielenbach (lake-level, ~11 km); the Herrsching on-water
-      station is the reference but its Windfinder/addicted feeds are often the same sensor. No
-      Kesselberg Δθ / föhn drivers here (Alpine-rim only).</p>
+      <p class="muted">No Kesselberg Δθ / föhn drivers here (Alpine-rim only).</p>
       <h3>How it's checked, and how it tunes itself</h3>
       <p>Every run is scored out of sample with <b>CRPS</b> (knots, lower better — the probabilistic
       version of mean absolute error) against <b>persistence</b> and <b>climatology</b> baselines. An
@@ -395,6 +411,13 @@ def _methodology(group):
       <h3>How it learns</h3>
       <p>Each morning it compares yesterday's forecast to the measured wind and updates the
       per-(regime×hour) regression before today's forecast.</p>
+      <h3>Which truth it learned from</h3>
+      <p>This matters more than it sounds: Ammersee's measured truth has <b>changed hands</b>
+      — the on-water buoy until 15.06.2026, a calibrated shore blend since — and an error figure
+      is <b>not comparable across that boundary</b>. Every day therefore records the source that
+      produced it, and any change is logged loudly. The
+      <a href="{_href('measurements', static)}">measured archive</a> shows the source for each day
+      alongside the numbers.</p>
     </section>"""
 
 
@@ -410,8 +433,11 @@ def _data_sources(group):
              "raw GRIB2 (bz2) from <code>opendata.dwd.de/weather/nwp/icon-d2/grib/</code>, decoded &amp; "
              "cached; plus the same model as a point from Open-Meteo "
              "<code>api.open-meteo.com/v1/forecast?…&amp;models=icon_d2</code> (incl. 850/925 hPa)"),
-            ("ICON-D2 ensemble", "confidence (20 members → P10/P50/P90, gust probability)",
+            ("ICON-D2 ensemble", "confidence (20 members → P10/P50/P90); its gust members also "
+             "set the ceiling a corrected gust may not exceed",
              "Open-Meteo <code>ensemble-api.open-meteo.com/v1/ensemble?…&amp;models=icon_d2</code>"),
+            ("ICON-EU", "independent second model in the blend + horizon beyond 48 h",
+             "Open-Meteo <code>api.open-meteo.com/v1/forecast?…&amp;models=icon_eu</code>"),
             ("DWD MOSMIX", "föhn trigger — cross-Alpine Δp (Bozen − München)",
              "KML/KMZ from <code>opendata.dwd.de/…/MOSMIX_L/single_stations/{16020,10865}/kml/</code>, "
              "parsed for the <code>PPPP</code> pressure series"),
@@ -448,16 +474,31 @@ def _data_sources(group):
              "Open-Meteo <code>ensemble-api.open-meteo.com/v1/ensemble</code>"),
         ]
         meas = [
-            ("GKD Ammerseeboje", "measured actual — official buoy ON the lake (preferred)",
+            ("GKD Ammerseeboje", "measured actual — official buoy ON the water (preferred; "
+             "wins automatically the moment it reports again)",
              "hourly means from <code>gkd.bayern.de/de/meteo/wind/isar/ammerseeboje-16601050"
              "/messwerte/tabelle</code> (© GKD Bayern, CC BY 4.0). Speed only — direction and "
-             "gust come from DWD for the same hours. Offline since 15.06.2026 (electronics "
-             "defect), so the DWD fallback below is currently in use"),
-            ("DWD 10-min obs", "measured actual — fallback: Wielenbach 05538 (lake-level, ~11 km inland)",
+             "gust are taken from BSV for the same hours. <b>Offline since 15.06.2026</b> "
+             "(electronics defect; LfU says the repair will take weeks), so the blend below is "
+             "in use. It is re-probed every morning and the change is logged loudly"),
+            ("BSV Herrsching + DWD Wielenbach", "measured actual — <b>blend of both, each "
+             "calibrated to lake-equivalent</b>, while the buoy is down",
+             "Neither shore station is good enough alone: on 1273 held-out hours against the "
+             "buoy, calibrated DWD scored 2.79 kn mean absolute error and calibrated BSV 2.92 — "
+             "but the <b>mean of the two scored 2.64</b>, better than either. They sit on "
+             "opposite shores, so much of their error is independent noise that averaging "
+             "cancels. Speed is the blend; <b>direction and gusts come from BSV</b>, which has a "
+             "real sensor at the lake"),
+            ("BSV Herrsching", "the on-lake half — a sailing club's Davis Vantage Pro2 on the "
+             "east shore (speed, gusts AND direction)",
+             "15-minute series embedded in <code>wetter.bsv-ammersee.de/PWS_graph_xx.php"
+             "?type=wind&amp;period=day1&amp;y=&amp;m=&amp;d=</code>; any past day is one "
+             "request. Days are cached and mirrored into a committed archive so the history "
+             "survives even if that server goes away"),
+            ("DWD 10-min obs", "the inland half — Wielenbach 05538 (lake-level, ~11 km inland); "
+             "DWD's own closest wind station to Ammersee",
              "zipped 10-min FF/DD from "
              "<code>opendata.dwd.de/climate_environment/CDC/…/10_minutes/wind/recent/</code>"),
-            ("Herrsching anemometer", "on-water reference (human-readable; not yet the learning actual)",
-             "addicted-sports / Windfinder Herrsching station pages"),
         ]
 
     def _tbl(rows):
@@ -649,7 +690,7 @@ def report_html(group, static=False):
   {fcards or '<p class="muted">No forecast logged yet — run daily_run.py.</p>'}
   <div class="sec"><span class="chip meas">measured</span> Yesterday: forecast vs measured — big misses</div>
   {meascards}
-  {_methodology(group)}
+  {_methodology(group, static)}
   {_data_sources(group)}
   {_learning_section(g["lakes"])}
 </main>
@@ -800,6 +841,27 @@ def _selftest():
     for g in GROUPS:
         assert "measurements" in report_html(g, static=True), \
             f"{g} page does not link to the measured archive"
+    # --- the prose must describe the code, not a previous version of it ---
+    # This section drifted badly once: the Ammersee page still said the measured truth was
+    # "DWD Wielenbach" and called BSV a reference "not yet the learning actual", months after
+    # both had stopped being true. Prose has no compiler, so pin the load-bearing claims.
+    for g in GROUPS:
+        page = report_html(g, static=True)
+        for token, why in (
+                (f"{fc.SPREAD_LOW_KN:g} kn", "the direction-withholding threshold"),
+                (f"{postproc.GUST_RATIO_LO}", "the gust-ratio plausibility floor"),
+                (f"{postproc.GUST_RATIO_HI}", "the gust-ratio plausibility ceiling"),
+                (f"{fc.GUST_ENS_CEIL_MULT:g}×", "the ensemble gust ceiling multiplier"),
+                ("VAR", "the withheld-direction marker")):
+            assert token in page, f"{g} page never mentions {why} ({token})"
+    amm = report_html("ammersee", static=True)
+    assert "blend" in amm.lower(), "the Ammersee page must say its truth is a blend"
+    assert "Ammerseeboje" in amm, "the Ammersee page must name the preferred on-water source"
+    # claims that were true once and are now false must not come back
+    for stale in ("not yet the learning actual", "the DWD fallback below is currently in use"):
+        assert stale not in amm, f"stale claim resurfaced on the Ammersee page: {stale!r}"
+    print("  PASS page prose: guard thresholds, VAR, blend and buoy all stated from the "
+          "code's own constants; retired claims blocked")
     n = sum(len(v["rows"]) for days in data.values() for v in days.values())
     print(f"  PASS measured archive: {len(data)} lake(s), "
           f"{sum(len(d) for d in data.values())} days, {n} hours, "
