@@ -53,6 +53,9 @@ jobs:
           .venv/bin/python lib/tuner.py selftest
           .venv/bin/python lib/render.py selftest
           .venv/bin/python lib/buoywatch.py selftest
+          # proves the COMMITTED BSV archive serves past days with no cache and no network
+          # — the runner is ephemeral and cache/ is gitignored, so this is the real path
+          .venv/bin/python lib/bsv.py selftest
 
       # The whole loop: propose -> gate -> APPLY -> open hypothesis -> withhold from early
       # review -> review. On real data the gate correctly refuses everything, so this

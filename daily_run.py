@@ -90,6 +90,17 @@ def main():
                        f" — {r['n_hours']} h" + ("  (buoy still down)" if not r["buoy_up"] else ""))
     except Exception as e:
         out.append(f"  buoy watch ERROR — {e}")
+    # Fold this morning's BSV fetch into the COMMITTED archive. cache/ is gitignored and
+    # the runner is ephemeral, so without this each day's measurements would exist only
+    # until the job ends, and the history could never be rebuilt if the club's server went
+    # away. The archive is also what lets a runner with no cache read past days offline.
+    try:
+        import bsv
+        a = bsv.sync_archive()
+        if a["added"]:
+            out.append(f"  BSV archive: +{a['added']} day(s), {a['total']} total")
+    except Exception as e:
+        out.append(f"  BSV archive ERROR — {e}")
     out.append("")
 
     # 1. LEARN from yesterday — detailed comparison + mechanism update, BEFORE forecasting

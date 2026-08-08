@@ -174,7 +174,10 @@ def _circ_mean_deg(degs):
         return None
     s = sum(math.sin(x) for x in xs)
     c = sum(math.cos(x) for x in xs)
-    return round((math.degrees(math.atan2(s, c)) + 360) % 360)
+    # Modulo AFTER rounding. The other order lets any mean in [359.5, 360) round up to a
+    # bare 360, which is not a bearing — it appeared 7 times in the BSV archive before a
+    # range assertion caught it. compass() happened to render it as N, so it was invisible.
+    return round(math.degrees(math.atan2(s, c)) + 360) % 360
 
 
 # --------------------------------------------------------------- GKD Bayern (on-lake buoy)

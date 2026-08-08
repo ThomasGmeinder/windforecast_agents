@@ -4,28 +4,36 @@ bsv.py — measured wind for Ammersee from the BSV Herrsching station.
 
 WHY THIS EXISTS
 The Ammerseeboje (the only buoy in GKD's entire wind network) has been offline since
-2026-06-15 with an electronics defect, repair "einige Wochen". While it is down, Ammersee
-was being trained and graded against DWD Wielenbach — a station 11 km inland whose
-correlation with the lake is r=0.171. Measured over 110 paired hours against the buoy:
+2026-06-15 with an electronics defect, repair "einige Wochen". While it is down Ammersee
+has no on-water truth, so it is graded against shore stations. BSV is one of the two that
+feed the blend; unlike the buoy it also measures GUSTS and DIRECTION.
 
-    source                reads   MAE      r
-    BSV Herrsching         43 %   4.50 kn  0.486
-    DWD Wielenbach         37 %   5.19 kn  0.171
+WHAT THE NUMBERS ACTUALLY SAY — measured on 4,746 paired hours against the buoy, with the
+held-out comparison on 1,273 of them, both sources calibrated:
 
-r is what decides whether a source is usable at all. A scale error is fixable — multiply
-it out, which is what obs_calib does. Poor tracking is not: scaling noise gives bigger
-noise. Wielenbach's worst failure is not that it reads low, it is that on 2026-06-05 its
-HIGHEST reading of the day (6.0 kn at 16:00) landed on the lake's calmest hour (1.4 kn),
-while at 06:00 the lake blew 17.9 kn and it reported 1.9. BSV tracks about three times
-better, and unlike the buoy it also measures GUSTS and DIRECTION.
+    BSV Herrsching, calibrated   MAE 2.915 kn     raw r=0.651
+    DWD Wielenbach, calibrated   MAE 2.788 kn     raw r=0.660
+    mean of the two              MAE 2.639 kn   <- what measured_source publishes
+
+BSV does NOT beat Wielenbach. The two track the lake almost identically and DWD is
+marginally ahead; blending them beats either, because they sit on opposite shores and much
+of their error is independent local noise.
+
+An earlier version of this docstring claimed BSV tracked three times better (r=0.486 vs
+0.171) and that Wielenbach was useless. That came from a 109-hour sample and did not
+survive the full test. The wrong numbers are recorded here on purpose: they were
+convincing, they were cherry-picked without meaning to be, and they nearly got a working
+station deleted. Do not re-rank these sources from a short window.
 
 HONEST LIMITS
-BSV is a sheltered shore station and its range is compressed — on that same day the buoy
-spanned 1.4–17.9 kn (13x) while BSV spanned 2.4–6.2 kn (2.6x). Calibration can stretch the
-average back out but cannot recover a 17.9 kn morning from a 5.3 kn reading. BSV is the
-best AVAILABLE truth while the buoy is down; it is not a buoy replacement. When the buoy
-returns it should resume as the speed truth, with BSV supplying direction and gusts (which
-the buoy lacks and Wielenbach reports badly).
+BSV is a sheltered shore station and its range is compressed — on 2026-06-05 the buoy
+spanned 1.4–17.9 kn across the day (13x) while BSV spanned 2.4–6.2 (2.6x). Calibration can
+stretch the average back out but cannot recover a 17.9 kn morning from a 5.3 kn reading.
+The blend is the best AVAILABLE truth while the buoy is down; it is not a substitute for
+it. When the buoy returns it resumes as the speed truth automatically, with BSV supplying
+direction and gusts — that last preference is a physical argument (a real sensor at the
+lake beats one 11 km inland), NOT a measured one: the buoy reports no direction or gust to
+validate either against.
 
 THE SOURCE
 A sailing club's Davis Vantage on WeatherLink Cloud, surfaced through a PWS Dashboard.
@@ -55,6 +63,11 @@ STATION = "BSV Herrsching (on-lake, Ammersee east shore)"
 BASE = ("http://wetter.bsv-ammersee.de/PWS_graph_xx.php?type=wind"
         "&script=wind_c_block.php&theme=user&lang=de-dl&units=metric&period=day1")
 CACHE = os.path.join(wd.CACHE_DIR, "bsv")
+# The DURABLE store, committed to git. cache/ is gitignored and lives only on whichever
+# machine did the fetching, so without this the whole history would exist nowhere the day
+# the club's server goes away — and the calibration could never be rebuilt or improved.
+# One line per date, hours as compact [mean_kn, gust_kn, dir] triples.
+ARCHIVE = os.path.join(wd.LOG_DIR, "ammersee_bsv_archive.jsonl")
 KMH_KN = 0.539957          # km/h -> knots
 MIN_SAMPLES_HOUR = 2       # below this an hour is not a usable mean (of 4 expected)
 MIN_HOURS_DAY = 3          # below this the day is unusable and the caller falls back
@@ -118,13 +131,55 @@ def fetch_day(date, use_cache=True):
     return rows
 
 
-def hourly(date, use_cache=True):
-    """{hour -> {'mean_kn','gust_kn','dir','n'}} for one date, or {} if unusable.
+_ARCHIVE_CACHE = None
 
-    Mean of the speed samples, MAX of the gust samples (a gust is an extreme, averaging it
-    away would defeat the point), circular mean of direction."""
+
+def load_archive():
+    """{date -> {hour -> {...}}} from the committed archive. Read once per process."""
+    global _ARCHIVE_CACHE
+    if _ARCHIVE_CACHE is not None:
+        return _ARCHIVE_CACHE
+    out = {}
+    if os.path.exists(ARCHIVE):
+        for line in open(ARCHIVE):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                r = json.loads(line)
+                out[r["date"]] = {int(h): {"mean_kn": v[0], "gust_kn": v[1],
+                                           "dir": v[2], "n": v[3]}
+                                  for h, v in r["hours"].items()}
+            except Exception:
+                continue                      # one bad line must not blank the archive
+    _ARCHIVE_CACHE = out
+    return out
+
+
+def save_archive(days):
+    """Merge `days` ({date -> hourly-dict}) into the committed archive, atomically.
+    Existing dates are REPLACED, so a re-fetch corrects rather than duplicates."""
+    merged = dict(load_archive())
+    merged.update({d: v for d, v in days.items() if v})
+    tmp = ARCHIVE + ".tmp"
+    with open(tmp, "w") as f:
+        for d in sorted(merged):
+            hrs = {str(h): [v["mean_kn"], v["gust_kn"], v["dir"], v.get("n", 0)]
+                   for h, v in sorted(merged[d].items())}
+            f.write(json.dumps({"date": d, "hours": hrs}, separators=(",", ":")) + "\n")
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, ARCHIVE)
+    global _ARCHIVE_CACHE
+    _ARCHIVE_CACHE = merged
+    return len(merged)
+
+
+def _aggregate(samples):
+    """15-min samples -> hourly. Mean of the speeds, MAX of the gusts (a gust is an
+    extreme; averaging it away defeats the point), circular mean of direction."""
     by_hour = {}
-    for h, spd, gust, deg in fetch_day(date, use_cache):
+    for h, spd, gust, deg in samples:
         by_hour.setdefault(h, []).append((spd, gust, deg))
     out = {}
     for h, v in by_hour.items():
@@ -135,6 +190,47 @@ def hourly(date, use_cache=True):
                   "dir": wd._circ_mean_deg([x[2] for x in v]),
                   "n": len(v)}
     return out
+
+
+def hourly(date, use_cache=True):
+    """{hour -> {'mean_kn','gust_kn','dir','n'}} for one date, or {} if unusable.
+
+    Reads the committed ARCHIVE first for past dates — that is what makes a CI runner, with
+    no cache/ directory at all, able to work offline over the whole history, and what keeps
+    the data alive if the club's server disappears. Today is always fetched, since it is
+    still filling up."""
+    today = datetime.datetime.now(wd.BERLIN).strftime("%Y-%m-%d")
+    if use_cache and date < today:
+        got = load_archive().get(date)
+        if got:
+            return got
+    return _aggregate(fetch_day(date, use_cache))
+
+
+def sync_archive(quiet=True):
+    """Fold every complete day sitting in the transient cache into the committed archive.
+    Called by the daily run, so each morning's fetch becomes durable automatically."""
+    today = datetime.datetime.now(wd.BERLIN).strftime("%Y-%m-%d")
+    have = load_archive()
+    add = {}
+    if os.path.isdir(CACHE):
+        for name in sorted(os.listdir(CACHE)):
+            if not name.endswith(".json"):
+                continue
+            d = name[:-5]
+            if d >= today or d in have:
+                continue                      # incomplete, or already durable
+            try:
+                h = _aggregate(fetch_day(d, use_cache=True))
+            except Exception:
+                continue
+            if len(h) >= MIN_HOURS_DAY:
+                add[d] = h
+    if add:
+        n = save_archive(add)
+        if not quiet:
+            print(f"  archived {len(add)} new day(s); {n} total")
+    return {"added": len(add), "total": len(load_archive())}
 
 
 def backfill(start, end, quiet=False):
@@ -161,8 +257,52 @@ def backfill(start, end, quiet=False):
             "days": days}
 
 
+def _selftest():
+    """The committed archive must serve past days with NO network and NO cache.
+
+    That is the whole point of it: cache/ is gitignored and the CI runner is ephemeral, so
+    if hourly() could only answer by fetching, the history would exist on one laptop and
+    would die with the club's server."""
+    import tempfile
+    arch = load_archive()
+    assert arch, f"no archive at {ARCHIVE} — run `python lib/bsv.py archive`"
+    saved_cache, saved_fetch = CACHE, fetch_day
+    try:
+        globals()["CACHE"] = tempfile.mkdtemp(prefix="bsv_selftest_")
+        def _no_network(*a, **k):
+            raise AssertionError("archived day hit the network")
+        globals()["fetch_day"] = _no_network
+        ds = sorted(arch)
+        for d in (ds[0], ds[len(ds) // 2], ds[-1]):
+            h = hourly(d)
+            assert h, f"{d} is archived but returned nothing"
+            for v in h.values():
+                assert v["gust_kn"] >= 0 and v["mean_kn"] >= 0
+                assert v["dir"] is None or 0 <= v["dir"] < 360, f"bad direction on {d}"
+                assert v["gust_kn"] >= v["mean_kn"] - 1e-9, \
+                    f"{d}: gust below mean is physically impossible"
+    finally:
+        globals()["CACHE"], globals()["fetch_day"] = saved_cache, saved_fetch
+    n = sum(len(v) for v in arch.values())
+    print(f"  PASS bsv archive: {len(arch)} days / {n} hours served offline, "
+          f"{ds[0]} .. {ds[-1]}")
+    print("ALL SELF-TESTS PASSED")
+
+
 if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] == "selftest":
+        _selftest()
+        sys.exit(0)
     cmd = sys.argv[1] if len(sys.argv) > 1 else "show"
+    if cmd == "archive":
+        r = sync_archive(quiet=False)
+        a = load_archive()
+        ds = sorted(a)
+        print(f"=== BSV archive ({ARCHIVE}) ===")
+        print(f"  {r['added']} new day(s) folded in; {len(ds)} days total"
+              + (f", {ds[0]} .. {ds[-1]}" if ds else ""))
+        print(f"  {sum(len(v) for v in a.values())} hourly records")
+        sys.exit(0)
     if cmd == "backfill":
         r = backfill(sys.argv[2], sys.argv[3])
         print(f"=== BSV backfill {r['start']} .. {r['end']} ===")
