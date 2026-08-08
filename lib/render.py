@@ -625,7 +625,9 @@ def report_html(group, static=False):
     other = [k for k in GROUPS if k != group]
     nav = (f'<div class="nav"><a href="{_href("", static)}">← all lakes</a>'
            + "".join(f' &nbsp;·&nbsp; <a href="{_href(k, static)}">{html.escape(GROUPS[k]["title"])}</a>'
-                     for k in other) + "</div>")
+                     for k in other)
+           + f' &nbsp;·&nbsp; <a href="{_href("measurements", static)}">📊 measured archive</a>'
+           + "</div>")
     fcards = "".join(_forecast_card(_latest_forecast(l)) for l in g["lakes"])
     # Pair each lake's big-miss table with ITS OWN "all measured hours" dropdown, wrapped
     # so the two read as one unit (tighter internal gap than between lakes). Previously
@@ -656,6 +658,117 @@ self-learning loop; "raw (no local calib yet)" hours are uncalibrated. Residual 
 worst in thermal/föhn.</footer></body></html>"""
 
 
+def _measurements_data():
+    """Everything the measurements browser needs, from the COMMITTED diffs log — the same
+    rows learning and verification consume, so the page cannot show a different truth than
+    the pipeline used. Shape: {lake: {date: {"src": str, "rows": [[hr,meas,gust,dir,fc,err]]}}}"""
+    out = {}
+    for lake in ("ammersee", "kochelsee", "walchensee"):
+        p = os.path.join(wd.LOG_DIR, f"{lake}_diffs.jsonl")
+        if not os.path.exists(p):
+            continue
+        days = {}
+        for line in open(p):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                r = json.loads(line)
+            except Exception:
+                continue                      # a corrupt line must not blank the page
+            if r.get("actual_kn") is None:
+                continue
+            # Some early rows predate the source being recorded. Say so plainly rather
+            # than leaving the field blank, which would read as "no source needed".
+            d = days.setdefault(r["date"],
+                                {"src": r.get("source") or "source not recorded", "rows": []})
+            d["rows"].append([r["hour"],
+                              r.get("actual_kn"), r.get("actual_gust_kn"),
+                              r.get("dir_actual"), r.get("issued_kn"),
+                              r.get("err_issued_kn"), bool(r.get("leaked"))])
+        for d in days.values():
+            d["rows"].sort(key=lambda x: x[0])
+        if days:
+            out[lake] = days
+    return out
+
+
+def measurements_html(static=False):
+    """A browsable archive of MEASURED wind, one day at a time.
+
+    Static hosting, so the day picker is client-side: every day is embedded once and the
+    table is rebuilt in the browser. That keeps it to a single file that works on GitHub
+    Pages with no server, and the whole archive is a few hundred KB.
+
+    Each day names the SOURCE that produced it. That matters more than it looks: Ammersee's
+    truth has changed hands over this archive — the buoy until 2026-06-15, then a calibrated
+    shore estimate — and an error figure is not comparable across that boundary. The page
+    says which truth produced each day rather than presenting them as one series."""
+    data = _measurements_data()
+    lakes = [l for l in ("ammersee", "kochelsee", "walchensee") if l in data]
+    default_lake = lakes[0] if lakes else ""
+    payload = json.dumps(data, separators=(",", ":"))
+    opts = "".join(f'<option value="{l}">{html.escape(_lake_label(l))}</option>' for l in lakes)
+    return f"""<!doctype html><html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Measured wind archive</title><style>{_css()}
+.pick{{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:0 0 12px}}
+.pick select{{font:inherit;padding:5px 8px;border:1px solid var(--grid);
+ background:var(--plane);color:var(--ink);border-radius:6px}}
+.srcline{{font-size:12.5px;color:var(--ink2);margin:2px 0 10px}}
+.srcline b{{color:var(--ink)}}
+.leaked{{opacity:.55}}
+</style></head><body>
+<header><h1>Measured wind — archive</h1>
+<div class="sub">what was actually measured, hour by hour · generated {_generated()}</div></header>
+<main>
+<section class="card">
+  <div class="pick">
+    <label>Lake <select id="lake">{opts}</select></label>
+    <label>Day <select id="day"></select></label>
+    <span id="count" class="muted"></span>
+  </div>
+  <div id="src" class="srcline"></div>
+  <table id="tbl"><thead><tr><th>Hour</th><th>Dir</th><th>Measured</th><th>Gust</th>
+  <th>Forecast</th><th>&Delta; fc&minus;meas</th></tr></thead><tbody></tbody></table>
+  <p class="blurb" style="margin-top:10px">
+    &Delta; is forecast minus measured, so positive means the forecast was too strong.
+    Greyed rows had already elapsed when the forecast was issued, so they were recorded but
+    never learned from or scored.</p>
+</section>
+<p><a href="{_href('', static)}">&larr; back to the overview</a>
+{"".join(f' &nbsp;·&nbsp; <a href="{_href(k, static)}">{html.escape(GROUPS[k]["title"])}</a>' for k in GROUPS)}</p>
+</main>
+<script>
+const DATA = {payload};
+const lakeSel = document.getElementById('lake'), daySel = document.getElementById('day');
+function fillDays() {{
+  const days = Object.keys(DATA[lakeSel.value] || {{}}).sort().reverse();
+  daySel.innerHTML = days.map(d => `<option value="${{d}}">${{d}}</option>`).join('');
+  draw();
+}}
+function draw() {{
+  const day = (DATA[lakeSel.value] || {{}})[daySel.value];
+  const tb = document.querySelector('#tbl tbody');
+  document.getElementById('src').innerHTML = day
+    ? 'Measured by: <b>' + day.src.replace(/[<>&]/g, '') + '</b>' : '';
+  document.getElementById('count').textContent = day ? day.rows.length + ' hours' : 'no data';
+  tb.innerHTML = (day ? day.rows : []).map(r => {{
+    const [hr, meas, gust, dir, fc, err, leaked] = r;
+    const f = v => (v === null || v === undefined) ? '&middot;' : (+v).toFixed(1);
+    return `<tr class="${{leaked ? 'leaked' : ''}}"><td class="hr">${{String(hr).padStart(2,'0')}}</td>`
+      + `<td class="dir">${{dir === null || dir === undefined ? '&middot;' : Math.round(dir) + '&deg;'}}</td>`
+      + `<td class="wind">${{f(meas)}}</td><td class="gust">${{f(gust)}}</td>`
+      + `<td>${{f(fc)}}</td><td>${{err === null || err === undefined ? '&middot;' : (err > 0 ? '+' : '') + (+err).toFixed(1)}}</td></tr>`;
+  }}).join('');
+}}
+lakeSel.addEventListener('change', fillDays);
+daySel.addEventListener('change', draw);
+fillDays();
+</script>
+</body></html>"""
+
+
 def _selftest():
     """The overview heading must describe the records it sits above, never the clock."""
     assert _overview_date([{"date": "2026-08-05"}, {"date": "2026-08-05"}]) == "2026-08-05"
@@ -669,6 +782,28 @@ def _selftest():
         assert h.index("Forecast overview") < h.index('class="tiles"'), \
             "heading must come BEFORE the prediction overview"
     print(f"  PASS index heading: 'Forecast overview for {day}', placed above the tiles")
+
+    # --- measured archive page ---
+    data = _measurements_data()
+    m = measurements_html(static=True)
+    assert "const DATA = {" in m, "the day archive shipped with no data payload"
+    for lake in data:
+        assert f'value="{lake}"' in m, f"{lake} has measurements but no picker entry"
+    # every day must name the source that produced it: Ammersee's truth changed hands
+    # mid-archive (buoy -> calibrated shore estimate) and the two are not comparable
+    unsourced = 0
+    for lake, days in data.items():
+        for d, v in days.items():
+            assert v.get("src"), f"{lake} {d} would render with a blank source field"
+            unsourced += v["src"] == "source not recorded"
+    # the forecast pages must actually link to it, or it is unreachable
+    for g in GROUPS:
+        assert "measurements" in report_html(g, static=True), \
+            f"{g} page does not link to the measured archive"
+    n = sum(len(v["rows"]) for days in data.values() for v in days.values())
+    print(f"  PASS measured archive: {len(data)} lake(s), "
+          f"{sum(len(d) for d in data.values())} days, {n} hours, "
+          f"{unsourced} day(s) predate source recording (shown as such, not hidden)")
     print("ALL SELF-TESTS PASSED")
 
 

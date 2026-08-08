@@ -22,7 +22,11 @@ def main():
     for group in render.GROUPS:
         with open(os.path.join(SITE, f"{group}.html"), "w") as f:
             f.write(render.report_html(group, static=True))
-    print("built site/:", ["index.html"] + [f"{g}.html" for g in render.GROUPS])
+    # browsable archive of what was actually MEASURED, one day at a time
+    with open(os.path.join(SITE, "measurements.html"), "w") as f:
+        f.write(render.measurements_html(static=True))
+    print("built site/:", ["index.html", "measurements.html"]
+          + [f"{g}.html" for g in render.GROUPS])
 
 
 if __name__ == "__main__":

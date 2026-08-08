@@ -3,10 +3,17 @@
 obs_calib.py — calibrate a FALLBACK observation source against the real on-lake truth.
 
 WHY: Ammersee's preferred actual is the on-lake Ammerseeboje, but it is offline (broken
-since 2026-06-15), so the pipeline falls back to DWD Wielenbach — a station ~11 km inland
-and sheltered. Measured over 11,774 overlapping hours it reads a mean 3.15 kn where the
-lake had 8.19 kn. Learning and grading Ammersee against that means training on a "truth"
-that is wrong by more than the forecast error we are trying to remove.
+since 2026-06-15), so the pipeline falls back to shore stations — DWD Wielenbach ~11 km
+inland, and BSV Herrsching on the east shore. Both are sheltered and read far low: over
+11,774 overlapping hours Wielenbach averaged 3.15 kn where the lake had 8.19. Learning and
+grading Ammersee against that raw means training on a "truth" that is wrong by more than
+the forecast error we are trying to remove.
+
+Both sources are calibrated here against the SAME target (the buoy archive) so their
+validations compare directly. Neither wins alone — on 1,273 held-out hours calibrated DWD
+scored MAE 2.788 kn and calibrated BSV 2.915 — but the MEAN OF THE TWO scored 2.639, and
+that blend is what winddata.measured_source publishes. Opposite shores, largely independent
+local noise, so averaging cancels some of it.
 
 WHAT: fit, per hour-of-day, a linear map  lake ~= a_h + b_h * station  from the paired
 history, and apply it whenever the fallback is used. Per hour matters because the gap is
