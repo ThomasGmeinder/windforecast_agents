@@ -152,7 +152,10 @@ def update_from_day(lake, date):
         err_issued = round(issued - act, 1)
         err_raw = round(raw - act, 1)
         derr = _dir_err(hp.get("dir"), actd)
-        # true regime from the MEASURED direction (terrain sector) + measured wind
+        # Direction-sector proxy from MEASURED direction + wind; not physical truth.
+        # Direction identifies a FLOW SECTOR, not a physical cause. S-SE can be foehn,
+        # ordinary gradient flow, or a nocturnal fall-wind. Preserve actual_regime for
+        # compatibility with old logs, but expose the honest name to new readers.
         areg = "calm" if act < 2 else (fc.terrain_regime(lake, actd) or "uncertain")
         rmatch = areg not in ("uncertain",) and areg == regime
         # An hour that had already elapsed when the forecast was issued is not a forecast:
@@ -162,7 +165,7 @@ def update_from_day(lake, date):
         # read this file — so the row is still written, flagged, and merely excluded from
         # training and from the day's accuracy aggregates.
         leaked = verify.is_leaked(date, hour, run_stamp)
-        diffs.append({"hour": hour, "regime": regime, "actual_regime": areg,
+        diffs.append({"hour": hour, "regime": regime, "actual_regime": areg, "observed_flow": areg,
                       "regime_match": rmatch, "issued_kn": issued, "raw_kn": raw,
                       "actual_kn": act, "err_issued_kn": err_issued, "err_raw_kn": err_raw,
                       "issued_gust_kn": hp.get("gust_kn"), "actual_gust_kn": actg,
@@ -246,10 +249,10 @@ def update_from_day(lake, date):
         explanation = (f"{'under' if under else 'over'}-predicted — forecast "
                        f"{d['issued_kn']} kn vs measured {d['actual_kn']} kn ({d['err_issued_kn']:+} kn)")
         lesson = (f"the model may {'underplay' if under else 'overplay'} the "
-                  f"'{d['regime']}' regime around {d['hour']:02d}:00 — one day is weak evidence")
+                  f"'{d['regime']}' scenario around {d['hour']:02d}:00 — one day is weak evidence")
         how = (f"the correction for ({d['regime']}×{d['hour']:02d}h) is a regression "
                f"corrected = {a_a:+.1f} + {b_a:.2f}·model — it **scales with** the model's own wind "
-               f"(so it can't double-count or blindly add a fixed amount), refined recursively over "
+               f"(rather than adding a fixed scenario bonus), refined recursively over "
                f"days ({n_after} obs; full weight after {fc.N_MIN_OBS})")
         large_misses.append({"hour": d["hour"], "regime": d["regime"], "issued_kn": d["issued_kn"],
                              "actual_kn": d["actual_kn"], "err_kn": d["err_issued_kn"],
@@ -399,10 +402,10 @@ def format_report(res):
           f"- Gust ratio (measured/model): {a['gust_ratio_day']}×" if a["gust_ratio_day"] is not None else "- Gust: n/a",
           "- By regime: " + "; ".join(f"{k} {v['mbe_kn']:+} kn ({v['n']}h)" for k, v in sorted(a["by_regime"].items()))]
     if a.get("regime_acc") is not None:
-        L += ["", "**2b. Regime validation** (predicted regime vs measured wind-direction sector)",
-              f"- Regime accuracy: **{a['regime_hits']}/{a['regime_n']} hours "
+        L += ["", "**2b. Scenario/flow-sector check** (forecast scenario vs measured direction sector; not physical-regime confirmation)",
+              f"- Scenario/sector agreement: **{a['regime_hits']}/{a['regime_n']} hours "
               f"({int(a['regime_acc']*100)}%)**",
-              "- Confusion (predicted→measured): " +
+              "- Cross-table (scenario→flow sector): " +
               ("; ".join(f"{k} ×{v}" for k, v in sorted(a["confusion"].items())) or "none")]
         mism = [d for d in res["diffs"] if not d.get("leaked") and d["actual_regime"] != "uncertain"
                 and not d["regime_match"]]
@@ -421,8 +424,9 @@ def format_report(res):
                  f"{u['a_before']:>+5.2f} -> {u['a_after']:>+5.2f}   | "
                  f"{u['b_before']:>4.2f} -> {u['b_after']:>4.2f}    | {u['n_after']}")
     L.append("```")
-    L.append(f"_The correction **scales with** the model (b·model) rather than adding a flat offset, "
-             f"so it neither double-counts nor over-adds. {res['buckets_total']} calibrated buckets._")
+    L.append(f"_The correction **scales with** the model (b·model) rather than adding a flat "
+             f"scenario bonus; the ±{fc.BIAS_CAP_KN:g} kn guard limits over-correction but cannot "
+             f"prove a physical cause. {res['buckets_total']} calibration buckets._")
     return "\n".join(L)
 
 

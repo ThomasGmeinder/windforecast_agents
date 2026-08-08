@@ -40,19 +40,23 @@ still wins — the page will say so.
 
 ---
 
-## Phase 1 — Adaptive Kalman regression  *(replace the additive fudge; correct for low data)*
-**Why:** the additive per-(regime×hour) offset with ~2-day memory doesn't scale with
-the forecast, doesn't weight drivers, and forgets trends. The literature's low-data
-method is an **adaptive Kalman-filtered regression**.
+## Phase 1 — Adaptive RLS/Kalman regression  *(implemented; refinement remains)*
+**Why:** a recursive linear calibration is appropriate for low data, but the current
+scenario×hour buckets remain fragmented and reach full application weight quickly.
 
-**Tasks**
-- `lib/postproc.py`: per-hour Kalman filter over regression state `(a_h, b_h)` so
+**Implemented**
+- `lib/postproc.py`: scenario×hour RLS/Kalman-style state `(a_h, b_h)` so
   `corrected = a_h + b_h · raw`; recursively updated each day, tunable process/observation
   noise (memory), capped.
-- Retire the additive-constant path in `learn.py` (keep the diff/large-miss reporting).
-- Wire through the Phase-0 harness: must beat raw ICON-D2 **and** persistence.
+- The additive-constant path is retired; diff/large-miss reporting remains.
 
-**Acceptance:** out-of-sample MAE/CRPS improvement over raw + persistence on the harness.
+**Remaining refinement**
+- Compare scenario×hour buckets with simpler hour-only and partially pooled models.
+- Base application weight on distinct days, predictor variation and covariance rather
+  than treating three observations as full support.
+- Require an out-of-sample win over the simpler calibration and persistence.
+
+**Acceptance:** out-of-sample MAE/CRPS improvement over simpler calibration + persistence.
 **Data prerequisite:** usable now (adaptive, short window).
 
 ---

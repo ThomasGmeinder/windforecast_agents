@@ -26,10 +26,11 @@ föhn they behave in opposite ways (see below). A sibling agent handles Ammersee
 Raw numerical-weather-prediction (NWP) wind is a *first guess, not truth*: the best
 freely-available high-res model here (ICON-D2, 2.2 km) sits right at the edge of
 resolving valley/thermal winds and systematically **under-plays** them, and handles
-föhn and thermals worst of all. So the engine classifies the **regime** each hour
-and corrects toward measured on-lake wind.
+föhn and thermals worst of all. The engine therefore assigns a rule-based forecast
+**scenario** each hour and corrects the model blend toward measured on-lake wind.
 
-Three regimes plus fall-winds, and telling them apart is the whole game:
+These physical patterns motivate the scenarios, but a scenario label is not proof that
+the physical cause occurred:
 
 | Regime | What it is | Effect on the two lakes |
 |---|---|---|
@@ -38,8 +39,10 @@ Three regimes plus fall-winds, and telling them apart is the whole game:
 | **Gradient** | frontal / pressure-driven flow | both lakes feel it; terrain still channels it |
 | **Non-föhn fall-winds** | cold-night N-slope drainage off Herzogstand/Heimgarten | up to ~8 Bft into the morning; must not be mislabelled föhn |
 
-**The single most important call** this agent makes is the föhn/thermal split,
-because it means *Kochelsee strong / Walchensee thermal dead* — opposite forecasts.
+Föhn is physically expected to make *Kochelsee strong / Walchensee thermal weak*. The
+current code does not impose that opposite response explicitly: lake-specific inputs and
+separately learned corrections must represent it. In existing replay tests, changing the
+scenario thresholds had little effect on mean-wind accuracy.
 
 ---
 
@@ -57,10 +60,9 @@ From the topographic map (Kochel am See district):
   (basis of the stability index in §4).
 - **Kesselberg** (B11) is the funnel between the lakes; **Jachenau** opens east.
 
-Because the surface wind is **channelled by terrain**, the raw model's free-flow
-direction is unreliable at the lake — real directions quantise into conduits. This
-sector map (direction the wind comes **from**, at Urfeld; confirmed locally) is the
-regime discriminator:
+Because the surface wind is **channelled by terrain**, measured direction is summarized
+with this flow-sector map. It is a post-event diagnostic, not an independent physical-
+regime observation: in particular S–SE flow may be föhn, gradient flow, or fall-wind.
 
 | Wind from | Conduit | Regime |
 |---|---|---|
@@ -77,23 +79,26 @@ weaker and its föhn comes over the pass more from the SW; to be calibrated).
 
 ## 3. Data sources and the role of each
 
-Sources are **tiered, not averaged** — one tier constrains/corrects the next.
+Forecast sources are blended; measurement sources are selected in a quality hierarchy.
 
 ### Forecast (the backbone) — an average of multiple predictions
 The forecast VALUE is the **equal-weight mean of several sources**, not one run:
 - **ICON-D2 ensemble** mean (20 members) + **ICON-D2 deterministic** + **ICON-EU** +
   the **addicted-sports spot forecast** (`winddata.addicted_forecast`, tuned to the
-  local thermal). ICON-D2 access: raw GRIB (`icon_d2_grib_point`, cached) or
-  Open-Meteo point. The ensemble **spread** sets the confidence band.
+  local thermal). The live pipeline uses Open-Meteo point/ensemble APIs. A raw-GRIB
+  reader exists for diagnostics but is not called by `build_table()`. The ensemble
+  **speed spread** sets the confidence band.
 
 ### Föhn diagnosis
 - **DWD MOSMIX** cross-Alpine **Δp = Bozen − München** (`foehn_delta_p`): ≥4 hPa
   noticeable, ≥8 hPa reaches the surface. Best föhn direction is **SE**; SW is flagged
   unreliable.
-- **Hohenpeißenberg nowcast** (`winddata.hohenpeissenberg_now`, DWD 02290): S/SE wind
-  there in the morning is the precondition — föhn is flagged *unconfirmed* until it shows.
+- **Hohenpeißenberg nowcast** (`winddata.hohenpeissenberg_now`, DWD 02290): a confidence
+  cross-check. It can mark a föhn-favourable scenario unconfirmed, but does not change the
+  scenario or wind speed.
 - **addicted-sports drivers** (`winddata.addicted_drivers`): `foehn_gradient_hpa`,
-  850 hPa wind, `lapse_2m_850`, radiation.
+  `lapse_2m_850`, and radiation are logged/displayed diagnostics, not regression
+  predictors. The active 850 hPa wind used by the scenario rule comes from ICON-D2.
 
 ### Measured "ground truth" (for bias correction + learning)
 - **On-lake Urfeld anemometer** via the reverse-engineered addicted-sports JSON
@@ -191,19 +196,21 @@ The forecast VALUE is the **equal-weight mean of several sources**, not one run:
 `build_table(lake, date)` produces the hourly table; both the automated 6 a.m. job
 and the LLM agent call it, so numbers never disagree. Per hour it:
 
-1. Pulls ICON-D2 (raw GRIB / Open-Meteo point) for the lake gridpoint.
+1. Pulls ICON-D2 from Open-Meteo for the lake gridpoint.
 2. Attaches augmentation features: MOSMIX Δp, addicted föhn drivers, and the Δθ
    stability index.
-3. **Classifies the regime** (`classify_regime`):
-   - **föhn** if Δp ≥ threshold **and** 850 hPa southerly (120–240°) **and** ≥ ~7 kn;
-   - **gradient** if 925 hPa flow ≥ ~12 kn;
-   - **thermal** if daytime + low cloud + weak gradient **and not** a cold pool —
+3. **Assigns a forecast scenario** (`classify_regime`, first matching rule):
+   - **föhn-favourable** if Δp ≥ threshold **and** 850 hPa southerly (120–240°) **and** ≥ ~7 kn;
+   - **strong-gradient** if 925 hPa flow ≥ ~12 kn;
+   - **thermal-favourable** if daytime + low cloud + weak gradient **and not** a cold pool —
      if Δθ ≥ `COLD_POOL_DTHETA` (1.5 K) and model wind is light it is downgraded to
      **"cold-pool capped"** calm;
    - else calm.
 4. **Applies the learned regression** `corrected = a + b·model` for that
-   (regime × hour-of-day) bucket (`apply_bias` → `postproc`), which **scales with**
-   the model so it can't double-count föhn; rows before calibration are flagged
+   (scenario × hour-of-day) bucket (`apply_bias` → `postproc`). Föhn indicators select
+   the bucket; they are not continuous regression predictors and the model does not
+   estimate how many knots föhn caused. Scaling avoids a fixed scenario bonus but cannot
+   guarantee that over-correction is impossible; rows before calibration are flagged
    "raw (no local calib yet)". The **mean** adjustment is bounded additively by
    `BIAS_CAP_KN` (±8 kn) — dimensionally right for an additive correction, and it binds on
    ~1 % of well-calibrated hours.
@@ -220,7 +227,7 @@ and the LLM agent call it, so numbers never disagree. Per hour it:
    pathological **raw** value with a blameless ratio — the worst on record is a 54.8 kn raw
    blend gust at Ammersee, a lake whose highest measured gust in 1,552 hours is 20.8 kn.
 6. **Confidence** from ensemble spread + calibration state; föhn capped at "med".
-7. **Withholds the direction** as `VAR` when ensemble spread crosses the same threshold
+7. **Withholds the direction** as `VAR` when ensemble *speed* spread crosses the same threshold
    `_confidence` uses for its "low" band. At the evening thermal reversal the wind passes
    through near-zero and the modelled bearing swings freely: on 2026-08-05 at 19:00
    Walchensee read 201° and Kochelsee 284° — 8 km apart, same model run, ~5 kn spread on a
@@ -228,9 +235,10 @@ and the LLM agent call it, so numbers never disagree. Per hour it:
    the text table, the HTML and the headline cannot disagree.
 8. Surfaces the drivers in the table Note column (`Δθ±x.x`, `fg±x.x`).
 
-Regime thresholds (`FOEHN_DP_*`, `FOEHN_850_KN`, `GRADIENT_925_KN`,
-`THERMAL_CLOUD_MAX`, `SW_SECTOR`, `COLD_POOL_DTHETA`) start from published
-(Swiss-calibrated) values and are recalibrated over time by the learning loop.
+Scenario thresholds (`FOEHN_DP_*`, `FOEHN_850_KN`, `GRADIENT_925_KN`,
+`THERMAL_CLOUD_MAX`, `COLD_POOL_DTHETA`) start from published/provisional values. Daily
+learning does not change them; the optional tuner may propose bounded changes that must
+pass a paired walk-forward MAE gate. `SW_SECTOR` is fixed, not tuner-writable.
 
 Output is knots with Beaufort in brackets, e.g. `9.2 (3)`, and gusts in knots.
 
@@ -246,24 +254,22 @@ Every morning, **before** the new forecast, for each lake:
    human-readable report `logs/learning/<lake>_<date>.md`.
 3. **Explains** — an accuracy summary (MAE issued vs raw, signed bias, per-regime,
    direction error, gust ratio), plus auto-derived plain-language **lessons**.
-4. **Regime validation** — classifies the *true* regime of each measured hour from
-   its **measured direction** (terrain sector) + wind, and reports predicted-vs-
-   measured **regime accuracy + confusion matrix**, flagging the föhn/thermal
-   **anti-correlation** when it is missed.
+4. **Flow-sector check** — maps measured direction into a terrain sector and compares it
+   with the forecast scenario. This does not confirm a physical regime and cannot by
+   itself distinguish föhn from drainage/fall-wind.
 5. **Updates the mechanism** — a **recursive-least-squares regression**
-   `corrected = a + b·model` per (regime × hour-of-day) (`postproc`), with a prior
+   `corrected = a + b·model` per (scenario × hour-of-day) (`postproc`), with a prior
    of (a=0, b=1) = "trust the model", a forgetting factor, and a cap; plus a gust
    factor. The report shows the exact **a/b before → after** for every bucket.
 
-The regression **scales with** the model (so it neither double-counts föhn nor blindly
-adds a fixed offset), converges to the systematic bias, and is evidence-gated (one day
+The regression **scales with** the model rather than adding a fixed scenario bonus,
+converges toward systematic bias, and is evidence-ramped (one day
 barely moves the applied correction). Idempotent: each date is learned once per lake. The
 forecast reads the just-updated model in the same run, so today benefits
 immediately.
 
-**Bias buckets are keyed by the *forecast* regime** (so the correction that gets
-applied matches how the forecast is made); the regime-validation section separately
-tells us how often the regime *call itself* was right.
+**Bias buckets are keyed by the forecast scenario.** The direction-sector section is a
+diagnostic comparison, not a statement that the physical cause was observed.
 
 ---
 
@@ -290,7 +296,7 @@ morning the logged forecasts are scored out of sample against the measured wind:
   strictly earlier data, and the archive climatology **refuses** any date inside its own
   coverage window.
 - **Skill score** `SS = 1 − CRPS/CRPS_baseline`; `SS > 0` means we beat that baseline.
-  Reported overall, per regime and per hour.
+  Reported overall, per forecast scenario and per hour.
 - **Lead time**: hours that had already elapsed when the forecast was issued are not
   scored or learned from — a 05:00 run does not "predict" 00:00–04:00. The forecast *of
   record* for a date is the EARLIEST one logged, so a better-informed same-day re-run
@@ -311,7 +317,7 @@ and gated. One call (`tuner.run`) performs a full cycle:
 
 **Input it perceives** (previously: yesterday's errors only)
 - a **multi-day error window** (14 days of per-hour forecast-vs-measured errors);
-- the **learned regression state** (per-`regime×hour` `a`, `b`, `n`), so it reasons about
+- the **learned regression state** (per-`scenario×hour` `a`, `b`, `n`), so it reasons about
   the *residual* the linear correction cannot absorb;
 - the **CRPS scorecard** and current tunable parameters with their legal bounds;
 - **its own past proposals**, each with the measured CRPS *before* vs *after* it was
@@ -329,7 +335,7 @@ and gated. One call (`tuner.run`) performs a full cycle:
 **What happens to a proposal (the gate).** Nothing is applied on the model's say-so.
 Each proposal must pass, in order: the parameter is one of the six known tunables → the
 value is numeric and inside `PARAM_BOUNDS` → the step is ≤ 25 % of the current value →
-and then a **backtest**: every replayable logged day is re-run under the candidate value
+and then a **paired MAE backtest**: every replayable logged day is re-run under the candidate value
 (`verify.backtest`, sharing `forecast.replay_hour` with production so a backtest can
 never drift from the real path) and it is applied only if the improvement is **statistically significant**: the
 per-hour errors of the two arms are compared **pairwise** (same hours, so the weather
@@ -339,7 +345,9 @@ must put the entire 95 % confidence interval below zero, with a mean gain of at 
 `N_MIN_BACKTEST_PAIRS` (60) scored hours. A merely positive point estimate is not
 evidence and is refused. A change that passes is written to `config/params_<lake>.json` — per-lake, because
 it was only ever verified against that one lake's history — and logged as a `param_change` event with its
-evidence. Anything else is refused, with the reason recorded.
+evidence. Before activation, calibration is rebuilt from replayable history under the new
+scenario labels so production does not cold-start. Anything else is refused, with the
+reason recorded.
 
 **Measured leverage (`docs/LEVERAGE.md`).** Replaying real history shows the six tunable
 thresholds are worth **<0.5 % of MAE with confidence intervals straddling zero**, even in
@@ -556,8 +564,8 @@ caveats.
   smooths absolute values; `COLD_POOL_DTHETA` is a provisional pivot for the
   learning loop to recalibrate. The model also flattens the true summit (Herzogstand
   1731 m → ~1456 m grid cell).
-- **`foehn_gradient_hpa` is logged and displayed but not yet a hard regime trigger**
-  (MOSMIX Δp remains primary) until the learning calibrates it.
+- **`foehn_gradient_hpa` is logged and displayed but is not an active predictor.** MOSMIX
+  Δp and ICON-D2 850 hPa wind drive the current föhn-favourable rule.
 - **Kochelsee actuals**: the on-lake `kochelsee/trimini` feed provides genuine measured
   wind (`mavg`/`mmax`/`dir`) and is used as truth; DWD Garmisch (a distant valley proxy)
   is only a fallback if that feed is unavailable. Walchensee/Urfeld is on-lake truth too.

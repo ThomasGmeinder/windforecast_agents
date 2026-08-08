@@ -357,8 +357,8 @@ def addicted_forecast(spot, yyyy_mm_dd):
 
 
 def hohenpeissenberg_now():
-    """Latest Hohenpeißenberg (DWD 02290) 10-min wind — the classic föhn nowcast: S/SE
-    wind here in the morning is the precondition for Kochelsee/Walchensee föhn.
+    """Latest Hohenpeißenberg (DWD 02290) 10-min wind — a föhn confidence cross-check.
+    S/SE wind here supports, but does not determine, the forecast scenario.
     Returns {'time','dir','kn','southerly'} or None."""
     base = "https://opendata.dwd.de/climate_environment/CDC/observations_germany/climate/10_minutes/wind/now/"
     try:

@@ -406,12 +406,61 @@ def _walk_forward(lake, params, forecasts, actuals, dates):
     return errs
 
 
+def rebuild_bias(lake, params, forecasts=None, actual_rows=None):
+    """Fit production calibration under ``params`` from replayable history.
+
+    A threshold change alters which scenario/hour bucket receives each observation.
+    Build that replacement state *before* activation so production gets the mature state
+    evaluated by the walk-forward gate instead of an empty cold start.
+    """
+    forecasts = _load_forecasts(lake) if forecasts is None else forecasts
+    if actual_rows is None:
+        actual_rows = {}
+        path = os.path.join(wd.LOG_DIR, f"{lake}_diffs.jsonl")
+        if os.path.exists(path):
+            for line in open(path):
+                try:
+                    row = json.loads(line)
+                except Exception:
+                    continue
+                if row.get("actual_kn") is not None:
+                    actual_rows.setdefault(row["date"], {})[row["hour"]] = row
+
+    bias = {"alpha": 0.3, "buckets": {}, "processed_dates": []}
+    for date in sorted(forecasts):
+        day_rows = actual_rows.get(date, {})
+        # Tests and callers may provide the verifier's compact {hour: speed} form.
+        speeds = {h: (v.get("actual_kn") if isinstance(v, dict) else v)
+                  for h, v in day_rows.items()}
+        used = False
+        for hour, hrec in sorted(forecasts[date].items()):
+            if not _replayable(date, hour, hrec, {date: speeds}):
+                continue
+            obs = day_rows[hour]
+            measured = obs.get("actual_kn") if isinstance(obs, dict) else obs
+            measured_gust = obs.get("actual_gust_kn") if isinstance(obs, dict) else None
+            raw = hrec["raw_kn"]
+            raw_gust = hrec.get("raw_gust_kn") or raw
+            scenario = fc.classify_regime(
+                lake, hour, fc.row_from_logged(hrec), hrec.get("dp"),
+                {"dtheta": hrec.get("dtheta")}, params)
+            state = bias["buckets"].setdefault(fc._bucket_key(scenario, hour),
+                                                postproc.new_state())
+            postproc.update(state, raw, measured)
+            postproc.update_gust(state, raw_gust, measured_gust)
+            used = True
+        if used:
+            bias["processed_dates"].append(date)
+    bias["processed_dates"] = bias["processed_dates"][-400:]
+    return bias
+
+
 def backtest(lake, param, value, forecasts=None, actuals=None, params=None, bias=None):
-    """Walk-forward replay of every replayable logged day under `param=value`, versus the
+    """Walk-forward MAE replay of every replayable logged day under `param=value`, versus the
     same days under the CURRENT parameters.
 
-    Returns {"crps_current","crps_candidate","crps_ss","n_days","n_pairs","enough_data"}.
-    crps_ss > 0 means the candidate genuinely reduced OUT-OF-SAMPLE error: each arm refits
+    Returns {"mae_current","mae_candidate","mae_skill","n_days","n_pairs","enough_data"}.
+    mae_skill > 0 means the candidate genuinely reduced OUT-OF-SAMPLE error: each arm refits
     its own bias model day by day (see _walk_forward), so the comparison isolates the
     parameter instead of rewarding whichever arm inherited better-calibrated buckets.
     Hours that lack captured `inputs`, or that had already elapsed at issue time, are not
@@ -433,7 +482,7 @@ def backtest(lake, param, value, forecasts=None, actuals=None, params=None, bias
     cur = _walk_forward(lake, base, forecasts, actuals, dates)
     alt = _walk_forward(lake, cand, forecasts, actuals, dates)
     if not cur:
-        return {"crps_current": None, "crps_candidate": None, "crps_ss": None,
+        return {"mae_current": None, "mae_candidate": None, "mae_skill": None,
                 "n_days": 0, "n_pairs": 0, "enough_data": False,
                 "delta_kn": None, "ci_lo": None, "ci_hi": None, "significant": False}
     c0 = sum(e for _, e in cur) / len(cur)
@@ -451,8 +500,8 @@ def backtest(lake, param, value, forecasts=None, actuals=None, params=None, bias
     # significant only if the WHOLE interval sits below zero, and the effect is big
     # enough to be worth acting on rather than merely non-zero
     sig = (hi is not None and hi < 0 and delta <= -MIN_EFFECT_KN)
-    return {"crps_current": round(c0, 3), "crps_candidate": round(c1, 3),
-            "crps_ss": (round(1 - c1 / c0, 4) if c0 else None),
+    return {"mae_current": round(c0, 3), "mae_candidate": round(c1, 3),
+            "mae_skill": (round(1 - c1 / c0, 4) if c0 else None),
             "n_days": n_days, "n_pairs": len(cur),
             "enough_data": n_days >= N_MIN_BACKTEST_DAYS and len(cur) >= N_MIN_BACKTEST_PAIRS,
             "delta_kn": round(delta, 4),
@@ -602,8 +651,8 @@ def _selftest_backtest():
     # one bucket. A sound backtest must punish that.
     f2, a2 = _synthetic_days([(15.0, 30, 2.0), (3.0, 30, 1.0)])
     bad = backtest("walchensee", "GRADIENT_925_KN", 18, f2, a2, base)
-    assert good["crps_ss"] is not None and good["crps_ss"] > 0, good
-    assert bad["crps_ss"] is not None and bad["crps_ss"] < 0, bad
+    assert good["mae_skill"] is not None and good["mae_skill"] > 0, good
+    assert bad["mae_skill"] is not None and bad["mae_skill"] < 0, bad
     assert good["enough_data"] and good["n_days"] == 16, good
     # thin history must be reported as insufficient, never silently accepted
     thin_f = {k: f1[k] for k in sorted(f1)[:3]}
@@ -616,7 +665,7 @@ def _selftest_backtest():
     empty = backtest("walchensee", "THERMAL_CLOUD_MAX", 38, noinp, a1, base)
     assert empty["n_pairs"] == 0 and not empty["enough_data"], empty
     # A NOISE-LEVEL improvement must be REFUSED. Before the significance test, any
-    # crps_ss > 0 was accepted, so a coin-flip difference could reach production.
+    # mae_skill > 0 was accepted, so a coin-flip difference could reach production.
     import random as _r
     rnd = _r.Random(7)
     f3, a3 = _synthetic_days([(3.0, 30, 1.0)], n_days=20)
@@ -632,6 +681,8 @@ def _selftest_backtest():
               for d, hh in f1.items()}
     lk = backtest("walchensee", "THERMAL_CLOUD_MAX", 38, leaked, a1, base)
     assert lk["n_pairs"] == 0, lk
+    rebuilt = rebuild_bias("walchensee", {**base, "THERMAL_CLOUD_MAX": 38}, f1, a1)
+    assert rebuilt["buckets"] and len(rebuilt["processed_dates"]) == 16, rebuilt
     return good, bad, thin
 
 
@@ -717,7 +768,7 @@ if __name__ == "__main__":
         gd, bd, th = _selftest_backtest()
         print(f"D. backtest gate .............. PASS  "
               f"(real effect Δ{gd['delta_kn']:+.2f} kn CI[{gd['ci_lo']},{gd['ci_hi']}] "
-              f"significant={gd['significant']}; harmful SS {bd['crps_ss']:+.2f}; "
+              f"significant={gd['significant']}; harmful MAE skill {bd['mae_skill']:+.2f}; "
               f"noise correctly rejected; thin history "
               f"'{'insufficient' if not th['enough_data'] else 'ENOUGH?!'}')")
         n_checked = _selftest_realdata()

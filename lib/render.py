@@ -7,7 +7,7 @@ Three views (all offline; read only the latest logs, no network):
   report_html(group)      one report page per lake group, with a methodology section
 Groups: 'kochel-walchensee' (the coupled Alpine-rim pair) and 'ammersee'.
 
-Colors follow the dataviz method (regime = CVD-checked categorical badges,
+Colors follow the dataviz method (scenario = CVD-checked categorical badges,
 mean wind = validated blue sequential ramp, confidence = text ink).
 """
 import os, sys, json, glob, html, datetime
@@ -95,6 +95,17 @@ def _lake_label(lake):
     return (rec or {}).get("label", lake.title())
 
 
+def _scenario_label(value):
+    return {"foehn": "föhn-favourable", "thermal": "thermal-favourable",
+            "gradient": "strong-gradient", "calm": "calm/capped"}.get(value, value or "—")
+
+
+def _flow_label(value):
+    return {"foehn": "S–SE flow", "thermal": "N–NE flow",
+            "gradient": "gradient-sector flow", "calm": "calm",
+            "uncertain": "uncertain"}.get(value, value or "uncertain")
+
+
 def _measured_rows(lake):
     """Most-recent measured day from the diffs log: (date, source, sorted rows)."""
     p = os.path.join(wd.LOG_DIR, f"{lake}_diffs.jsonl")
@@ -134,10 +145,10 @@ def _bigdiff_card(lake):
             f'<td class="gust" style="{_wind_cell_style(r.get("actual_kn") or 0)}">'
             f'{(r.get("actual_kn") or 0):{fc.KN_FMT}}</td>'
             f'<td class="wind" style="{_wind_cell_style(abs(r["err_issued_kn"]))}">{r["err_issued_kn"]:+.1f}</td>'
-            f'<td><span class="badge {r.get("actual_regime","calm")}">{r.get("actual_regime","")}</span></td></tr>'
+            f'<td><span class="badge {r.get("observed_flow", r.get("actual_regime", "calm"))}">{html.escape(_flow_label(r.get("observed_flow", r.get("actual_regime", ""))))}</span></td></tr>'
             for r in big)
         inner = (f'<table><thead><tr><th>h</th><th>forecast</th><th>measured</th>'
-                 f'<th>Δ = fc−meas</th><th>measured regime</th></tr></thead><tbody>{trs}</tbody></table>')
+                 f'<th>Δ = fc−meas</th><th>observed flow</th></tr></thead><tbody>{trs}</tbody></table>')
     return (f'<section class="card"><h2>{label} '
             f'<span class="chip meas">|Δ| &gt; {thr:g} kn · {date}</span></h2>'
             f'<p class="summary">Hours where the forecast missed the measured wind by more than '
@@ -153,8 +164,8 @@ def _measured_card(lake):
     trs = []
     for r in rows:
         kn = r.get("actual_kn") or 0
-        reg = r.get("actual_regime", "")
-        badge = (f'<span class="badge {reg}">{reg}</span>'
+        reg = r.get("observed_flow", r.get("actual_regime", ""))
+        badge = (f'<span class="badge {reg}">{html.escape(_flow_label(reg))}</span>'
                  if reg and reg != "uncertain" else '<span class="muted">—</span>')
         err = r.get("err_issued_kn")
         note = f'{err:+.1f}' if err is not None else ''
@@ -169,10 +180,9 @@ def _measured_card(lake):
     return f"""
     <section class="card measured">
       <details><summary>{label} — all measured hours · {date}</summary>
-      <p class="summary">Observed wind from {html.escape(src)}. Regime inferred from the measured
-       direction; "vs fc" = that day's forecast − measured (kn), same sign convention as the big-miss table. Daylight hours where a station reported.</p>
+      <p class="summary">Observed wind from {html.escape(src)}. Flow sector inferred from measured direction; it does not confirm the physical cause; "vs fc" = that day's forecast − measured (kn), same sign convention as the big-miss table. Daylight hours where a station reported.</p>
       <table><thead><tr><th>h</th><th>dir</th><th>mean kn (Bft)</th><th>gust</th>
-        <th>regime</th><th>vs&nbsp;fc</th></tr></thead><tbody>{''.join(trs)}</tbody></table>
+        <th>observed flow</th><th>vs&nbsp;fc</th></tr></thead><tbody>{''.join(trs)}</tbody></table>
       </details>
     </section>"""
 
@@ -209,7 +219,8 @@ def _forecast_card(rec):
             f'<span class="bft">{fc.beaufort(kn)}</span></td>'
             f'<td class="gust" style="{_wind_cell_style(r.get("gust_kn") or 0)}">'
             f'{(r.get("gust_kn") or 0):{fc.KN_FMT}}</td>'
-            f'<td><span class="badge {reg}">{reg}</span></td>'
+            f'<td><span class="badge {reg}">{html.escape(_scenario_label(reg))}</span></td>'
+            f'<td class="note">{"not recorded" if "calib_n" not in r else ("raw" if not r.get("calib_n") else "n=" + str(r.get("calib_n")))}</td>'
             f'<td class="conf c-{r.get("conf","med")}">{r.get("conf","")}</td>'
             f'<td class="note">{html.escape(" ".join(note))}</td></tr>')
     date = rec.get("date", "")
@@ -219,7 +230,7 @@ def _forecast_card(rec):
       <p class="summary">{summ}</p>
       <table>
         <thead><tr><th>h</th><th>dir</th><th>mean kn (Bft)</th><th>gust</th>
-          <th>regime</th><th>conf</th><th>note</th></tr></thead>
+          <th>scenario</th><th>support</th><th>conf</th><th>note</th></tr></thead>
         <tbody>{''.join(rows)}</tbody>
       </table>
     </section>"""
@@ -258,9 +269,9 @@ def _analyst_block(lake):
     n_app = len(r.get("applied", []))
     nmin = verify.N_MIN_BACKTEST_DAYS
     foot = (f"A change is applied only if replaying past days under it measurably lowers "
-            f"CRPS on at least {nmin} replayable days; otherwise it stays a logged proposal."
+            f"mean absolute error on at least {nmin} replayable days; otherwise it stays a logged proposal."
             if n_app else
-            f"Nothing was applied: every proposal must first lower CRPS on at least {nmin} "
+            f"Nothing was applied: every proposal must first lower mean absolute error on at least {nmin} "
             f"replayable days of backtest. Until that history accrues, proposals are "
             f"recorded and reviewed but the forecaster is left unchanged.")
     return (f'<div class="analyst"><b>🧠 Self-tuning loop · {esc(d.get("date", ""))}:</b> '
@@ -315,7 +326,10 @@ def _learning_section(lakes):
     if not blocks:
         blocks = ['<p class="muted">No learning reports yet — the first appears once the '
                   'morning run has a prior day to compare against.</p>']
-    return ('<section class="card"><h2>Self-learning (yesterday vs measured)</h2>'
+    caveat = ('<p class="muted">Scenario names in archived automated reports may use the '
+              'older “regime” wording. They describe rule-selected buckets or measured '
+              'direction sectors, not confirmed physical causes.</p>')
+    return ('<section class="card"><h2>Self-learning (yesterday vs measured)</h2>' + caveat
             + "".join(blocks) + "</section>")
 
 
@@ -336,21 +350,15 @@ def _methodology(group, static=False):
         return f"""
     <section class="card method">
       <h2>How it's predicted</h2>
-      <p>Kochelsee and Walchensee share one wind system but are reported separately: under
-      <b>south föhn</b> the Kesselberg fall-wind makes <b>Kochelsee strong</b> while it kills the
-      <b>Walchensee NE thermal</b> — getting that split right is the job.</p>
+      <p>Kochelsee and Walchensee share one wind system but are reported separately. South föhn is physically expected to strengthen Kochelsee and suppress Walchensee’s NE thermal; the current system does not impose that response explicitly, but relies on lake-specific model inputs and learned corrections.</p>
       <h3>Prediction algorithm (per hour)</h3>
       <ol>
         <li><b>Blend the models.</b> Value = mean of ICON-D2 ensemble + ICON-D2 deterministic +
             ICON-EU + addicted-sports' spot forecast; ensemble spread → confidence.</li>
-        <li><b>Diagnose drivers.</b> Cross-Alpine Δp (Bozen−München), 850 hPa wind, föhn-gradient,
-            radiation, and the Kochel−Walchensee <b>Δθ</b> stability index.</li>
-        <li><b>Classify the regime</b> — terrain then fixes direction (N–NE thermal · S–SE föhn ·
-            W–NW gradient): <b>föhn</b> (Δp ≥ {P['FOEHN_DP_RIM']} hPa + SE–S 850 wind; confirmed by morning S/SE at
-            Hohenpeißenberg) → <b>gradient</b> (925 hPa ≥ {P['GRADIENT_925_KN']} kn) → <b>thermal</b> (sun + weak gradient
-            + no cold pool, Δθ &lt; {P['COLD_POOL_DTHETA']} K) → <b>calm</b>.</li>
+        <li><b>Read indicators.</b> Cross-Alpine Δp and 850 hPa wind actively select the föhn-favourable scenario. Cloud, 925 hPa wind and Δθ affect other scenarios. Föhn-gradient, lapse rate and radiation are displayed diagnostics, not regression predictors.</li>
+        <li><b>Assign a forecast scenario.</b> First matching rule: <b>föhn-favourable</b> (Δp ≥ {P['FOEHN_DP_RIM']} hPa plus southerly 850 hPa wind) → <b>strong-gradient</b> (925 hPa ≥ {P['GRADIENT_925_KN']} kn) → <b>thermal-favourable</b> (daytime, limited cloud and no capped cold pool) → <b>calm/capped</b>. This selects a local correction; it does not confirm the physical cause or alter forecast direction.</li>
         <li><b>Correct.</b> A learned regression <b>corrected = a + b·model</b> that scales with the
-            model (no föhn double-count), evidence-gated, bounded by ±{fc.BIAS_CAP_KN:g} kn.</li>
+            model rather than adding a fixed scenario bonus, evidence-gated, bounded by ±{fc.BIAS_CAP_KN:g} kn.</li>
         <li><b>Guard the gust.</b> The gust correction is a multiplier, so an additive bound is the
             wrong tool for it: a learned ratio outside {postproc.GUST_RATIO_LO}–{postproc.GUST_RATIO_HI}
             is <b>refused</b> and the raw model gust published instead, and the published gust is
@@ -361,12 +369,10 @@ def _methodology(group, static=False):
             near-zero and the modelled bearing swings freely — these two lakes read 201° and 284°
             for the same hour on 2026-08-05, 8 km apart, and both settled to ~172° by 21:00.</li>
       </ol>
-      <p class="muted"><b>Föhn caveat:</b> its strength/timing isn't reliably predictable (often blows
-      only till ~09:00); flagged "unconfirmed" until Hohenpeißenberg shows S/SE.</p>
+      <p class="muted"><b>Föhn caveat:</b> “föhn-favourable” means forecast pressure and upper-air thresholds were crossed. Hohenpeißenberg is a confidence cross-check, not a classification condition; measured S–SE flow alone cannot distinguish föhn from drainage or fall-wind.</p>
       <h3>How it learns</h3>
       <p>Each morning it compares yesterday's forecast to the measured wind (on-lake Urfeld for
-      Walchensee, on-lake Trimini for Kochelsee), updates the per-(regime×hour) regression, and
-      validates the regime against the measured direction. Until history builds, hours read
+      Walchensee, on-lake Trimini for Kochelsee), updates the per-(scenario×hour) regression. Measured direction is shown separately as a flow-sector check, not physical-regime validation. Until history builds, hours read
       "raw (no local calib yet)".</p>
       <h3>How it's checked, and how it tunes itself</h3>
       <p>Every run is scored out of sample with <b>CRPS</b> (knots, lower better — the
@@ -375,7 +381,7 @@ def _methodology(group, static=False):
       <b>persistence</b> and <b>climatology</b>. On top of that an LLM tuner reviews
       <i>its own</i> earlier proposals against the measured CRPS, confirms or retracts each, and may
       propose small threshold changes — but a change is only written to the forecaster if replaying
-      past days under it measurably lowers CRPS on at least {nmin} replayable days. Until that
+      past days under it measurably lowers mean absolute error on at least {nmin} replayable days. Until that
       history exists, proposals are recorded and shown, and nothing is applied.</p>
     </section>"""
     return f"""
@@ -387,9 +393,7 @@ def _methodology(group, static=False):
       <ol>
         <li><b>Blend the models.</b> Value = mean of ICON-D2 ensemble + ICON-D2 deterministic +
             ICON-EU at the Herrsching point; ensemble spread → confidence.</li>
-        <li><b>Classify the regime:</b> <b>gradient</b> (strong 925/850 hPa flow) → <b>thermal</b>
-            (sunny, weak-gradient afternoons) → <b>föhn</b> (only on strong Δp + southerly 850, rare)
-            → <b>calm</b>.</li>
+        <li><b>Assign a forecast scenario:</b> <b>föhn-favourable</b> (strong Δp plus southerly 850 hPa wind, rare) → <b>strong-gradient</b> (strong 925 hPa flow) → <b>thermal-favourable</b> (daytime with limited cloud) → <b>calm/capped</b>. The scenario selects a local correction; it is not a confirmed physical regime.</li>
         <li><b>Correct.</b> A learned regression <b>corrected = a + b·model</b> (scales with the
             model), evidence-gated, and bounded by ±{fc.BIAS_CAP_KN:g} kn.</li>
         <li><b>Guard the gust.</b> The gust correction is a multiplier, so it gets different
@@ -405,12 +409,11 @@ def _methodology(group, static=False):
       <h3>How it's checked, and how it tunes itself</h3>
       <p>Every run is scored out of sample with <b>CRPS</b> (knots, lower better — the probabilistic
       version of mean absolute error) against <b>persistence</b> and <b>climatology</b> baselines. An
-      LLM tuner reviews its own earlier proposals against the measured CRPS and may suggest small
-      threshold changes, but a change reaches the forecaster only if a backtest over at least
-      {nmin} replayable days shows it lowers CRPS.</p>
+      LLM tuner reviews its earlier proposals against subsequent forecast scores and may suggest small
+      threshold changes, but a change reaches the forecaster only if a backtest over at least {nmin} replayable days shows it lowers mean absolute error.</p>
       <h3>How it learns</h3>
       <p>Each morning it compares yesterday's forecast to the measured wind and updates the
-      per-(regime×hour) regression before today's forecast.</p>
+      per-(scenario×hour) regression before today's forecast.</p>
       <h3>Which truth it learned from</h3>
       <p>This matters more than it sounds: Ammersee's measured truth has <b>changed hands</b>
       — the on-water buoy until 15.06.2026, a calibrated shore blend since — and an error figure
@@ -424,14 +427,13 @@ def _methodology(group, static=False):
 def _data_sources(group):
     common = ("All sources are fetched server-side with Python <code>urllib</code> and the system "
               "CA bundle, which validates through the corporate Zscaler TLS-intercepting proxy. "
-              "ICON-D2 GRIB is decoded locally with <code>cfgrib</code>/<code>eccodes</code> in the "
-              "project venv and cached; DWD Open Data keeps only a ~24 h rolling window, so files are "
-              "archived on fetch (DWD data © Deutscher Wetterdienst, CC BY 4.0).")
+              "The live forecast uses Open-Meteo point and ensemble APIs. A separate raw-GRIB "
+              "reader exists for diagnostics/backups but is not called by the daily pipeline "
+              "(DWD data © Deutscher Wetterdienst, CC BY 4.0).")
     if group == "kochel-walchensee":
         pred = [
             ("ICON-D2", "forecast backbone (2.2 km, hourly, 48 h, 8 runs/day)",
-             "raw GRIB2 (bz2) from <code>opendata.dwd.de/weather/nwp/icon-d2/grib/</code>, decoded &amp; "
-             "cached; plus the same model as a point from Open-Meteo "
+             "Open-Meteo point forecast "
              "<code>api.open-meteo.com/v1/forecast?…&amp;models=icon_d2</code> (incl. 850/925 hPa)"),
             ("ICON-D2 ensemble", "confidence (20 members → P10/P50/P90); its gust members also "
              "set the ceiling a corrected gust may not exceed",
@@ -445,7 +447,8 @@ def _data_sources(group):
              "the <code>avg</code>/<code>boe</code> series, per lake: "
              "<code>…/forecast/walchensee/urfeld/?json=wind&amp;from=DATE</code> for Walchensee, "
              "<code>…/forecast/kochelsee/trimini/?json=wind&amp;from=DATE</code> for Kochelsee"),
-            ("addicted-sports drivers", "föhn/thermal cause (foehn gradient, 850 hPa, lapse, radiation)",
+            ("addicted-sports drivers", "displayed diagnostics (föhn gradient, lapse, radiation); "
+             "not regression predictors",
              "the <code>drivers</code> block of the same per-lake feed "
              "(<code>…/walchensee/urfeld/…</code> for Walchensee, "
              "<code>…/kochelsee/trimini/…</code> for Kochelsee)"),
@@ -466,8 +469,7 @@ def _data_sources(group):
     else:
         pred = [
             ("ICON-D2", "forecast backbone (2.2 km, hourly, 48 h)",
-             "raw GRIB2 from <code>opendata.dwd.de/weather/nwp/icon-d2/grib/</code> (decoded &amp; cached) "
-             "+ Open-Meteo point <code>…?models=icon_d2</code>"),
+             "Open-Meteo point <code>…?models=icon_d2</code>"),
             ("ICON-EU", "independent cross-check + horizon beyond 48 h",
              "Open-Meteo <code>api.open-meteo.com/v1/forecast?…&amp;models=icon_eu</code>"),
             ("ICON-D2 ensemble", "confidence (20 members)",
@@ -615,8 +617,8 @@ def _legend():
       <span class="tsend">{cmax}+ strong</span>
     </div>
   </div>
-  <div class="reghint"><b>Regime</b> — which wind dominates that hour:
-    <b>thermal</b> sun-driven lake/valley breeze · <b>föhn</b> warm, gusty south fall-wind ·
+  <div class="reghint"><b>Scenario</b> — a rule-based weather pattern that selects the local correction; it is not a confirmed physical regime:
+    <b>thermal-favourable</b> sun-driven lake/valley breeze · <b>föhn-favourable</b> warm, gusty south fall-wind ·
     <b>gradient</b> frontal / pressure-driven flow · <b>calm</b> little or no wind.</div>"""
 
 
@@ -854,6 +856,10 @@ def _selftest():
                 (f"{fc.GUST_ENS_CEIL_MULT:g}×", "the ensemble gust ceiling multiplier"),
                 ("VAR", "the withheld-direction marker")):
             assert token in page, f"{g} page never mentions {why} ({token})"
+        for stale in ("measured regime", "terrain then fixes direction", "lowers CRPS"):
+            assert stale not in page, f"stale methodology claim on {g}: {stale!r}"
+        assert "scenario" in page.lower(), f"{g} page does not explain forecast scenarios"
+        assert "physical cause" in page.lower(), f"{g} page omits scenario-causality caveat"
     amm = report_html("ammersee", static=True)
     assert "blend" in amm.lower(), "the Ammersee page must say its truth is a blend"
     assert "Ammerseeboje" in amm, "the Ammersee page must name the preferred on-water source"

@@ -84,7 +84,8 @@ This was tested where it should have mattered most and still didn't:
 
 - **June–July** (thermal season): föhn fired 5 hours out of ~1,300. Nothing to tune.
 - **Oct 15 – Dec 10** (föhn season): föhn fired **219 hours, 16 % of the period** — plenty
-  of signal — and `FOEHN_DP_RIM` 4.0→4.5 still moved CRPS by **+0.006 kn** with the
+  of rule-positive hours for a sensitivity test — and `FOEHN_DP_RIM` 4.0→4.5 moved
+  paired walk-forward MAE by only **+0.006 kn**, with the
   confidence interval straddling zero. `FOEHN_850_KN` 7→8: +0.029 kn, also straddling.
 - **March–April**: föhn 1.4 % of hours. Untestable again.
 

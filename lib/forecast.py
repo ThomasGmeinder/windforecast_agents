@@ -30,8 +30,8 @@ OM_VARS = ["wind_speed_10m", "wind_gusts_10m", "wind_direction_10m",
            "wind_speed_925hPa", "wind_direction_925hPa",
            "wind_speed_850hPa", "wind_direction_850hPa"]
 
-# regime thresholds (knots / degrees) — Swiss-calibrated foehn values converted
-# from m/s; documented as approximate until locally recalibrated by learn.py.
+# Rule-based scenario thresholds (knots / degrees). Daily RLS learning does not tune
+# these values; only the separately backtest-gated tuner may change them.
 FOEHN_DP_RIM = 4.0      # hPa, Bozen-Muenchen, reaches Alpine-rim valleys/lakes
 FOEHN_DP_FORELAND = 8.0 # hPa, needed to reach Ammersee (rare)
 FOEHN_850_KN = 7.0      # ~3.7 m/s
@@ -191,6 +191,12 @@ def beaufort(kn):
         if kn >= L:
             b += 1
     return b
+
+
+def scenario_label(value):
+    """Public wording for a rule-selected calibration scenario, not a confirmed regime."""
+    return {"foehn": "föhn-favourable", "thermal": "thermal-favourable",
+            "gradient": "strong-gradient", "calm": "calm/capped"}.get(value, value)
 
 
 def compass(deg):
@@ -373,7 +379,7 @@ def apply_bias(bias, regime, hour, speed_kn, gust_kn, gust_ceiling_kn=None):
 # that log, NEVER from a live build_table, so a field missing here is a change that
 # silently never reaches the page. dir_variable and gust_flags were nearly lost exactly
 # that way: the row carried them, the hand-maintained payload in daily_run did not.
-LOGGED_ROW_FIELDS = ("hour", "regime", "raw_kn", "raw_gust_kn", "mean_kn", "gust_kn",
+LOGGED_ROW_FIELDS = ("hour", "regime", "calib_n", "raw_kn", "raw_gust_kn", "mean_kn", "gust_kn",
                      "dir", "dir_variable", "conf", "foehn_note", "spread_kn", "q_kn",
                      "dtheta", "foehn_grad", "lapse", "dp",
                      "gust_ceiling_kn", "gust_flags", "inputs")
@@ -567,6 +573,7 @@ def build_table(lake, target_date, run_stamp=None):
             "gust_ceiling_kn": round(ceil_kn, 1), "gust_flags": list(gflags),
             "mean_kn": cs, "gust_kn": cg,
             "bft": beaufort(cs), "regime": regime, "learned": learned,
+            "calib_n": ((bias.get("buckets", {}).get(_bucket_key(regime, hour)) or {}).get("n", 0)),
             "dp": None if dp is None else round(dp, 1),
             "spread_kn": None if spread is None else round(spread, 1),
             "q_kn": q_kn,
@@ -608,14 +615,10 @@ def _summary(lake, rows):
     foehn_hrs = [r["hour"] for r in rows if r["regime"] == "foehn"]
     extra = ""
     if foehn_hrs:
-        extra = f"  FOEHN {min(foehn_hrs):02d}-{max(foehn_hrs):02d}h"
-        if lake == "walchensee":
-            extra += " (NE thermal suppressed)"
-        if lake == "kochelsee":
-            extra += " (Kesselberg fall-wind)"
+        extra = f"  FÖHN-FAVOURABLE {min(foehn_hrs):02d}-{max(foehn_hrs):02d}h"
     g = gust.get("gust_kn")
     gtxt = (f" · gusts to {g:{KN_FMT}} kn ~{gust['hour']:02d}h" if g else "")
-    return (f"dominant {dom}; peak {peak['mean_kn']:{KN_FMT}} kn "
+    return (f"dominant {scenario_label(dom)}; peak {peak['mean_kn']:{KN_FMT}} kn "
             f"({beaufort(peak['mean_kn'])} Bft) {dir_label(peak)} "
             f"~{peak['hour']:02d}h{gtxt}{extra}")
 
@@ -624,7 +627,7 @@ def format_table(res):
     _fmt_params = params_for(res["lake"])   # annotate with the lake's own thresholds
     lines = [f"{res['label']} — {res['date']}",
              f"  {res['summary']}",
-             "  Hour | Dir  | Mean kn (Bft) | Gust kn | Regime   | Conf | Note"]
+             "  Hour | Dir  | Mean kn (Bft) | Gust kn | Scenario   | Conf | Note"]
     for r in res["rows"]:
         note = ""
         if not r["learned"]:

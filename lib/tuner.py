@@ -11,7 +11,7 @@ One call (`tuner.run`) does the whole cycle, so the caller never assembles it:
                the verdict is written back to the ledger.
   3. PROPOSE   new bounded parameter proposals are recorded as open hypotheses.
   4. ACT       each proposal is BACKTESTED; a change is applied to the lake's params
-               only if it verifiably lowers CRPS on enough replayable days. Otherwise
+               only if it verifiably lowers paired MAE on enough replayable days. Otherwise
                it stays a logged proposal. Nothing is ever applied on faith.
                The write goes to config/params_<lake>.json — per-lake, because the
                evidence was only ever gathered for that one lake.
@@ -46,12 +46,12 @@ def _multiday_errors(lake, days=ERROR_WINDOW_DAYS):
                 pass
     dates = sorted({r["date"] for r in rows})[-days:]
     keep = {"date", "hour", "regime", "issued_kn", "actual_kn", "err_issued_kn",
-            "dir_err_deg", "actual_regime"}
+            "dir_err_deg", "observed_flow", "actual_regime"}
     return [{k: v for k, v in r.items() if k in keep} for r in rows if r["date"] in dates]
 
 
 def _regression_state(lake):
-    """Compact view of the learned per-(regime x hour) regression: what the linear
+    """Compact view of the learned per-(scenario x hour) regression: what the linear
     correction has already absorbed, so the analyst reasons about the RESIDUAL."""
     try:
         with open(fc.bias_path(lake)) as f:
@@ -153,14 +153,14 @@ def consider(lake, param, value):
                        f"{verify.N_MIN_BACKTEST_DAYS} days, {bt['n_pairs']}/"
                        f"{verify.N_MIN_BACKTEST_PAIRS} hours)"), bt
     # A positive point estimate is not evidence. The walk-forward score is deliberately
-    # noisy (each arm relearns from cold), so requiring only crps_ss > 0 applied a
+    # noisy (each arm relearns from cold), so requiring only mae_skill > 0 applied a
     # coin-flip-grade "improvement" a large fraction of the time. Demand instead that the
     # whole bootstrap interval of the PAIRED per-hour difference sits below zero, and that
     # the effect is big enough to be worth acting on.
     if not bt.get("significant"):
         # Three genuinely different verdicts. Reporting them all as "not significant" is
         # wrong: a change can be statistically solid and still too small to act on, and a
-        # change can have literally no effect because the regime it governs never fires in
+        # change can have literally no effect because the scenario it governs never fires in
         # the replayed period (Ammersee foehn, for instance).
         d, lo, hi = bt["delta_kn"], bt["ci_lo"], bt["ci_hi"]
         if d == 0 and lo == 0 and hi == 0:
@@ -173,29 +173,48 @@ def consider(lake, param, value):
             why = (f"not statistically significant (Δ {d:+.3f} kn, 95% CI [{lo}, {hi}] "
                    f"includes zero)")
         return False, why, bt
-    return True, (f"CRPS -{abs(bt['delta_kn']):.3f} kn, 95% CI [{bt['ci_lo']}, {bt['ci_hi']}]"
+    return True, (f"MAE -{abs(bt['delta_kn']):.3f} kn, 95% CI [{bt['ci_lo']}, {bt['ci_hi']}]"
                   f" over {bt['n_days']} days / {bt['n_pairs']} hours "
-                  f"(SS {bt['crps_ss']:+.4f})"), bt
+                  f"(skill {bt['mae_skill']:+.4f})"), bt
 
 
 def apply_change(lake, param, value, reason, backtest_result, date, stamp):
-    """Write the verified change to the single source of truth + record the evidence."""
-    params = fc.params_for(lake)
+    """Build replacement calibration, then activate the verified per-lake change."""
+    old_params = fc.params_for(lake)
+    params = dict(old_params)
     before = params.get(param)
     params[param] = value
-    fc.save_params(params, lake=lake)     # PER-LAKE: verified on this lake's history only
-    # The backtest measured this change with each arm relearning its bias from scratch,
-    # i.e. the steady state AFTER recalibration. The live buckets were fit under the OLD
-    # regime labels, so leaving them would make production behave like neither arm and
-    # silently score the relabelling cost as zero. Retire them so the lake relearns under
-    # the labels the change was actually verified with.
-    n_dropped = fc.reset_bias(lake)
+    # Build first. If replay fails, neither configuration nor production state changes.
+    rebuilt = verify.rebuild_bias(lake, params)
+    old_bias = fc.load_bias(lake)
+    n_dropped = len(old_bias.get("buckets") or {})
+    path = fc.bias_path(lake)
+    tmp = path + ".tmp"
+    try:
+        fc.save_params(params, lake=lake)  # PER-LAKE: verified on this lake's history only
+        with open(tmp, "w") as f:
+            json.dump(rebuilt, f, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    except Exception:
+        # A two-file switch cannot be one filesystem rename. Restore both old states if
+        # either write fails so config and calibration never intentionally diverge.
+        fc.save_params(old_params, lake=lake)
+        with open(tmp, "w") as f:
+            json.dump(old_bias, f, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+        raise
     wd.log_event("param_change", {"lake": lake, "date": date, "param": param,
                                   "from": before, "to": value, "reason": reason,
                                   "bias_buckets_retired": n_dropped,
+                                  "bias_buckets_rebuilt": len(rebuilt["buckets"]),
                                   "backtest": backtest_result}, stamp=stamp)
     return {"param": param, "from": before, "to": value, "reason": reason,
-            "bias_buckets_retired": n_dropped}
+            "bias_buckets_retired": n_dropped,
+            "bias_buckets_rebuilt": len(rebuilt["buckets"])}
 
 
 # ---------------------------------------------------------------- the loop
@@ -278,10 +297,10 @@ def _selftest():
     fc.CONFIG_DIR = tmp
     fc.PARAMS_PATH = os.path.join(tmp, "params.json")
     fc.PARAMS = dict(fc._DEFAULTS)
+    wd.LOG_DIR = tmp
     wd.EVENTS_LOG = os.path.join(tmp, "events.jsonl")
-    # MODELS_DIR too: apply_change now retires the lake's learned buckets, and without
-    # this the test destroyed the REAL models/<lake>_bias.json. Seed a copy so reset_bias
-    # has something to drop and we can assert it actually dropped it.
+    # MODELS_DIR too: apply_change replaces the lake's learned buckets, and without this
+    # the test would overwrite the real model. Seed stale state and prove it is replaced.
     fc.MODELS_DIR = tmp
     with open(fc.bias_path("walchensee"), "w") as f:
         json.dump({"alpha": 0.3, "processed_dates": ["2026-07-31"],
@@ -298,7 +317,7 @@ def _selftest():
     # --- gate: decision follows the backtest, not the model's confidence
     real_backtest = verify.backtest
     def bt(ss, days=20, enough=True, delta=-0.4, lo=-0.6, hi=-0.2, sig=None):
-        return {"crps_ss": ss, "n_days": days, "n_pairs": days * 6, "enough_data": enough,
+        return {"mae_skill": ss, "n_days": days, "n_pairs": days * 6, "enough_data": enough,
                 "delta_kn": delta, "ci_lo": lo, "ci_hi": hi,
                 "significant": (hi < 0 and delta <= -verify.MIN_EFFECT_KN) if sig is None else sig}
     cases = [
@@ -337,12 +356,12 @@ def _selftest():
     # justify it (the change was only ever backtested against walchensee)
     assert fc.params_for("kochelsee")["THERMAL_CLOUD_MAX"] == fc._DEFAULTS["THERMAL_CLOUD_MAX"]
     assert fc.params_for("ammersee")["THERMAL_CLOUD_MAX"] == fc._DEFAULTS["THERMAL_CLOUD_MAX"]
-    # the stale calibration must be retired, since it was fit under the OLD labels
+    # No replay rows exist in this isolated fixture, so rebuild produces an empty but
+    # internally consistent state rather than leaving the stale bucket in place.
     assert json.load(open(fc.bias_path("walchensee")))["buckets"] == {}, "stale buckets kept"
     assert json.load(open(fc.bias_path("walchensee")))["processed_dates"] == [], \
-        "processed_dates must be cleared so the logged history can be re-learned under " \
-        "the new labels — otherwise the wipe is permanent"
-    print("  PASS apply: per-lake write, other lakes untouched, stale buckets retired")
+        "a rebuild with no replay rows must not claim processed history"
+    print("  PASS apply: per-lake write, other lakes untouched, stale state replaced")
 
     # --- memory loop: proposal recorded, then reviewed and resolved next run
     fc.PARAMS = dict(fc._DEFAULTS)
