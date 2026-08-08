@@ -1,326 +1,105 @@
-=== Bavarian lake wind — daily run 2026-08-08 05:00 CEST ===
+=== Bavarian lake wind — daily run 2026-08-08 06:16 CEST ===
 forecast day: 2026-08-08   |   learning from: 2026-08-07
 
 ========================================================================
 STEP 1 — SELF-LEARNING FROM YESTERDAY  (runs before any new forecast)
 ========================================================================
-### Learning report — ammersee — learned from 2026-08-07
-Actual source: DWD station 05538 (lake-level, ~11 km inland) calibrated to on-lake (+42% vs raw, 11774 paired hrs) · matched 16 hours · 8 hour(s) skipped (already elapsed when issued)
+### Learning — ammersee (from 2026-08-07): skipped — already processed
 
-**1. Prediction vs measured (per hour)** — Δ = prediction − measured (kn)
-```
- Hr | Regime   | Pred | Raw  | Meas | Δiss | Δraw | Pdir Adir Δ°
- ---|----------|------|------|------|------|------|-------------
- 08 | gradient |  5.8 |  2.4 |  7.0 | -1.2 | -4.6 |    N    N   6
- 09 | gradient |  4.4 |  2.5 |  8.4 | -4.0 | -5.9 |  NNE    N  25
- 10 | gradient |  6.4 |  3.4 |  6.4 | +0.0 | -3.0 |   NE   NW  76
- 11 | gradient |  6.0 |  4.1 |  5.9 | +0.1 | -1.8 |   NE   NW  85
- 12 | gradient |  5.1 |  5.0 | 11.4 | -6.3 | -6.4 |  NNE  NNW  61
- 13 | thermal  | 11.4 |  6.1 |  9.6 | +1.8 | -3.5 |  NNE  NNW  59
- 14 | thermal  | 13.3 |  6.2 |  8.0 | +5.3 | -1.8 |   NE   NW  84
- 15 | thermal  | 13.0 |  6.1 |  7.5 | +5.5 | -1.4 |  NNE  ESE  77
- 16 | thermal  | 11.5 |  5.9 | 10.6 | +0.9 | -4.7 |  NNE  NNW  58
- 17 | gradient |  7.5 |  5.7 | 11.9 | -4.4 | -6.2 |   NE  NNW  79
- 18 | gradient | 10.0 |  5.8 | 11.7 | -1.7 | -5.9 |   NE  NNW  59
- 19 | gradient |  6.6 |  5.4 | 10.8 | -4.2 | -5.4 |  NNE  NNW  42
- 20 | gradient |  7.2 |  3.8 |  8.0 | -0.8 | -4.2 |   NE  NNW  61
- 21 | gradient |  8.5 |  3.6 |  6.4 | +2.1 | -2.8 |    E    N  90
- 22 | gradient |  7.6 |  3.2 |  6.7 | +0.9 | -3.5 |    E  SSW 109
- 23 | gradient |  8.3 |  3.0 |  7.7 | +0.6 | -4.7 |  ESE    S  59
-```
+### Learning — kochelsee (from 2026-08-07): skipped — already processed
 
-**Large misses (|Δ| > 5 kn) — difference, lesson & fix applied**
-```
- Hr | Regime   | Pred | Meas |   Δ  
- ---|----------|------|------|------
- 12 | gradient |  5.1 | 11.4 |  -6.3
- 14 | thermal  | 13.3 |  8.0 |  +5.3
- 15 | thermal  | 13.0 |  7.5 |  +5.5
-```
-- **12:00 (gradient)** — under-predicted — forecast 5.1 kn vs measured 11.4 kn (-6.3 kn). *Lesson:* the model may underplay the 'gradient' regime around 12:00 — one day is weak evidence. *Fix:* the correction for (gradient×12h) is a regression corrected = +1.4 + 1.35·model — it **scales with** the model's own wind (so it can't double-count or blindly add a fixed amount), refined recursively over days (2 obs; full weight after 3).
-- **14:00 (thermal)** — over-predicted — forecast 13.3 kn vs measured 8.0 kn (+5.3 kn). *Lesson:* the model may overplay the 'thermal' regime around 14:00 — one day is weak evidence. *Fix:* the correction for (thermal×14h) is a regression corrected = +5.1 + 0.67·model — it **scales with** the model's own wind (so it can't double-count or blindly add a fixed amount), refined recursively over days (4 obs; full weight after 3).
-- **15:00 (thermal)** — over-predicted — forecast 13.0 kn vs measured 7.5 kn (+5.5 kn). *Lesson:* the model may overplay the 'thermal' regime around 15:00 — one day is weak evidence. *Fix:* the correction for (thermal×15h) is a regression corrected = +5.2 + 0.63·model — it **scales with** the model's own wind (so it can't double-count or blindly add a fixed amount), refined recursively over days (4 obs; full weight after 3).
-
-**2. Accuracy summary**
-- Mean abs error: issued forecast **2.49 kn** vs raw model 4.11 kn
-- Mean signed error (bias): -0.34 kn (over-predicting)
-- Direction mean abs error: 64°
-- Gust ratio (measured/model): 1.01×
-- By regime: gradient -1.57 kn (12h); thermal +3.38 kn (4h)
-
-**3. Lessons learned**
-- The learned correction HELPED: issued-forecast error 2.49 kn vs raw-model error 4.11 kn (−1.62 kn).
-- Overall speed bias small (-0.34 kn mean error).
-- 'gradient' hours (12h) over-predicted by 1.57 kn → those regime buckets shifted most.
-- 'thermal' hours (4h) under-predicted by 3.38 kn → those regime buckets shifted most.
-- Wind DIRECTION was off by 64° on average (terrain/thermal veer the model misses); direction not yet auto-corrected.
-- Worst hour was 12:00 (gradient): predicted 5.1 kn, measured 11.4 kn (Δ -6.3 kn).
-
-**4. How the prediction mechanism was updated** (RLS regression `corrected = a + b·model`, per regime×hour)
-```
- bucket        | model_err |   a: before->after |   b: before->after | n
- --------------|-----------|--------------------|--------------------|--
- gradient|08   |    +4.60  | +2.35 -> +3.06   | 1.42 -> 1.29    | 4
- gradient|09   |    +5.90  | +2.37 -> +3.63   | 1.20 -> 1.09    | 3
- gradient|10   |    +3.00  | +3.00 -> +2.92   | 1.45 -> 1.31    | 3
- gradient|11   |    +1.80  | +1.85 -> +1.83   | 1.25 -> 1.16    | 3
- gradient|12   |    +6.40  | +0.09 -> +1.42   | 1.04 -> 1.35    | 2
- thermal|13    |    +3.50  | +2.92 -> +3.45   | 1.40 -> 1.08    | 4
- thermal|14    |    +1.80  | +3.61 -> +5.11   | 1.57 -> 0.67    | 4
- thermal|15    |    +1.40  | +3.06 -> +5.25   | 1.63 -> 0.63    | 4
- thermal|16    |    +4.70  | +1.91 -> +2.30   | 1.63 -> 1.46    | 4
- gradient|17   |    +6.20  | +2.46 -> +2.30   | 1.52 -> 1.65    | 2
- gradient|18   |    +5.90  | +2.13 -> +1.88   | 1.35 -> 1.48    | 6
- gradient|19   |    +5.40  | +4.93 -> +4.80   | 0.30 -> 0.50    | 6
- gradient|20   |    +4.20  | +3.29 -> +3.42   | 1.02 -> 1.02    | 6
- gradient|21   |    +2.80  | +1.82 -> +1.11   | 1.82 -> 1.90    | 5
- gradient|22   |    +3.50  | +2.02 -> +1.76   | 1.72 -> 1.75    | 6
- gradient|23   |    +4.70  | +3.52 -> +3.48   | 1.61 -> 1.59    | 7
-```
-_The correction **scales with** the model (b·model) rather than adding a flat offset, so it neither double-counts nor over-adds. 29 calibrated buckets._
-  tuner: 2 proposal(s), 0 hypothesis review(s), 0 applied — The wind forecaster is currently performing worse than both persistence and climatology, indicating 
-    ✗ held back GRADIENT_925_KN=13.5 — not statistically significant (Δ -0.000 kn, 95% CI [-0.0057, 0.0034] includes zero)
-    ✗ held back COLD_POOL_DTHETA=1.2 — not statistically significant (Δ -0.001 kn, 95% CI [-0.0058, 0.005] includes zero)
-
-### Learning report — kochelsee — learned from 2026-08-07
-Actual source: addicted-sports on-lake (kochelsee/trimini) · matched 16 hours · 8 hour(s) skipped (already elapsed when issued)
-
-**1. Prediction vs measured (per hour)** — Δ = prediction − measured (kn)
-```
- Hr | Regime   | Pred | Raw  | Meas | Δiss | Δraw | Pdir Adir Δ°
- ---|----------|------|------|------|------|------|-------------
- 08 | calm     |  1.0 |  0.8 |  0.4 | +0.6 | +0.4 |   NW   NW  11
- 09 | calm     |  1.3 |  1.3 |  1.1 | +0.2 | +0.2 |  NNW    N  14
- 10 | calm     |  3.5 |  1.8 |  1.2 | +2.3 | +0.6 |    N    N   4
- 11 | gradient |  2.2 |  2.2 |  1.5 | +0.7 | +0.7 |  NNE    N   3
- 12 | thermal  |  2.8 |  2.6 |  2.1 | +0.7 | +0.5 |    N    N   6
- 13 | gradient |  2.3 |  2.8 |  2.9 | -0.6 | -0.1 |    N    N   6
- 14 | gradient |  2.7 |  2.9 |  2.6 | +0.1 | +0.3 |    N    N   6
- 15 | gradient |  3.3 |  3.3 |  2.1 | +1.2 | +1.2 |    N    N   6
- 16 | gradient |  3.0 |  3.0 |  1.8 | +1.2 | +1.2 |    N    N   0
- 17 | gradient |  3.1 |  3.1 |  1.1 | +2.0 | +2.0 |  NNE  NNW  30
- 18 | gradient |  3.9 |  3.3 |  0.2 | +3.7 | +3.1 |  NNE    N  19
- 19 | gradient |  1.5 |  3.4 |  0.1 | +1.4 | +3.3 |  NNE    N  22
- 20 | gradient |  3.1 |  2.6 |  0.3 | +2.8 | +2.3 |   NE  NNE  16
- 21 | calm     |  1.8 |  1.8 |  0.3 | +1.5 | +1.5 |    E    N 100
- 22 | calm     |  0.7 |  1.6 |  0.0 | +0.7 | +1.6 |   SE    W 154
- 23 | calm     |  1.7 |  1.3 |  0.0 | +1.7 | +1.3 |  ESE  WSW 136
-```
-
-**Large misses (|Δ| > 5 kn) — difference, lesson & fix applied**
-- none: every matched hour was within 5 kn.
-
-**2. Accuracy summary**
-- Mean abs error: issued forecast **1.34 kn** vs raw model 1.27 kn
-- Mean signed error (bias): +1.26 kn (under-predicting)
-- Direction mean abs error: 33°
-- Gust ratio (measured/model): 0.62×
-- By regime: calm +1.17 kn (6h); gradient +1.39 kn (9h); thermal +0.7 kn (1h)
-
-**2b. Regime validation** (predicted regime vs measured wind-direction sector)
-- Regime accuracy: **7/16 hours (44%)**
-- Confusion (predicted→measured): calm->calm ×6; gradient->calm ×6; gradient->thermal ×3; thermal->thermal ×1
-- Mismatched hours: 11h gradient→calm (N); 13h gradient→thermal (N); 14h gradient→thermal (N); 15h gradient→thermal (N); 16h gradient→calm (N); 17h gradient→calm (NNW); 18h gradient→calm (N); 19h gradient→calm (N)
-
-**3. Lessons learned**
-- Correction was roughly neutral (issued 1.34 kn vs raw 1.27 kn).
-- Issued forecast UNDER-predicted by 1.26 kn on average → biases nudged up.
-- 'calm' hours (6h) under-predicted by 1.17 kn → those regime buckets shifted most.
-- 'gradient' hours (9h) under-predicted by 1.39 kn → those regime buckets shifted most.
-- Measured gusts ran 0.62× the model (weaker); gust ratio updated.
-- Regime call was right 7/16 hours (44%) vs the measured wind direction.
-- Regime miss: predicted 'gradient', measured 'calm' (6×).
-- Regime miss: predicted 'gradient', measured 'thermal' (3×).
-- Worst hour was 18:00 (gradient): predicted 3.9 kn, measured 0.2 kn (Δ +3.7 kn).
-
-**4. How the prediction mechanism was updated** (RLS regression `corrected = a + b·model`, per regime×hour)
-```
- bucket        | model_err |   a: before->after |   b: before->after | n
- --------------|-----------|--------------------|--------------------|--
- calm|08       |    -0.40  | -0.07 -> -0.21   | 1.22 -> 1.25    | 5
- calm|09       |    -0.20  | +0.08 -> -0.02   | 1.00 -> 0.97    | 2
- calm|10       |    -0.60  | +1.29 -> +0.93   | 1.25 -> 1.12    | 4
- gradient|11   |    -0.70  | -0.17 -> -0.36   | 0.97 -> 0.96    | 2
- thermal|12    |    -0.50  | +1.96 -> +1.94   | 0.34 -> 0.26    | 4
- gradient|13   |    +0.10  | -0.95 -> -0.20   | 0.76 -> 0.77    | 2
- gradient|14   |    -0.30  | -0.27 -> -0.24   | 0.94 -> 0.95    | 2
- gradient|15   |    -1.20  | +0.00 -> -0.58   | 1.00 -> 0.86    | 1
- gradient|16   |    -1.20  | +0.00 -> -0.62   | 1.00 -> 0.86    | 1
- gradient|17   |    -2.00  | +0.00 -> -1.02   | 1.00 -> 0.76    | 1
- gradient|18   |    -3.10  | -0.26 -> -0.38   | 1.26 -> 0.99    | 4
- gradient|19   |    -3.30  | +0.44 -> +0.33   | 0.32 -> 0.26    | 5
- gradient|20   |    -2.30  | +0.11 -> -1.30   | 1.18 -> 1.36    | 4
- calm|21       |    -1.50  | +0.00 -> -1.01   | 1.00 -> 0.86    | 1
- calm|22       |    -1.60  | -1.10 -> -1.17   | 0.82 -> 0.82    | 3
- calm|23       |    -1.30  | +0.17 -> -0.17   | 1.19 -> 1.11    | 4
-```
-_The correction **scales with** the model (b·model) rather than adding a flat offset, so it neither double-counts nor over-adds. 33 calibrated buckets._
-  tuner: 2 proposal(s), 0 hypothesis review(s), 0 applied — The forecaster exhibits a persistent positive bias, consistently over-predicting wind speeds, partic
-    ✗ held back GRADIENT_925_KN=13.0 — insufficient replayable history (6/10 days, 68/60 hours)
-    ✗ held back FOEHN_850_KN=6.0 — insufficient replayable history (6/10 days, 68/60 hours)
-
-### Learning report — walchensee — learned from 2026-08-07
-Actual source: addicted-sports on-lake (walchensee/urfeld) · matched 12 hours
-
-**1. Prediction vs measured (per hour)** — Δ = prediction − measured (kn)
-```
- Hr | Regime   | Pred | Raw  | Meas | Δiss | Δraw | Pdir Adir Δ°
- ---|----------|------|------|------|------|------|-------------
- 08 | gradient |  3.2 |  3.2 |  9.7 | -6.5 | -6.5 |  NNE  NNE   1
- 09 | gradient |  3.3 |  4.0 |  7.2 | -3.9 | -3.2 |  NNE  NNE   0
- 10 | gradient |  3.9 |  4.4 |  1.4 | +2.5 | +3.0 |  NNE  NNE   5
- 11 | gradient |  7.2 |  5.8 |  8.5 | -1.3 | -2.7 |  NNE    N  13
- 12 | gradient |  7.4 |  6.2 | 10.8 | -3.4 | -4.6 |  NNE    N  14
- 13 | gradient |  7.8 |  6.5 | 11.8 | -4.0 | -5.3 |    N    N   2
- 14 | gradient |  7.3 |  5.9 | 11.2 | -3.9 | -5.3 |    N    N   5
- 15 | gradient |  6.7 |  4.7 | 10.0 | -3.3 | -5.3 |    N    N   3
- 16 | gradient |  9.1 |  4.7 |  8.2 | +0.9 | -3.5 |    N    N   1
- 17 | gradient |  4.6 |  3.9 |  5.9 | -1.3 | -2.0 |    N  NNW  19
- 18 | gradient |  5.4 |  4.2 |  3.7 | +1.7 | +0.5 |  NNW    N   4
- 19 | gradient |  5.9 |  4.1 |  5.7 | +0.2 | -1.6 |    N    N   2
-```
-
-**Large misses (|Δ| > 5 kn) — difference, lesson & fix applied**
-```
- Hr | Regime   | Pred | Meas |   Δ  
- ---|----------|------|------|------
- 08 | gradient |  3.2 |  9.7 |  -6.5
-```
-- **08:00 (gradient)** — under-predicted — forecast 3.2 kn vs measured 9.7 kn (-6.5 kn). *Lesson:* the model may underplay the 'gradient' regime around 08:00 — one day is weak evidence. *Fix:* the correction for (gradient×08h) is a regression corrected = +3.2 + 1.77·model — it **scales with** the model's own wind (so it can't double-count or blindly add a fixed amount), refined recursively over days (1 obs; full weight after 3).
-
-**2. Accuracy summary**
-- Mean abs error: issued forecast **2.74 kn** vs raw model 3.62 kn
-- Mean signed error (bias): -1.86 kn (over-predicting)
-- Direction mean abs error: 6°
-- Gust ratio (measured/model): 1.37×
-- By regime: gradient -1.86 kn (12h)
-
-**2b. Regime validation** (predicted regime vs measured wind-direction sector)
-- Regime accuracy: **0/12 hours (0%)**
-- Confusion (predicted→measured): gradient->calm ×1; gradient->thermal ×11
-- Mismatched hours: 08h gradient→thermal (NNE); 09h gradient→thermal (NNE); 10h gradient→calm (NNE); 11h gradient→thermal (N); 12h gradient→thermal (N); 13h gradient→thermal (N); 14h gradient→thermal (N); 15h gradient→thermal (N)
-
-**3. Lessons learned**
-- The learned correction HELPED: issued-forecast error 2.74 kn vs raw-model error 3.62 kn (−0.88 kn).
-- Issued forecast OVER-predicted by 1.86 kn on average → biases nudged down.
-- 'gradient' hours (12h) over-predicted by 1.86 kn → those regime buckets shifted most.
-- Measured gusts ran 1.37× the model (stronger); gust ratio updated.
-- Regime call was right 0/12 hours (0%) vs the measured wind direction.
-- Regime miss: predicted 'gradient', measured 'thermal' (11×).
-- Worst hour was 08:00 (gradient): predicted 3.2 kn, measured 9.7 kn (Δ -6.5 kn).
-
-**4. How the prediction mechanism was updated** (RLS regression `corrected = a + b·model`, per regime×hour)
-```
- bucket        | model_err |   a: before->after |   b: before->after | n
- --------------|-----------|--------------------|--------------------|--
- gradient|08   |    +6.50  | +0.00 -> +3.23   | 1.00 -> 1.77    | 1
- gradient|09   |    +3.20  | -1.17 -> -1.34   | 0.78 -> 1.65    | 2
- gradient|10   |    -3.00  | -0.60 -> -0.80   | 0.82 -> 0.68    | 2
- gradient|11   |    +2.70  | +1.25 -> +1.21   | 1.50 -> 1.38    | 2
- gradient|12   |    +4.60  | +0.97 -> +0.94   | 1.40 -> 1.50    | 2
- gradient|13   |    +5.30  | +1.05 -> +0.89   | 1.43 -> 1.58    | 2
- gradient|14   |    +5.30  | +1.28 -> +1.26   | 1.50 -> 1.60    | 2
- gradient|15   |    +5.30  | +2.39 -> +2.27   | 1.81 -> 1.74    | 2
- gradient|16   |    +3.50  | +2.77 -> +2.61   | 1.35 -> 1.34    | 4
- gradient|17   |    +2.00  | -0.73 -> -0.46   | 1.44 -> 1.45    | 3
- gradient|18   |    -0.50  | +0.90 -> +0.70   | 1.05 -> 1.01    | 4
- gradient|19   |    +1.60  | +5.96 -> +5.91   | -0.01 -> -0.01    | 5
-```
-_The correction **scales with** the model (b·model) rather than adding a flat offset, so it neither double-counts nor over-adds. 33 calibrated buckets._
-  tuner: 2 proposal(s), 0 hypothesis review(s), 0 applied — The forecaster for Walchensee is exhibiting significant issues with regime classification, particula
-    ✗ held back GRADIENT_925_KN=13.5 — insufficient replayable history (5/10 days, 68/60 hours)
-    ✗ held back THERMAL_CLOUD_MAX=55.0 — insufficient replayable history (5/10 days, 68/60 hours)
+### Learning — walchensee (from 2026-08-07): skipped — already processed
 
 ========================================================================
 STEP 2 — NEW FORECASTS  (built from the just-updated model)
 ========================================================================
 
 Ammersee — 2026-08-08
-  dominant thermal; peak 13.7 kn (4 Bft) E ~23h · gusts to 18.1 kn ~23h
+  dominant thermal; peak 13.7 kn (4 Bft) E ~23h · gusts to 18.4 kn ~23h
   Hour | Dir  | Mean kn (Bft) | Gust kn | Regime   | Conf | Note
   00   | E    |     2.9 (1) |   6.9   | gradient | med  | raw (no local calib yet)
   01   | E    |     2.8 (1) |   5.4   | gradient | med  | raw (no local calib yet)
   02   | ENE  |     3.6 (1) |   6.7   | gradient | med  | raw (no local calib yet)
-  03   | E    |     3.6 (1) |   7.4   | gradient | med  | raw (no local calib yet)
-  04   | E    |     2.9 (1) |   7.5   | gradient | med  | raw (no local calib yet)
-  05   | E    |     2.7 (1) |   6.0   | gradient | med  | raw (no local calib yet)
-  06   | ESE  |     6.4 (2) |   6.5   | gradient | high | 
-  07   | ESE  |     6.6 (2) |   6.6   | gradient | high | 
-  08   | NNE  |     3.3 (1) |   6.5   | calm     | med  | glassy
-  09   | NNE  |     4.3 (2) |   6.5   | thermal  | med  | raw (no local calib yet)
-  10   | ENE  |     4.9 (2) |   7.9   | thermal  | med  | raw (no local calib yet)
+  03   | E    |     3.6 (1) |   7.5   | gradient | med  | raw (no local calib yet)
+  04   | E    |     2.8 (1) |   7.4   | gradient | med  | raw (no local calib yet)
+  05   | E    |     2.8 (1) |   5.8   | gradient | med  | raw (no local calib yet)
+  06   | ESE  |     6.4 (2) |   6.8   | gradient | high | 
+  07   | ESE  |     1.9 (1) |   4.5   | calm     | med  | glassy
+  08   | NNE  |     3.3 (1) |   6.3   | calm     | med  | glassy
+  09   | NNE  |     4.4 (2) |   6.8   | thermal  | med  | raw (no local calib yet)
+  10   | ENE  |     5.0 (2) |   8.0   | thermal  | med  | raw (no local calib yet)
   11   | NE   |     6.4 (2) |   9.1   | thermal  | med  | raw (no local calib yet)
   12   | ENE  |    11.6 (4) |  13.1   | thermal  | high | 
-  13   | ENE  |    10.2 (3) |  13.3   | thermal  | high | 
-  14   | E    |     9.2 (3) |  14.7   | thermal  | high | 
-  15   | E    |     8.8 (3) |  14.4   | thermal  | high | 
-  16   | NE   |    10.4 (3) |  12.6   | thermal  | high | 
-  17   | NE   |     9.6 (3) |  11.5   | thermal  | med  | 
-  18   | NE   |     6.2 (2) |  13.2   | thermal  | med  | raw (no local calib yet)
-  19   | NNE  |     4.9 (2) |  12.7   | thermal  | med  | raw (no local calib yet)
+  13   | ENE  |    10.2 (3) |  13.4   | thermal  | high | 
+  14   | E    |     9.3 (3) |  14.7   | thermal  | high | 
+  15   | E    |     8.8 (3) |  14.6   | thermal  | high | 
+  16   | NE   |    10.4 (3) |  12.7   | thermal  | high | 
+  17   | NE   |     9.6 (3) |  11.6   | thermal  | med  | 
+  18   | NE   |     6.3 (2) |  13.3   | thermal  | med  | raw (no local calib yet)
+  19   | NNE  |     5.0 (2) |  13.0   | thermal  | med  | raw (no local calib yet)
   20   | E    |     8.0 (3) |  10.3   | gradient | high | 
   21   | E    |    11.2 (4) |  11.2   | gradient | high | 
-  22   | E    |    12.6 (4) |  12.9   | gradient | med  | 
-  23   | E    |    13.7 (4) |  18.1   | gradient | med  | 
+  22   | E    |    12.8 (4) |  12.8   | gradient | med  | 
+  23   | E    |    13.7 (4) |  18.4   | gradient | med  | 
 
 Kochelsee — 2026-08-08
-  dominant thermal; peak 5.2 kn (2 Bft) NE ~17h · gusts to 11.2 kn ~18h
+  dominant thermal; peak 5.3 kn (2 Bft) NE ~16h · gusts to 11.3 kn ~18h
   Hour | Dir  | Mean kn (Bft) | Gust kn | Regime   | Conf | Note
-  00   | SE   |     1.5 (1) |   3.4   | calm     | med  | glassy
+  00   | SE   |     1.4 (1) |   3.3   | calm     | med  | glassy
   01   | ESE  |     1.8 (1) |   3.3   | calm     | med  | glassy
-  02   | SSE  |     1.8 (1) |   3.7   | calm     | med  | glassy
-  03   | ESE  |     1.6 (1) |   4.4   | calm     | med  | glassy
+  02   | SSE  |     1.6 (1) |   3.4   | calm     | med  | glassy
+  03   | ESE  |     1.6 (1) |   3.5   | calm     | med  | glassy
   04   | SE   |     1.4 (1) |   3.3   | calm     | med  | glassy
   05   | ESE  |     1.2 (1) |   2.8   | calm     | med  | glassy
-  06   | ENE  |     1.2 (1) |   2.7   | calm     | med  | glassy
+  06   | ENE  |     1.2 (1) |   2.6   | calm     | med  | glassy
   07   | N    |     3.4 (1) |   4.2   | calm     | high | glassy
-  08   | N    |     1.4 (1) |   4.6   | calm     | high | glassy
-  09   | NNW  |     1.5 (1) |   5.2   | thermal  | high | 
-  10   | NNW  |     1.2 (1) |   4.1   | thermal  | med  | raw (no local calib yet)
-  11   | N    |     4.6 (2) |   8.3   | thermal  | med  | raw (no local calib yet)
-  12   | N    |     2.6 (1) |   9.4   | thermal  | high | 
-  13   | NNE  |     3.8 (1) |   6.7   | thermal  | med  | raw (no local calib yet)
-  14   | NNE  |     4.5 (2) |   9.2   | thermal  | med  | raw (no local calib yet)
-  15   | NNE  |     5.0 (2) |   9.9   | thermal  | med  | raw (no local calib yet)
-  16   | NE   |     5.1 (2) |  10.2   | thermal  | med  | raw (no local calib yet)
-  17   | NE   |     5.2 (2) |  10.7   | thermal  | med  | raw (no local calib yet)
-  18   | NE   |     5.2 (2) |  11.2   | thermal  | med  | raw (no local calib yet)
-  19   | ENE  |     4.5 (2) |  10.9   | thermal  | med  | raw (no local calib yet)
-  20   | E    |     2.7 (1) |  10.5   | gradient | high | 
-  21   | SE   |     1.4 (1) |   5.6   | calm     | med  | glassy
-  22   | ESE  |     0.2 (0) |   2.3   | calm     | high | glassy
-  23   | E    |     1.4 (1) |   4.0   | calm     | high | glassy
+  08   | N    |     1.4 (1) |   4.7   | calm     | high | glassy
+  09   | NNW  |     1.6 (1) |   5.3   | thermal  | high | 
+  10   | NNW  |     1.1 (1) |   3.9   | thermal  | med  | raw (no local calib yet)
+  11   | N    |     4.5 (2) |   7.9   | thermal  | med  | raw (no local calib yet)
+  12   | N    |     2.6 (1) |   9.0   | thermal  | high | 
+  13   | NNE  |     3.8 (1) |   7.0   | thermal  | med  | raw (no local calib yet)
+  14   | NNE  |     4.3 (2) |   7.9   | thermal  | med  | raw (no local calib yet)
+  15   | NNE  |     5.1 (2) |   9.8   | thermal  | med  | raw (no local calib yet)
+  16   | NE   |     5.3 (2) |  10.4   | thermal  | med  | raw (no local calib yet)
+  17   | NE   |     5.2 (2) |  11.0   | thermal  | med  | raw (no local calib yet)
+  18   | NE   |     5.3 (2) |  11.3   | thermal  | med  | raw (no local calib yet)
+  19   | ENE  |     4.6 (2) |  11.3   | thermal  | med  | raw (no local calib yet)
+  20   | E    |     2.6 (1) |  10.7   | gradient | high | 
+  21   | SE   |     1.4 (1) |   5.3   | calm     | med  | glassy
+  22   | ESE  |     0.1 (0) |   2.1   | calm     | high | glassy
+  23   | E    |     1.4 (1) |   3.6   | calm     | high | glassy
 
-  ⚠ blend disagreement > 6 kn at 15h(6), 16h(7), 17h(7), 18h(6)
+  ⚠ blend disagreement > 6 kn at 14h(6), 15h(7), 16h(7), 17h(7), 18h(7), 19h(6)
 Walchensee — 2026-08-08
-  dominant thermal; peak 9.8 kn (3 Bft) N ~17h · gusts to 16.6 kn ~17h
+  dominant thermal; peak 10.0 kn (3 Bft) N ~17h · gusts to 16.6 kn ~17h
   Hour | Dir  | Mean kn (Bft) | Gust kn | Regime   | Conf | Note
-  00   | S    |     2.2 (1) |   4.5   | gradient | med  | raw (no local calib yet)
-  01   | S    |     2.7 (1) |   5.1   | gradient | med  | raw (no local calib yet)
-  02   | S    |     3.1 (1) |   5.5   | gradient | med  | raw (no local calib yet)
-  03   | S    |     3.4 (1) |   5.8   | gradient | med  | raw (no local calib yet)
-  04   | S    |     3.6 (1) |   6.4   | gradient | med  | raw (no local calib yet)
-  05   | S    |     3.4 (1) |   6.4   | gradient | med  | raw (no local calib yet)
-  06   | S    |     4.1 (2) |   7.2   | gradient | med  | raw (no local calib yet)
-  07   | S    |     2.3 (1) |   5.1   | gradient | med  | raw (no local calib yet)
-  08   | S    |     1.0 (1) |   4.1   | calm     | med  | cold-pool capped Δθ+3.9
-  09   | NNE  |     1.3 (1) |   4.6   | calm     | med  | cold-pool capped Δθ+2.6
-  10   | NNE  |     1.3 (1) |   5.0   | thermal  | med  | raw (no local calib yet) Δθ+0.8
-  11   | N    |     6.9 (2) |   8.2   | thermal  | med  | raw (no local calib yet) Δθ-0.2
-  12   | N    |     9.1 (3) |   9.8   | thermal  | high | Δθ-0.2
-  13   | N    |     9.0 (3) |   9.3   | thermal  | high | Δθ-1.1
-  14   | N    |     8.7 (3) |  12.7   | thermal  | high | Δθ-0.9
-  15   | N    |     9.5 (3) |  13.2   | thermal  | high | Δθ-0.9
-  16   | N    |     8.0 (3) |  12.2   | thermal  | med  | raw (no local calib yet) Δθ-0.7
-  17   | N    |     9.8 (3) |  16.6   | thermal  | med  | raw (no local calib yet) Δθ-0.4 gust capped at ensemble ceiling
-  18   | NNE  |     6.1 (2) |  12.1   | thermal  | med  | raw (no local calib yet) Δθ+0.1
-  19   | NE   |     5.1 (2) |  10.8   | thermal  | med  | raw (no local calib yet) Δθ+0.4
+  00   | S    |     2.3 (1) |   4.6   | gradient | med  | raw (no local calib yet)
+  01   | S    |     2.8 (1) |   5.2   | gradient | med  | raw (no local calib yet)
+  02   | S    |     3.2 (1) |   5.2   | gradient | med  | raw (no local calib yet)
+  03   | S    |     3.5 (1) |   5.9   | gradient | med  | raw (no local calib yet)
+  04   | S    |     3.5 (1) |   5.9   | gradient | med  | raw (no local calib yet)
+  05   | S    |     3.3 (1) |   6.1   | gradient | med  | raw (no local calib yet)
+  06   | S    |     4.0 (2) |   6.8   | gradient | med  | raw (no local calib yet)
+  07   | S    |     2.4 (1) |   5.4   | gradient | med  | raw (no local calib yet)
+  08   | S    |     1.2 (1) |   4.4   | calm     | med  | cold-pool capped Δθ+3.9
+  09   | NNE  |     1.1 (1) |   3.9   | calm     | med  | cold-pool capped Δθ+2.6
+  10   | NNE  |     1.2 (1) |   4.8   | thermal  | med  | raw (no local calib yet) Δθ+0.8
+  11   | N    |     6.7 (2) |   8.0   | thermal  | med  | raw (no local calib yet) Δθ-0.2
+  12   | N    |     9.3 (3) |   9.9   | thermal  | high | Δθ-0.2
+  13   | N    |     8.9 (3) |   9.2   | thermal  | high | Δθ-1.1
+  14   | N    |     8.8 (3) |  13.0   | thermal  | high | Δθ-0.9
+  15   | N    |     9.3 (3) |  13.4   | thermal  | high | Δθ-0.9
+  16   | N    |     8.0 (3) |  12.1   | thermal  | med  | raw (no local calib yet) Δθ-0.7
+  17   | N    |    10.0 (3) |  16.6   | thermal  | med  | raw (no local calib yet) Δθ-0.4 gust capped at ensemble ceiling
+  18   | NNE  |     6.3 (2) |  12.2   | thermal  | med  | raw (no local calib yet) Δθ+0.1
+  19   | NE   |     5.2 (2) |  11.0   | thermal  | med  | raw (no local calib yet) Δθ+0.4
   20   | ENE  |     3.5 (1) |   9.3   | gradient | med  | raw (no local calib yet)
-  21   | SE   |     2.3 (1) |   6.4   | gradient | med  | raw (no local calib yet)
-  22   | SE   |     2.8 (1) |   4.7   | gradient | med  | raw (no local calib yet)
-  23   | S    |     3.7 (1) |   6.4   | gradient | med  | raw (no local calib yet)
+  21   | SE   |     2.2 (1) |   6.3   | gradient | med  | raw (no local calib yet)
+  22   | SE   |     2.8 (1) |   4.8   | gradient | med  | raw (no local calib yet)
+  23   | S    |     3.6 (1) |   6.5   | gradient | med  | raw (no local calib yet)
 
-  ⚠ blend disagreement > 6 kn at 11h(8), 12h(7), 13h(7)
+  ⚠ blend disagreement > 6 kn at 11h(8), 12h(8), 13h(6)
 
 ========================================================================
 STEP 3 — VERIFICATION  (CRPS out-of-sample vs baselines — the referee)
