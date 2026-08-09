@@ -1,0 +1,61 @@
+{
+  "lake": "kochelsee",
+  "date": "2026-08-08",
+  "result": {
+    "narrative": "The forecaster exhibits a consistent positive bias, over-predicting wind speeds, particularly during calm periods and in thermal regimes. This is evident from yesterday's aggregate mean bias error of 1.06 kn and numerous positive errors in calm and misclassified thermal hours. The 'thermal|11' bucket also shows a very high mean absolute error. Historically, there's a recurring issue of significant under-prediction during Foehn events, often misclassified as weaker regimes, leading to large negative errors in the error window.",
+    "diagnosis": [
+      {
+        "pattern": "Consistent over-prediction of wind speeds, particularly during calm periods and in thermal regimes.",
+        "cause": "The thermal wind component appears to be too strong or is being activated too early/readily, leading to an overall positive bias in forecasts and misclassification of calm conditions as thermal."
+      },
+      {
+        "pattern": "Frequent and significant under-prediction of Foehn events.",
+        "cause": "The criteria for Foehn breakthrough are likely too stringent, causing the forecaster to miss Foehn conditions or underestimate their strength, often misclassifying them as weaker gradient or calm regimes."
+      }
+    ],
+    "proposals": [
+      {
+        "param": "THERMAL_CLOUD_MAX",
+        "proposed": 40.0,
+        "rationale": "To reduce the overall positive bias and mitigate over-prediction in thermal and calm regimes, especially during hours when thermal winds are over-forecasted or calm conditions are misclassified as thermal.",
+        "expected_effect": "A reduction in mean bias error (MBE) and mean absolute error (MAE) during thermal and calm periods, particularly in the late morning/early afternoon."
+      },
+      {
+        "param": "FOEHN_DP_RIM",
+        "proposed": 3.5,
+        "rationale": "To improve the detection and forecasting of Foehn events, which are currently being significantly under-predicted and misclassified. Lowering this pressure difference threshold will make it easier for the model to identify Foehn conditions.",
+        "expected_effect": "A reduction in large negative errors during Foehn events and an increase in Foehn regime classification accuracy."
+      }
+    ],
+    "reviews": [],
+    "reviewed": [],
+    "unknown_review_ids": [],
+    "applied": [],
+    "refused": [
+      {
+        "param": "THERMAL_CLOUD_MAX",
+        "proposed": 40.0,
+        "reason": "insufficient replayable history (7/10 days, 80/60 hours)"
+      },
+      {
+        "param": "FOEHN_DP_RIM",
+        "proposed": 3.5,
+        "reason": "insufficient replayable history (7/10 days, 80/60 hours)"
+      }
+    ],
+    "n_open": 0,
+    "verification": {
+      "n_pairs": 86,
+      "n_days": 8,
+      "crps": 1.5426511627906978,
+      "mae": 1.876046511627907,
+      "rmse": 2.629919448983093,
+      "bias": 0.43633720930232567,
+      "crps_pers": 2.313698630136986,
+      "crps_clim": 1.4970540662592722,
+      "ss_pers": 0.29840142095914746,
+      "ss_clim": 0.029415849500189717,
+      "n_leaked_skipped": 79
+    }
+  }
+}

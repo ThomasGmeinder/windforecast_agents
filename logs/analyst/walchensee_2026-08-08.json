@@ -1,0 +1,61 @@
+{
+  "lake": "walchensee",
+  "date": "2026-08-08",
+  "result": {
+    "narrative": "The forecaster is consistently underpredicting wind speeds, with a notable negative bias across all regimes, particularly in thermal and early morning foehn conditions. Foehn events are frequently misclassified as gradient or calm in the morning hours, leading to significant underestimation of wind strength. Thermal winds, when correctly classified, are also systematically underpredicted.",
+    "diagnosis": [
+      {
+        "pattern": "Early morning foehn breakthrough underprediction and misclassification",
+        "cause": "Foehn detection thresholds are too strict, preventing correct regime classification (e.g., gradient/calm instead of foehn) and leading to underestimated wind speeds."
+      },
+      {
+        "pattern": "Consistent underprediction of thermal wind strength",
+        "cause": "The current THERMAL_CLOUD_MAX parameter might be too restrictive, preventing the full development or duration of thermal winds under conditions where they actually occur, leading to systematic underestimation."
+      }
+    ],
+    "proposals": [
+      {
+        "param": "FOEHN_850_KN",
+        "proposed": 6.5,
+        "rationale": "The model frequently misclassifies early morning foehn events as gradient or calm, leading to significant underprediction. Lowering this threshold should make the foehn classification more sensitive, allowing it to be triggered earlier and more accurately.",
+        "expected_effect": "Increased detection of foehn conditions in the morning, leading to higher predicted wind speeds and reduced negative bias during foehn events."
+      },
+      {
+        "param": "THERMAL_CLOUD_MAX",
+        "proposed": 50.0,
+        "rationale": "Thermal wind speeds are consistently underpredicted, contributing significantly to the overall negative bias. Increasing the maximum allowed cloud cover for thermal regime activation should allow the model to predict stronger or more persistent thermal winds.",
+        "expected_effect": "Increased predicted wind speeds during thermal regime hours, reducing the negative bias in these conditions and improving overall forecast accuracy."
+      }
+    ],
+    "reviews": [],
+    "reviewed": [],
+    "unknown_review_ids": [],
+    "applied": [],
+    "refused": [
+      {
+        "param": "FOEHN_850_KN",
+        "proposed": 6.5,
+        "reason": "insufficient replayable history (6/10 days, 82/60 hours)"
+      },
+      {
+        "param": "THERMAL_CLOUD_MAX",
+        "proposed": 50.0,
+        "reason": "insufficient replayable history (6/10 days, 82/60 hours)"
+      }
+    ],
+    "n_open": 0,
+    "verification": {
+      "n_pairs": 84,
+      "n_days": 7,
+      "crps": 1.9169047619047617,
+      "mae": 2.208392857142857,
+      "rmse": 2.942849801698541,
+      "bias": -1.1975595238095238,
+      "crps_pers": 2.635897435897436,
+      "crps_clim": 1.468332225314368,
+      "ss_pers": 0.29861867704280154,
+      "ss_clim": -0.2802403634611472,
+      "n_leaked_skipped": 26
+    }
+  }
+}
