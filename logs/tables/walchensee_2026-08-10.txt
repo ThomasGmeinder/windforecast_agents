@@ -1,0 +1,27 @@
+Walchensee — 2026-08-10
+  dominant strong-gradient; peak 10.8 kn (3 Bft) NNW ~16h · gusts to 18.7 kn ~16h  FÖHN-FAVOURABLE 00-03h
+  Hour | Dir  | Mean kn (Bft) | Gust kn | Scenario   | Conf | Note
+  00   | SW   |     4.9 (2) |   9.6   | foehn    | low  | raw (no local calib yet) fg-1.0 unconfirmed @Peißenberg (WSW 12kn)
+  01   | SSW  |     4.4 (2) |   9.4   | foehn    | low  | raw (no local calib yet) fg-0.5 unconfirmed @Peißenberg (WSW 12kn)
+  02   | S    |     4.3 (2) |   8.7   | foehn    | low  | raw (no local calib yet) fg-1.0 unconfirmed @Peißenberg (WSW 12kn)
+  03   | S    |     4.6 (2) |   8.5   | foehn    | low  | raw (no local calib yet) fg-1.0 unconfirmed @Peißenberg (WSW 12kn)
+  04   | SSW  |     4.7 (2) |   9.4   | gradient | med  | raw (no local calib yet)
+  05   | SSW  |     4.5 (2) |   9.2   | gradient | med  | raw (no local calib yet)
+  06   | SSW  |     5.5 (2) |  11.0   | gradient | high | 
+  07   | S    |     4.6 (2) |   9.8   | gradient | high | 
+  08   | SSW  |     6.2 (2) |   8.7   | gradient | med  | raw (no local calib yet)
+  09   | SSW  |     3.3 (1) |   8.5   | gradient | med  | raw (no local calib yet)
+  10   | SSW  |     1.2 (1) |   7.2   | gradient | med  | raw (no local calib yet)
+  11   | SW   |     2.6 (1) |   7.3   | calm     | med  | glassy Δθ-0.9
+  12   | NW   |     4.6 (2) |   9.6   | gradient | high | 
+  13   | N    |     7.4 (3) |  12.0   | gradient | high | 
+  14   | WNW  |     6.5 (2) |  13.2   | thermal  | high | Δθ-1.1
+  15   | NNW  |    10.6 (3) |  14.6   | gradient | high | 
+  16   | NNW  |    10.8 (3) |  18.7   | gradient | high | 
+  17   | NNW  |     9.0 (3) |  16.4   | gradient | high | 
+  18   | NW   |     6.2 (2) |  11.7   | gradient | high | 
+  19   | WNW  |     5.9 (2) |  11.9   | gradient | high | 
+  20   | WNW  |     3.3 (1) |   9.2   | gradient | med  | raw (no local calib yet)
+  21   | VAR  |     3.1 (1) |   8.2   | gradient | low  | raw (no local calib yet)
+  22   | SSW  |     3.5 (1) |   7.5   | gradient | med  | raw (no local calib yet)
+  23   | SW   |     5.0 (2) |  10.4   | gradient | med  | raw (no local calib yet)

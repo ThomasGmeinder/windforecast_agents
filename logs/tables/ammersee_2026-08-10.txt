@@ -1,0 +1,27 @@
+Ammersee — 2026-08-10
+  dominant strong-gradient; peak 14.5 kn (4 Bft) W ~17h · gusts to 29.2 kn ~20h
+  Hour | Dir  | Mean kn (Bft) | Gust kn | Scenario   | Conf | Note
+  00   | SSE  |     3.9 (1) |   8.8   | gradient | med  | raw (no local calib yet)
+  01   | SSE  |     3.5 (1) |   7.0   | gradient | med  | raw (no local calib yet)
+  02   | SSE  |     2.6 (1) |   6.3   | gradient | med  | raw (no local calib yet)
+  03   | SSE  |     3.3 (1) |   6.1   | gradient | med  | raw (no local calib yet)
+  04   | SSE  |     3.1 (1) |   6.5   | gradient | med  | raw (no local calib yet)
+  05   | S    |     3.2 (1) |   8.2   | gradient | med  | raw (no local calib yet)
+  06   | S    |     7.5 (3) |  11.1   | gradient | high | 
+  07   | S    |     7.3 (3) |  11.0   | gradient | high | 
+  08   | SSW  |     7.9 (3) |  12.1   | gradient | high | 
+  09   | SSW  |     7.3 (3) |   7.8   | gradient | high | 
+  10   | SW   |     7.2 (3) |  10.0   | thermal  | high | 
+  11   | WSW  |     6.8 (2) |   8.4   | gradient | high | 
+  12   | WSW  |     6.8 (2) |  10.7   | gradient | med  | raw (no local calib yet)
+  13   | W    |    11.6 (4) |  15.4   | thermal  | med  | 
+  14   | W    |     8.6 (3) |  16.7   | gradient | med  | raw (no local calib yet)
+  15   | W    |     9.6 (3) |  19.3   | gradient | med  | raw (no local calib yet)
+  16   | W    |     9.4 (3) |  17.4   | gradient | med  | raw (no local calib yet)
+  17   | W    |    14.5 (4) |  21.5   | gradient | high | 
+  18   | WNW  |    12.7 (4) |  16.2   | gradient | med  | 
+  19   | NW   |     9.4 (3) |  16.5   | gradient | high | 
+  20   | NNE  |     8.0 (3) |  29.2   | gradient | med  | 
+  21   | S    |     6.5 (2) |   8.0   | gradient | med  | 
+  22   | S    |     8.6 (3) |   8.9   | gradient | med  | 
+  23   | S    |     8.7 (3) |  13.5   | gradient | med  | 
