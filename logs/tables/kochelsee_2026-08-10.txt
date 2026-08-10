@@ -1,0 +1,27 @@
+Kochelsee — 2026-08-10
+  dominant strong-gradient; peak 8.0 kn (3 Bft) SSE ~02h · gusts to 15.2 kn ~23h
+  Hour | Dir  | Mean kn (Bft) | Gust kn | Scenario   | Conf | Note
+  00   | SSE  |     5.5 (2) |  11.1   | gradient | med  | raw (no local calib yet)
+  01   | S    |     3.3 (1) |   9.1   | gradient | med  | raw (no local calib yet)
+  02   | SSE  |     8.0 (3) |  11.5   | gradient | med  | raw (no local calib yet)
+  03   | S    |     8.0 (3) |  15.0   | gradient | med  | raw (no local calib yet)
+  04   | S    |     5.0 (2) |  12.4   | gradient | med  | raw (no local calib yet)
+  05   | SSE  |     4.2 (2) |   6.8   | gradient | med  | raw (no local calib yet)
+  06   | SSE  |     2.2 (1) |   7.9   | gradient | med  | raw (no local calib yet)
+  07   | ESE  |     3.7 (1) |  10.3   | calm     | high | glassy
+  08   | SSE  |     2.5 (1) |   8.7   | gradient | med  | raw (no local calib yet)
+  09   | SSE  |     2.2 (1) |   7.2   | gradient | med  | raw (no local calib yet)
+  10   | S    |     2.2 (1) |   6.4   | gradient | med  | raw (no local calib yet)
+  11   | S    |     2.4 (1) |   6.7   | gradient | med  | raw (no local calib yet)
+  12   | SW   |     2.5 (1) |   7.1   | gradient | med  | raw (no local calib yet)
+  13   | WSW  |     2.3 (1) |   7.5   | gradient | med  | raw (no local calib yet)
+  14   | W    |     4.1 (2) |  10.7   | thermal  | med  | raw (no local calib yet)
+  15   | W    |     4.1 (2) |  11.8   | gradient | med  | raw (no local calib yet)
+  16   | W    |     4.4 (2) |  10.5   | gradient | med  | raw (no local calib yet)
+  17   | W    |     3.8 (1) |  11.3   | gradient | med  | raw (no local calib yet)
+  18   | NW   |     3.7 (1) |  11.5   | gradient | med  | 
+  19   | SSE  |     1.1 (1) |   5.7   | gradient | med  | 
+  20   | SSE  |     1.9 (1) |  12.4   | gradient | med  | 
+  21   | S    |     1.3 (1) |   6.7   | gradient | high | 
+  22   | SSE  |     2.2 (1) |   7.3   | gradient | med  | 
+  23   | SSE  |     4.8 (2) |  15.2   | gradient | med  | 
