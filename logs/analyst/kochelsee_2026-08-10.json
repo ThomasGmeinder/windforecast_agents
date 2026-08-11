@@ -1,0 +1,61 @@
+{
+  "lake": "kochelsee",
+  "date": "2026-08-10",
+  "result": {
+    "narrative": "The forecaster is exhibiting significant issues with regime classification and wind speed prediction. A primary concern is the frequent underprediction of strong wind events, particularly foehn breakthroughs, which are often misclassified as gradient or even calm. Conversely, the model consistently overpredicts wind speeds during genuinely calm periods, incorrectly assigning them to the gradient or thermal regimes. Yesterday's performance highlighted these issues with zero regime accuracy and large errors in both directions.",
+    "diagnosis": [
+      {
+        "pattern": "Foehn breakthrough underprediction and misclassification",
+        "cause": "Foehn detection thresholds are too high, leading to foehn events being misclassified as weaker regimes (gradient/calm) and resulting in large negative wind speed errors."
+      },
+      {
+        "pattern": "Overprediction during calm conditions",
+        "cause": "Gradient regime threshold is too low, causing calm conditions to be incorrectly classified as gradient, leading to positive wind speed errors."
+      }
+    ],
+    "proposals": [
+      {
+        "param": "FOEHN_DP_RIM",
+        "proposed": 3.0,
+        "rationale": "Frequent and severe underprediction of foehn, often misclassified as gradient, indicates that the current foehn detection threshold based on pressure difference at the rim is too high. Lowering this threshold will increase the sensitivity of foehn detection.",
+        "expected_effect": "Reduce large negative wind speed errors during foehn events and improve the accuracy of foehn regime classification."
+      },
+      {
+        "param": "GRADIENT_925_KN",
+        "proposed": 13.0,
+        "rationale": "Consistent overprediction of wind speed during calm conditions, often due to misclassification as a gradient regime, suggests the current gradient wind speed threshold is too low. Increasing this threshold will make it harder to trigger the gradient regime when conditions are actually calm.",
+        "expected_effect": "Reduce positive wind speed errors during calm periods and improve the accuracy of calm regime classification."
+      }
+    ],
+    "reviews": [],
+    "reviewed": [],
+    "unknown_review_ids": [],
+    "applied": [],
+    "refused": [
+      {
+        "param": "FOEHN_DP_RIM",
+        "proposed": 3.0,
+        "reason": "insufficient replayable history (9/10 days, 102/60 hours)"
+      },
+      {
+        "param": "GRADIENT_925_KN",
+        "proposed": 13.0,
+        "reason": "insufficient replayable history (9/10 days, 102/60 hours)"
+      }
+    ],
+    "n_open": 0,
+    "verification": {
+      "n_pairs": 108,
+      "n_days": 10,
+      "crps": 1.5677037037037038,
+      "mae": 1.9216666666666666,
+      "rmse": 2.6534690126183733,
+      "bias": 0.48263888888888895,
+      "crps_pers": 2.2138297872340424,
+      "crps_clim": 1.46317507927954,
+      "ss_pers": 0.2559154252763095,
+      "ss_clim": -0.03252539869846527,
+      "n_leaked_skipped": 92
+    }
+  }
+}

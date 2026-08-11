@@ -1,0 +1,27 @@
+Walchensee — 2026-08-11
+  dominant thermal-favourable; peak 10.7 kn (3 Bft) N ~12h · gusts to 14.9 kn ~17h
+  Hour | Dir  | Mean kn (Bft) | Gust kn | Scenario   | Conf | Note
+  00   | SSW  |     5.1 (2) |   9.8   | gradient | med  | raw (no local calib yet)
+  01   | SW   |     6.5 (2) |  13.5   | gradient | med  | raw (no local calib yet)
+  02   | SSW  |     5.7 (2) |  11.4   | gradient | med  | raw (no local calib yet)
+  03   | SSW  |     4.4 (2) |  10.6   | gradient | med  | raw (no local calib yet)
+  04   | SW   |     3.5 (1) |   8.6   | gradient | med  | raw (no local calib yet)
+  05   | SSW  |     4.2 (2) |  10.0   | gradient | med  | raw (no local calib yet)
+  06   | SSW  |     4.5 (2) |   9.7   | gradient | high | 
+  07   | S    |     3.1 (1) |   7.6   | gradient | high | 
+  08   | S    |     1.5 (1) |   5.1   | calm     | high | glassy
+  09   | NE   |     2.6 (1) |   5.7   | thermal  | med  | raw (no local calib yet)
+  10   | N    |     2.1 (1) |   5.5   | thermal  | high | 
+  11   | NNE  |    10.2 (3) |  10.2   | thermal  | high | 
+  12   | N    |    10.7 (3) |  12.1   | thermal  | high | 
+  13   | NNE  |     9.6 (3) |  11.1   | gradient | high | gust capped at ensemble ceiling
+  14   | N    |     8.7 (3) |  12.7   | thermal  | high | 
+  15   | NNE  |     9.5 (3) |  13.5   | thermal  | high | 
+  16   | N    |     9.0 (3) |  11.6   | thermal  | high | 
+  17   | N    |     8.8 (3) |  14.9   | thermal  | high | gust capped at ensemble ceiling
+  18   | N    |     6.4 (2) |  10.7   | thermal  | med  | raw (no local calib yet)
+  19   | N    |     6.8 (2) |  13.2   | thermal  | med  | raw (no local calib yet)
+  20   | NNE  |     5.4 (2) |  12.1   | gradient | med  | raw (no local calib yet)
+  21   | NE   |     3.6 (1) |   9.5   | gradient | med  | raw (no local calib yet)
+  22   | S    |     2.2 (1) |   5.6   | gradient | med  | raw (no local calib yet)
+  23   | SW   |     2.4 (1) |   4.8   | gradient | med  | raw (no local calib yet)

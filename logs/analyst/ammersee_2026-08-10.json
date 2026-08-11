@@ -1,0 +1,65 @@
+{
+  "lake": "ammersee",
+  "date": "2026-08-10",
+  "result": {
+    "narrative": "The wind forecaster is currently showing negative skill scores against both persistence and climatology, indicating a need for improvement. The overall verification data reveals a notable negative bias, suggesting a general underprediction of wind speeds. A deeper dive into yesterday's performance highlights a consistent and significant underprediction in the gradient regime, particularly during the early morning hours. Conversely, the thermal regime shows a tendency towards overprediction, although based on fewer data points. High directional errors are also prevalent, but direct parameter adjustments for wind direction are not available.",
+    "diagnosis": [
+      {
+        "pattern": "Persistent underprediction of wind speed in gradient regime, particularly during early morning hours (0-5).",
+        "cause": "The current 'GRADIENT_925_KN' parameter is likely too low, leading to systematically underestimated gradient wind speeds, especially when other atmospheric forcings are weak."
+      },
+      {
+        "pattern": "High directional errors across various hours, especially early morning and around midday.",
+        "cause": "Potential issues with terrain-channelled wind direction modeling or possible misclassification of regimes where the characteristic flow patterns differ significantly from the assigned regime."
+      },
+      {
+        "pattern": "Overprediction of wind speed in the thermal regime.",
+        "cause": "The 'THERMAL_CLOUD_MAX' parameter, which influences thermal wind strength, might be set too high, leading to an overestimation of thermal winds."
+      }
+    ],
+    "proposals": [
+      {
+        "param": "GRADIENT_925_KN",
+        "proposed": 12.5,
+        "rationale": "To address the consistent underprediction of wind speed in the gradient regime, especially during early morning hours (0-5), as evidenced by large negative errors in 'yesterday_diffs' and the overall negative bias in verification.",
+        "expected_effect": "Reduce the negative bias and mean absolute error (MAE) in the gradient regime, leading to more accurate wind speed forecasts during these periods."
+      },
+      {
+        "param": "THERMAL_CLOUD_MAX",
+        "proposed": 40.0,
+        "rationale": "To mitigate the observed overprediction of wind speed in the thermal regime, as indicated by the positive mean bias error (MBE) for thermal hours in 'yesterday_aggregate' and 'yesterday_diffs'.",
+        "expected_effect": "Reduce the positive bias and mean absolute error (MAE) in the thermal regime, improving the accuracy of thermal wind forecasts."
+      }
+    ],
+    "reviews": [],
+    "reviewed": [],
+    "unknown_review_ids": [],
+    "applied": [],
+    "refused": [
+      {
+        "param": "GRADIENT_925_KN",
+        "proposed": 12.5,
+        "reason": "not statistically significant (\u0394 -0.000 kn, 95% CI [-0.0056, 0.0032] includes zero)"
+      },
+      {
+        "param": "THERMAL_CLOUD_MAX",
+        "proposed": 40.0,
+        "reason": "real but too small to act on (\u0394 -0.024 kn, 95% CI [-0.0435, -0.0061] is below zero, but |\u0394| < MIN_EFFECT_KN=0.05)"
+      }
+    ],
+    "n_open": 0,
+    "verification": {
+      "n_pairs": 148,
+      "n_days": 10,
+      "crps": 2.2192432432432434,
+      "mae": 2.5544932432432432,
+      "rmse": 3.1525038341252136,
+      "bias": -1.7707094594594595,
+      "crps_pers": 2.1736486486486486,
+      "crps_clim": 1.623522684734596,
+      "ss_pers": -0.020976064656512472,
+      "ss_clim": -0.36693084987970614,
+      "n_leaked_skipped": 92
+    }
+  }
+}
