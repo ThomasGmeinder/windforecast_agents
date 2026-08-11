@@ -41,7 +41,11 @@ SW_SECTOR = (120, 240)  # southerly 850 hPa sector for foehn
 COLD_POOL_DTHETA = 1.5  # K; Kochel-Walchensee dtheta above this = stable cold pool caps the thermal
                         # (provisional pivot ~ dry-adiabatic 2.0 K minus margin; recalibrated by learn.py)
 N_MIN_OBS = 3           # matching days before a (regime×hour) correction is fully trusted/applied
-BIAS_CAP_KN = 8.0       # clamp on the learned MEAN bias so one anomalous day can't swing it
+# A ±4 kn cap is deliberately tighter than the earlier ±8 kn guard.  On the available
+# leak-free replay it lowers MAE for BOTH Alpine lakes (Kochelsee 1.98→1.94 kn;
+# Walchensee 1.99→1.97 kn), while preventing a small bucket from adding the 5–8 kn
+# jumps seen when a local thermal was filed as a strong-gradient hour.
+BIAS_CAP_KN = 4.0       # clamp on the learned MEAN adjustment from raw model wind
 # Gust output ceiling. GUST_ENS_CEIL_MULT is how far above the ensemble's OWN highest
 # member a corrected gust may go — the point of a bias correction is that the model can be
 # systematically wrong, so the bound must be loose enough not to defeat it, while still

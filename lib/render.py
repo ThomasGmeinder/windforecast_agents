@@ -7,7 +7,7 @@ Three views (all offline; read only the latest logs, no network):
   report_html(group)      one report page per lake group, with a methodology section
 Groups: 'kochel-walchensee' (the coupled Alpine-rim pair) and 'ammersee'.
 
-Colors follow the dataviz method (scenario = CVD-checked categorical badges,
+Colors follow the dataviz method (scenario = CVD-checked colour-code column,
 mean wind = validated blue sequential ramp, confidence = text ink).
 """
 import os, sys, json, glob, html, datetime
@@ -127,17 +127,20 @@ def _measured_rows(lake):
 
 
 def _bigdiff_card(lake):
-    """PROMINENT table: only the hours where |forecast − measured| exceeded the
-    threshold — the difference table, filtered by a defined absolute value."""
+    """PROMINENT table: eligible forecast hours where |forecast − measured| exceeded
+    the threshold. Hours already elapsed at issue time are observations, not forecasts,
+    and must never be promoted as a forecast miss."""
     label = html.escape(_lake_label(lake))
     date, src, rows = _measured_rows(lake)
     thr = learn.LARGE_ERR_KN
     if not rows:
         return (f'<section class="card"><h2>{label} — big misses</h2>'
                 f'<p class="muted">No measured day yet — appears after the next morning run.</p></section>')
-    big = [r for r in rows if learn.is_large_miss(r.get("err_issued_kn"))]
+    big = [r for r in rows if not r.get("leaked") and learn.is_large_miss(r.get("err_issued_kn"))]
     if not big:
-        inner = f'<p class="muted">🎯 No hour differed from the forecast by more than {thr:g} kn on {date}.</p>'
+        inner = (f'<p class="muted">🎯 No eligible forecast hour differed from the forecast by more than '
+                 f'{thr:g} kn on {date}. Hours that had already elapsed when the forecast was issued '
+                 f'are observations only and are not scored as misses.</p>')
     else:
         trs = "".join(
             f'<tr><td class="hr">{r["hour"]:02d}</td>'
@@ -145,13 +148,13 @@ def _bigdiff_card(lake):
             f'<td class="gust" style="{_wind_cell_style(r.get("actual_kn") or 0)}">'
             f'{(r.get("actual_kn") or 0):{fc.KN_FMT}}</td>'
             f'<td class="wind" style="{_wind_cell_style(abs(r["err_issued_kn"]))}">{r["err_issued_kn"]:+.1f}</td>'
-            f'<td><span class="badge {r.get("observed_flow", r.get("actual_regime", "calm"))}">{html.escape(_flow_label(r.get("observed_flow", r.get("actual_regime", ""))))}</span></td></tr>'
+            f'<td><span class="badge flow">{html.escape(_flow_label(r.get("observed_flow", r.get("actual_regime", ""))))}</span></td></tr>'
             for r in big)
         inner = (f'<table><thead><tr><th>h</th><th>forecast</th><th>measured</th>'
                  f'<th>Δ = fc−meas</th><th>observed flow</th></tr></thead><tbody>{trs}</tbody></table>')
     return (f'<section class="card"><h2>{label} '
             f'<span class="chip meas">|Δ| &gt; {thr:g} kn · {date}</span></h2>'
-            f'<p class="summary">Hours where the forecast missed the measured wind by more than '
+            f'<p class="summary">Eligible hours where the forecast missed the measured wind by more than '
             f'{thr:g} kn (measured: {html.escape(src)}). The morning learning report explains each '
             f'miss and the fix applied.</p>{inner}</section>')
 
@@ -165,12 +168,16 @@ def _measured_card(lake):
     for r in rows:
         kn = r.get("actual_kn") or 0
         reg = r.get("observed_flow", r.get("actual_regime", ""))
-        badge = (f'<span class="badge {reg}">{html.escape(_flow_label(reg))}</span>'
+        badge = (f'<span class="badge flow">{html.escape(_flow_label(reg))}</span>'
                  if reg and reg != "uncertain" else '<span class="muted">—</span>')
+        leaked = bool(r.get("leaked"))
         err = r.get("err_issued_kn")
-        note = f'{err:+.1f}' if err is not None else ''
+        note = ("not forecastable at issue time" if leaked else
+                (f'{err:+.1f}' if err is not None else ''))
         trs.append(
-            f'<tr><td class="hr">{r["hour"]:02d}</td>'
+            ('<tr class="elapsed" title="hour had already elapsed when forecast was issued">'
+             if leaked else '<tr>') +
+            f'<td class="hr">{r["hour"]:02d}</td>'
             f'<td class="dir">{_dir_arrow(r.get("dir_actual"))} {fc.compass(r.get("dir_actual"))}</td>'
             f'<td class="wind" style="{_wind_cell_style(kn)}">{kn:{fc.KN_FMT}}'
             f'<span class="bft">{fc.beaufort(kn)}</span></td>'
@@ -180,7 +187,7 @@ def _measured_card(lake):
     return f"""
     <section class="card measured">
       <details><summary>{label} — all measured hours · {date}</summary>
-      <p class="summary">Observed wind from {html.escape(src)}. Flow sector inferred from measured direction; it does not confirm the physical cause; "vs fc" = that day's forecast − measured (kn), same sign convention as the big-miss table. Daylight hours where a station reported.</p>
+      <p class="summary">Observed wind from {html.escape(src)}. Flow sector inferred from measured direction; it does not confirm the physical cause; "vs fc" = that day's forecast − measured (kn). Grey rows had already elapsed when the forecast was issued: recorded as observations, but not forecastable, scored, or learned from.</p>
       <table><thead><tr><th>h</th><th>dir</th><th>mean kn (Bft)</th><th>gust</th>
         <th>observed flow</th><th>vs&nbsp;fc</th></tr></thead><tbody>{''.join(trs)}</tbody></table>
       </details>
@@ -209,6 +216,7 @@ def _forecast_card(rec):
         # Walchensee hours and left no trace anywhere, so a clamped value read as a forecast
         note += [fc.GUST_FLAG_NOTE[f] for f in (r.get("gust_flags") or [])
                  if f in fc.GUST_FLAG_NOTE]
+        scenario = html.escape(_scenario_label(reg))
         rows.append(
             f'<tr><td class="hr">{r["hour"]:02d}</td>'
             # No arrow when the direction is flagged variable — a rotated arrow reads as a
@@ -219,7 +227,8 @@ def _forecast_card(rec):
             f'<span class="bft">{fc.beaufort(kn)}</span></td>'
             f'<td class="gust" style="{_wind_cell_style(r.get("gust_kn") or 0)}">'
             f'{(r.get("gust_kn") or 0):{fc.KN_FMT}}</td>'
-            f'<td><span class="badge {reg}">{html.escape(_scenario_label(reg))}</span></td>'
+            f'<td class="scenario-code"><i class="sw {reg}" title="{scenario}" '
+            f'aria-label="{scenario}"></i></td>'
             f'<td class="note">{"not recorded" if "calib_n" not in r else ("raw" if not r.get("calib_n") else "n=" + str(r.get("calib_n")))}</td>'
             f'<td class="conf c-{r.get("conf","med")}">{r.get("conf","")}</td>'
             f'<td class="note">{html.escape(" ".join(note))}</td></tr>')
@@ -388,7 +397,9 @@ def _methodology(group, static=False):
       recursive least squares: <code>error = measuredₕ − (a + b·rₕ)</code>; the new <code>a</code>
       and <code>b</code> move toward that error with forgetting factor λ = {postproc.FORGET:g}. The
       initial model is <code>a = 0, b = 1</code> (“trust the raw model”), so local evidence builds
-      gradually and older evidence fades. Equivalently, each bucket continually minimises
+      gradually and older evidence fades. A single update is limited to ±{postproc.INNOVATION_CAP_KN:g} kn,
+      and the learned scaling stays between {postproc.SLOPE_LO:g} and {postproc.SLOPE_HI:g}; this prevents an
+      isolated burst from producing an inverse or extreme local relationship. Equivalently, each bucket continually minimises
       <code>Σᵢ₌₁ⁿ λ^(n−i)·[measuredᵢ − (a + b·rᵢ)]²</code> over its <code>n</code> prior eligible observations,
       where <code>i</code> runs from the oldest observation (1) to the latest (<code>n</code>),
       and <code>rᵢ</code> and <code>measuredᵢ</code> are that observation’s raw forecast and wind measurement.</p>
@@ -462,7 +473,9 @@ def _methodology(group, static=False):
       recursive least squares: <code>error = measuredₕ − (a + b·rₕ)</code>; the new <code>a</code>
       and <code>b</code> move toward that error with forgetting factor λ = {postproc.FORGET:g}. The
       initial model is <code>a = 0, b = 1</code> (“trust the raw model”), so local evidence builds
-      gradually and older evidence fades. Equivalently, each bucket continually minimises
+      gradually and older evidence fades. A single update is limited to ±{postproc.INNOVATION_CAP_KN:g} kn,
+      and the learned scaling stays between {postproc.SLOPE_LO:g} and {postproc.SLOPE_HI:g}; this prevents an
+      isolated burst from producing an inverse or extreme local relationship. Equivalently, each bucket continually minimises
       <code>Σᵢ₌₁ⁿ λ^(n−i)·[measuredᵢ − (a + b·rᵢ)]²</code> over its <code>n</code> prior eligible observations,
       where <code>i</code> runs from the oldest observation (1) to the latest (<code>n</code>),
       and <code>rᵢ</code> and <code>measuredᵢ</code> are that observation’s raw forecast and wind measurement.</p>
@@ -609,6 +622,14 @@ td{padding:3px 8px;border-bottom:1px solid var(--grid);font-size:13.5px}
 .badge{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:600;color:#fff}
 .badge.gradient{background:var(--g)}.badge.thermal{background:var(--t)}
 .badge.foehn{background:var(--f)}.badge.calm{background:var(--c)}
+/* Observed flow is a diagnostic derived from measured direction, not the forecast
+   scenario. Keeping it neutral prevents S–SE flow from looking like the violet
+   föhn-favourable forecast scenario. */
+.badge.flow{background:transparent;border:1px solid var(--muted);color:var(--ink2)}
+.elapsed td{opacity:.48}
+.scenario-code{width:38px;text-align:center}
+.sw.gradient{background:var(--g)}.sw.thermal{background:var(--t)}
+.sw.foehn{background:var(--f)}.sw.calm{background:var(--c)}
 .conf{width:44px;font-size:12px;color:var(--muted)}
 .conf.c-high{color:var(--ink)} .conf.c-low{opacity:.7}
 .note{color:var(--ink2);font-size:12px}
@@ -664,10 +685,10 @@ def _legend():
     cmax = _WIND_RAMP[-2][0]       # strong end = where the top (red) band starts (kn)
     return f"""<div class="legendrow">
     <div class="legend">
-      <span><i class="sw" style="background:var(--t)"></i>thermal</span>
-      <span><i class="sw" style="background:var(--f)"></i>föhn</span>
-      <span><i class="sw" style="background:var(--g)"></i>gradient</span>
-      <span><i class="sw" style="background:var(--c)"></i>calm</span>
+      <span><i class="sw" style="background:var(--t)"></i>thermal-favourable</span>
+      <span><i class="sw" style="background:var(--f)"></i>föhn-favourable</span>
+      <span><i class="sw" style="background:var(--g)"></i>strong-gradient</span>
+      <span><i class="sw" style="background:var(--c)"></i>calm/capped</span>
     </div>
     <div class="tscale"><span>mean &amp; gust (kn):</span>
       <span class="tsend">calm {cmin}</span>
@@ -675,7 +696,7 @@ def _legend():
       <span class="tsend">{cmax}+ strong</span>
     </div>
   </div>
-  <div class="reghint"><b>Scenario</b> — a rule-based weather pattern that selects the local correction; it is not a confirmed physical regime:
+  <div class="reghint"><b>Scenario colour code</b> — a rule-based weather pattern that selects the local correction; it is not a confirmed physical regime:
     <b>thermal-favourable</b> sun-driven lake/valley breeze · <b>föhn-favourable</b> warm, gusty south fall-wind ·
     <b>gradient</b> frontal / pressure-driven flow · <b>calm</b> little or no wind.</div>"""
 

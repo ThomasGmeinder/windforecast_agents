@@ -47,7 +47,13 @@ SYSTEM = (
     "(what measurable change you predict, so you can be held to it next time). Do not "
     "re-propose something you just retracted. Be conservative: each change is backtested "
     "on held-out days against paired mean absolute error and is only applied if it verifiably helps, so prefer "
-    "small, well-justified steps."
+    "small, well-justified steps.\n"
+    "JUMP AUDIT — The evidence contains jump_audit: hours with a large issued miss, a large "
+    "local correction, or a correction that made the raw forecast materially worse. You MUST "
+    "scrutinize every listed jump before proposing a threshold change: compare raw_error_kn with "
+    "issued_error_kn, identify whether the issue is raw-model failure, calibration overshoot, "
+    "scenario/flow mismatch, or doubtful observation timing, and say so in the diagnosis. Do not "
+    "treat a calibration overshoot as evidence that a scenario threshold should be moved."
 )
 
 RESPONSE_SCHEMA = {

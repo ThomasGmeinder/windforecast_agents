@@ -212,8 +212,10 @@ and the LLM agent call it, so numbers never disagree. Per hour it:
    estimate how many knots föhn caused. Scaling avoids a fixed scenario bonus but cannot
    guarantee that over-correction is impossible; rows before calibration are flagged
    "raw (no local calib yet)". The **mean** adjustment is bounded additively by
-   `BIAS_CAP_KN` (±8 kn) — dimensionally right for an additive correction, and it binds on
-   ~1 % of well-calibrated hours.
+   `BIAS_CAP_KN` (±4 kn) — dimensionally right for an additive correction. The tighter cap
+   was selected after recent small-bucket over-corrections: it improves the available
+   leak-free replay for both Alpine lakes and prevents a learned local adjustment from
+   adding a 5–8 kn jump to the raw model.
 5. **Guards the gust**, which is a *multiplicative* correction (`raw × gust_ratio`) and so
    needs different bounds than the mean:
    - **plausibility** — a stored ratio outside `[0.6, 1.8]` is *refused* and the raw model
@@ -273,6 +275,11 @@ converges toward systematic bias, and is evidence-ramped (one day
 barely moves the applied correction). Idempotent: each date is learned once per lake. The
 forecast reads the just-updated model in the same run, so today benefits
 immediately.
+
+To keep one burst or timing mismatch from corrupting a sparse bucket, each RLS update
+clips its innovation to ±4 kn and constrains the wind-speed scaling coefficient to
+`0 ≤ b ≤ 2`. Repeated evidence can still move the correction; an isolated 6–10 kn
+residual cannot create a negative or extreme slope.
 
 Only the first forecast issued for a date is eligible, and hours that had already elapsed
 when it was issued are recorded but neither scored nor learned from.

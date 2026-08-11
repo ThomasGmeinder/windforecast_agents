@@ -31,6 +31,7 @@ import analyst
 ERROR_WINDOW_DAYS = 14      # how much error history the analyst sees
 MAX_REL_STEP = 0.25         # a single applied change may move a param at most 25%
 REVIEW_AFTER_DAYS = 3       # how long a hypothesis waits before it is judged
+JUMP_AUDIT_KN = 4.0         # correction / harm large enough to require explicit analyst scrutiny
 
 
 # ---------------------------------------------------------------- perceive
@@ -45,9 +46,45 @@ def _multiday_errors(lake, days=ERROR_WINDOW_DAYS):
             except Exception:
                 pass
     dates = sorted({r["date"] for r in rows})[-days:]
-    keep = {"date", "hour", "regime", "issued_kn", "actual_kn", "err_issued_kn",
-            "dir_err_deg", "observed_flow", "actual_regime"}
+    keep = {"date", "hour", "regime", "issued_kn", "raw_kn", "actual_kn",
+            "err_issued_kn", "err_raw_kn", "dir_err_deg", "observed_flow", "actual_regime",
+            "leaked"}
     return [{k: v for k, v in r.items() if k in keep} for r in rows if r["date"] in dates]
+
+
+def _jump_audit(rows):
+    """Large misses or corrections that made the raw forecast materially worse.
+
+    The LLM cannot safely infer a calibration overshoot from an issued error alone: a
+    6 kn miss may originate in the raw model, whereas a 4 kn local correction that turns
+    a 1 kn raw miss into a 6 kn issued miss needs a different diagnosis.  Give it the
+    paired evidence explicitly rather than asking it to reconstruct it from a long log.
+    """
+    out = []
+    for r in rows:
+        if r.get("leaked") or r.get("issued_kn") is None or r.get("raw_kn") is None:
+            continue
+        issued_err, raw_err = r.get("err_issued_kn"), r.get("err_raw_kn")
+        if issued_err is None or raw_err is None:
+            continue
+        correction = r["issued_kn"] - r["raw_kn"]
+        harm = abs(issued_err) - abs(raw_err)
+        large_miss = abs(issued_err) > JUMP_AUDIT_KN
+        large_correction = abs(correction) >= JUMP_AUDIT_KN
+        correction_hurt = harm >= JUMP_AUDIT_KN
+        if not (large_miss or large_correction or correction_hurt):
+            continue
+        out.append({"date": r.get("date"), "hour": r.get("hour"), "bucket":
+                    f"{r.get('regime', '?')}|{int(r.get('hour', 0)):02d}",
+                    "raw_kn": r["raw_kn"], "issued_kn": r["issued_kn"],
+                    "actual_kn": r.get("actual_kn"), "raw_error_kn": raw_err,
+                    "issued_error_kn": issued_err, "correction_kn": round(correction, 2),
+                    "correction_harm_kn": round(harm, 2),
+                    "observed_flow": r.get("observed_flow", r.get("actual_regime")),
+                    "flags": [name for name, yes in (("large_miss", large_miss),
+                                                       ("large_correction", large_correction),
+                                                       ("correction_hurt", correction_hurt)) if yes]})
+    return out[-30:]
 
 
 def _regression_state(lake):
@@ -107,13 +144,15 @@ def _recent_proposals(lake):
 def build_evidence(lake, date, agg=None, diffs=None):
     """Everything the analyst perceives this morning."""
     sc = verify.evaluate(lake)
+    window = _multiday_errors(lake)
     return {
         "lake": lake, "date": date,
         "current_params": fc.params_for(lake),
         "param_bounds": fc.PARAM_BOUNDS,
         "yesterday_aggregate": agg,
         "yesterday_diffs": diffs,
-        "error_window": _multiday_errors(lake),
+        "error_window": window,
+        "jump_audit": _jump_audit(window),
         "regression_state": _regression_state(lake),
         "verification": {k: sc.get(k) for k in
                          ("n_pairs", "n_days", "crps", "mae", "rmse", "bias",
@@ -305,6 +344,23 @@ def _selftest():
     with open(fc.bias_path("walchensee"), "w") as f:
         json.dump({"alpha": 0.3, "processed_dates": ["2026-07-31"],
                    "buckets": {"thermal|13": {"n": 4, "a": 0.0, "b": 1.2}}}, f)
+
+    # --- jump audit: distinguish a raw-model miss from a harmful correction
+    audit = _jump_audit([
+        {"date": "2026-08-01", "hour": 15, "regime": "gradient", "raw_kn": 5.0,
+         "issued_kn": 10.5, "actual_kn": 4.0, "err_raw_kn": 1.0, "err_issued_kn": 6.5,
+         "observed_flow": "thermal", "leaked": False},
+        {"date": "2026-08-01", "hour": 16, "regime": "gradient", "raw_kn": 3.0,
+         "issued_kn": 3.2, "actual_kn": 10.0, "err_raw_kn": -7.0, "err_issued_kn": -6.8,
+         "observed_flow": "foehn", "leaked": False},
+        {"date": "2026-08-01", "hour": 17, "regime": "calm", "raw_kn": 2.0,
+         "issued_kn": 2.1, "actual_kn": 2.0, "err_raw_kn": 0.0, "err_issued_kn": 0.1,
+         "leaked": False},
+    ])
+    assert len(audit) == 2, audit
+    assert "correction_hurt" in audit[0]["flags"] and "large_miss" in audit[0]["flags"], audit
+    assert audit[1]["correction_harm_kn"] < 0, audit
+    print("  PASS jump audit: harmful correction separated from raw-model large miss")
 
     # --- validation: every bad proposal is rejected, with a reason
     assert _validate("NOT_A_PARAM", 5) and "unknown" in _validate("NOT_A_PARAM", 5)
