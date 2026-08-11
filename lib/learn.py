@@ -81,14 +81,14 @@ def _lessons(agg, bucket_updates):
     b = agg["mbe_issued_kn"]
     if b is not None:
         if b <= -1:
-            L.append(f"Issued forecast OVER-predicted by {abs(b)} kn on average → biases nudged down.")
+            L.append(f"Issued forecast UNDER-predicted by {abs(b)} kn on average → biases nudged up.")
         elif b >= 1:
-            L.append(f"Issued forecast UNDER-predicted by {b} kn on average → biases nudged up.")
+            L.append(f"Issued forecast OVER-predicted by {b} kn on average → biases nudged down.")
         else:
             L.append(f"Overall speed bias small ({b:+} kn mean error).")
     for reg, d in sorted(agg["by_regime"].items()):
         if d["n"] >= 2 and abs(d["mbe_kn"]) >= 1:
-            verb = "under" if d["mbe_kn"] > 0 else "over"
+            verb = "over" if d["mbe_kn"] > 0 else "under"
             L.append(f"'{reg}' hours ({d['n']}h) {verb}-predicted by "
                      f"{abs(d['mbe_kn'])} kn → those regime buckets shifted most.")
     if agg["dir_mae_deg"] is not None and agg["dir_mae_deg"] >= 45:

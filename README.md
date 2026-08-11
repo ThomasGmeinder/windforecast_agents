@@ -262,11 +262,20 @@ Every morning, **before** the new forecast, for each lake:
    of (a=0, b=1) = "trust the model", a forgetting factor, and a cap; plus a gust
    factor. The report shows the exact **a/b before → after** for every bucket.
 
+The two comparisons have different jobs: the published residual
+`issued forecast − measured wind` is retained for the scorecard and the ±5 kn
+large-miss explanation; the regression learns from `raw model` and `measured wind`:
+`measured ≈ a + b·raw model`. It does **not** fit yesterday's already-corrected
+issued value, so it cannot repeatedly correct its own previous adjustment.
+
 The regression **scales with** the model rather than adding a fixed scenario bonus,
 converges toward systematic bias, and is evidence-ramped (one day
 barely moves the applied correction). Idempotent: each date is learned once per lake. The
 forecast reads the just-updated model in the same run, so today benefits
 immediately.
+
+Only the first forecast issued for a date is eligible, and hours that had already elapsed
+when it was issued are recorded but neither scored nor learned from.
 
 **Bias buckets are keyed by the forecast scenario.** The direction-sector section is a
 diagnostic comparison, not a statement that the physical cause was observed.

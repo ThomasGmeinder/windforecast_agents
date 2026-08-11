@@ -352,13 +352,25 @@ def _methodology(group, static=False):
       <h2>How it's predicted</h2>
       <p>Kochelsee and Walchensee share one wind system but are reported separately. South föhn is physically expected to strengthen Kochelsee and suppress Walchensee’s NE thermal; the current system does not impose that response explicitly, but relies on lake-specific model inputs and learned corrections.</p>
       <h3>Prediction algorithm (per hour)</h3>
+      <p class="muted"><b>Formula key:</b> <code>h</code> = forecast hour; <code>rₕ</code> = raw blended wind for that hour;
+      <code>ŷₕ</code> = full locally corrected mean; <code>publishedₕ</code> = displayed forecast;
+      <code>a</code> = additive local bias; <code>b</code> = local scaling; <code>n</code> = eligible prior
+      observations in this exact lake×scenario×hour bucket.</p>
       <ol>
-        <li><b>Blend the models.</b> Value = mean of ICON-D2 ensemble + ICON-D2 deterministic +
-            ICON-EU + addicted-sports' spot forecast; ensemble spread → confidence.</li>
+        <li><b>Blend the models.</b> Each hourly raw value is the equal-weight average of
+            <code>(ICON-D2 ensemble + ICON-D2 deterministic + ICON-EU + addicted-sports spot forecast) ÷ 4</code>.
+            If a source is unavailable, it averages the sources that are available. Ensemble spread
+            becomes the uncertainty band.</li>
         <li><b>Read indicators.</b> Cross-Alpine Δp and 850 hPa wind actively select the föhn-favourable scenario. Cloud, 925 hPa wind and Δθ affect other scenarios. Föhn-gradient, lapse rate and radiation are displayed diagnostics, not regression predictors.</li>
-        <li><b>Assign a forecast scenario.</b> First matching rule: <b>föhn-favourable</b> (Δp ≥ {P['FOEHN_DP_RIM']} hPa plus southerly 850 hPa wind) → <b>strong-gradient</b> (925 hPa ≥ {P['GRADIENT_925_KN']} kn) → <b>thermal-favourable</b> (daytime, limited cloud and no capped cold pool) → <b>calm/capped</b>. This selects a local correction; it does not confirm the physical cause or alter forecast direction.</li>
-        <li><b>Correct.</b> A learned regression <b>corrected = a + b·model</b> that scales with the
-            model rather than adding a fixed scenario bonus, evidence-gated, bounded by ±{fc.BIAS_CAP_KN:g} kn.</li>
+        <li><b>Assign a forecast scenario.</b> First matching rule: <b>föhn-favourable</b> (Δp ≥ {P['FOEHN_DP_RIM']} hPa plus southerly 850 hPa wind) → <b>strong-gradient</b> (925 hPa ≥ {P['GRADIENT_925_KN']} kn) → <b>thermal-favourable</b> (daytime, limited cloud and no capped cold pool) → <b>calm/capped</b>. The scenario chooses a separate local model for this lake and hour; it does not confirm the physical cause or alter forecast direction.</li>
+        <li><b>Correct the hourly mean.</b> In the selected <code>(lake, scenario, hour)</code> bucket,
+            the full correction is <code>ŷₕ = a + b·rₕ</code>, first bounded to within
+            ±{fc.BIAS_CAP_KN:g} kn of the raw value. It is then ramped in as
+            <code>publishedₕ = rₕ + min(1, n/3)·(ŷₕ − rₕ)</code>. Thus one observation moves the forecast only a third
+            of the way (<code>n=1</code>), two move it two thirds, and <code>n≥3</code> can apply the full bounded correction.</li>
+        <li><b>Why ramp it?</b> <code>n</code> counts only earlier eligible examples of this exact scenario at
+            this exact hour—at most one per day—so rare buckets can have fewer than three. The ramp
+            prevents one unusual day from applying the whole adjustment.</li>
         <li><b>Guard the gust.</b> The gust correction is a multiplier, so an additive bound is the
             wrong tool for it: a learned ratio outside {postproc.GUST_RATIO_LO}–{postproc.GUST_RATIO_HI}
             is <b>refused</b> and the raw model gust published instead, and the published gust is
@@ -371,18 +383,35 @@ def _methodology(group, static=False):
       </ol>
       <p class="muted"><b>Föhn caveat:</b> “föhn-favourable” means forecast pressure and upper-air thresholds were crossed. Hohenpeißenberg is a confidence cross-check, not a classification condition; measured S–SE flow alone cannot distinguish föhn from drainage or fall-wind.</p>
       <h3>How it learns</h3>
-      <p>Each morning it compares yesterday's forecast to the measured wind (on-lake Urfeld for
-      Walchensee, on-lake Trimini for Kochelsee), updates the per-(scenario×hour) regression. Measured direction is shown separately as a flow-sector check, not physical-regime validation. Until history builds, hours read
-      "raw (no local calib yet)".</p>
+      <p>For every eligible measured hour, the learner updates only that hour’s
+      <code>(lake, scenario, hour)</code> bucket. It fits <code>measuredₕ ≈ a + b·rₕ</code> with
+      recursive least squares: <code>error = measuredₕ − (a + b·rₕ)</code>; the new <code>a</code>
+      and <code>b</code> move toward that error with forgetting factor λ = {postproc.FORGET:g}. The
+      initial model is <code>a = 0, b = 1</code> (“trust the raw model”), so local evidence builds
+      gradually and older evidence fades. Equivalently, each bucket continually minimises
+      <code>Σᵢ₌₁ⁿ λ^(n−i)·[measuredᵢ − (a + b·rᵢ)]²</code> over its <code>n</code> prior eligible observations,
+      where <code>i</code> runs from the oldest observation (1) to the latest (<code>n</code>),
+      and <code>rᵢ</code> and <code>measuredᵢ</code> are that observation’s raw forecast and wind measurement.</p>
+      <p>The published difference <code>forecastₕ − measuredₕ</code> has a different job: it feeds
+      the scorecard and the ±{learn.LARGE_ERR_KN:g} kn large-miss report. The regression trains on
+      <i>raw model → measurement</i>, never an already-corrected forecast. Only the first-issued
+      forecast and hours still in the future when it was issued can learn. Gusts use a separate
+      smoothed ratio <code>g ← clip[0.6,1.8](0.7g + 0.3·measured gust/raw gust)</code>, guarded to
+      {postproc.GUST_RATIO_LO}–{postproc.GUST_RATIO_HI}, where <code>g</code> is the bucket’s current gust multiplier.
+      Measured direction is a flow-sector check,
+      not physical-regime validation.</p>
       <h3>How it's checked, and how it tunes itself</h3>
-      <p>Every run is scored out of sample with <b>CRPS</b> (knots, lower better — the
-      probabilistic version of mean absolute error: it grades the whole predicted spread, and for a
-      single-number forecast equals the absolute error) against two baselines,
+      <p>Every issued hour is scored out of sample with <b>CRPS</b> (knots, lower better) against two baselines,
       <b>persistence</b> and <b>climatology</b>. On top of that an LLM tuner reviews
       <i>its own</i> earlier proposals against the measured CRPS, confirms or retracts each, and may
       propose small threshold changes — but a change is only written to the forecaster if replaying
       past days under it measurably lowers mean absolute error on at least {nmin} replayable days. Until that
-      history exists, proposals are recorded and shown, and nothing is applied.</p>
+      history exists, proposals are recorded and shown, and nothing is applied. For hourly ensemble
+      members <code>xᵢ</code>, measurement <code>y</code>, and <code>m</code> members,
+      <code>CRPS = (1/m)Σᵢ|xᵢ−y| − (1/2m²)ΣᵢΣⱼ|xᵢ−xⱼ|</code>, where <code>i</code> and <code>j</code>
+      each run over those members. It evaluates the published hourly
+      distribution—its centre and spread—not the RLS update; for a single-number forecast it equals
+      <code>|forecastₕ − measuredₕ|</code>.</p>
     </section>"""
     return f"""
     <section class="card method">
@@ -390,12 +419,24 @@ def _methodology(group, static=False):
       <p>Ammersee (~533 m) is an open foreland lake: wind is mostly <b>synoptic gradient</b> plus a
       <b>summer thermal (lake breeze)</b>; south föhn is rare here.</p>
       <h3>Prediction algorithm (per hour)</h3>
+      <p class="muted"><b>Formula key:</b> <code>h</code> = forecast hour; <code>rₕ</code> = raw blended wind for that hour;
+      <code>ŷₕ</code> = full locally corrected mean; <code>publishedₕ</code> = displayed forecast;
+      <code>a</code> = additive local bias; <code>b</code> = local scaling; <code>n</code> = eligible prior
+      observations in this exact lake×scenario×hour bucket.</p>
       <ol>
-        <li><b>Blend the models.</b> Value = mean of ICON-D2 ensemble + ICON-D2 deterministic +
-            ICON-EU at the Herrsching point; ensemble spread → confidence.</li>
+        <li><b>Blend the models.</b> Each hourly raw value is the equal-weight average of
+            <code>(ICON-D2 ensemble + ICON-D2 deterministic + ICON-EU) ÷ 3</code> at the Herrsching point.
+            If a source is unavailable, it averages the sources that are available. Ensemble spread
+            becomes the uncertainty band.</li>
         <li><b>Assign a forecast scenario:</b> <b>föhn-favourable</b> (strong Δp plus southerly 850 hPa wind, rare) → <b>strong-gradient</b> (strong 925 hPa flow) → <b>thermal-favourable</b> (daytime with limited cloud) → <b>calm/capped</b>. The scenario selects a local correction; it is not a confirmed physical regime.</li>
-        <li><b>Correct.</b> A learned regression <b>corrected = a + b·model</b> (scales with the
-            model), evidence-gated, and bounded by ±{fc.BIAS_CAP_KN:g} kn.</li>
+        <li><b>Correct the hourly mean.</b> In the selected <code>(lake, scenario, hour)</code> bucket,
+            the full correction is <code>ŷₕ = a + b·rₕ</code>, first bounded to within
+            ±{fc.BIAS_CAP_KN:g} kn of the raw value. It is then ramped in as
+            <code>publishedₕ = rₕ + min(1, n/3)·(ŷₕ − rₕ)</code>. Thus one observation moves the forecast only a third
+            of the way (<code>n=1</code>), two move it two thirds, and <code>n≥3</code> can apply the full bounded correction.</li>
+        <li><b>Why ramp it?</b> <code>n</code> counts only earlier eligible examples of this exact scenario at
+            this exact hour—at most one per day—so rare buckets can have fewer than three. The ramp
+            prevents one unusual day from applying the whole adjustment.</li>
         <li><b>Guard the gust.</b> The gust correction is a multiplier, so it gets different
             bounds than the mean: a learned ratio outside {postproc.GUST_RATIO_LO}–{postproc.GUST_RATIO_HI}
             is <b>refused</b> and the raw model gust published instead, and the result is capped at
@@ -407,13 +448,30 @@ def _methodology(group, static=False):
       </ol>
       <p class="muted">No Kesselberg Δθ / föhn drivers here (Alpine-rim only).</p>
       <h3>How it's checked, and how it tunes itself</h3>
-      <p>Every run is scored out of sample with <b>CRPS</b> (knots, lower better — the probabilistic
-      version of mean absolute error) against <b>persistence</b> and <b>climatology</b> baselines. An
+      <p>Every issued hour is scored out of sample with <b>CRPS</b> (knots, lower better) against
+      <b>persistence</b> and <b>climatology</b> baselines. For hourly ensemble members <code>xᵢ</code>
+      measurement <code>y</code>, and <code>m</code> members,
+      <code>CRPS = (1/m)Σᵢ|xᵢ−y| − (1/2m²)ΣᵢΣⱼ|xᵢ−xⱼ|</code>, where <code>i</code> and <code>j</code>
+      each run over those members. It evaluates the published hourly distribution—its centre and spread—not the RLS update; for
+      a single-number forecast it equals <code>|forecastₕ − measuredₕ|</code>. An
       LLM tuner reviews its earlier proposals against subsequent forecast scores and may suggest small
       threshold changes, but a change reaches the forecaster only if a backtest over at least {nmin} replayable days shows it lowers mean absolute error.</p>
       <h3>How it learns</h3>
-      <p>Each morning it compares yesterday's forecast to the measured wind and updates the
-      per-(scenario×hour) regression before today's forecast.</p>
+      <p>For every eligible measured hour, the learner updates only that hour’s
+      <code>(lake, scenario, hour)</code> bucket. It fits <code>measuredₕ ≈ a + b·rₕ</code> with
+      recursive least squares: <code>error = measuredₕ − (a + b·rₕ)</code>; the new <code>a</code>
+      and <code>b</code> move toward that error with forgetting factor λ = {postproc.FORGET:g}. The
+      initial model is <code>a = 0, b = 1</code> (“trust the raw model”), so local evidence builds
+      gradually and older evidence fades. Equivalently, each bucket continually minimises
+      <code>Σᵢ₌₁ⁿ λ^(n−i)·[measuredᵢ − (a + b·rᵢ)]²</code> over its <code>n</code> prior eligible observations,
+      where <code>i</code> runs from the oldest observation (1) to the latest (<code>n</code>),
+      and <code>rᵢ</code> and <code>measuredᵢ</code> are that observation’s raw forecast and wind measurement.</p>
+      <p>The published difference <code>forecastₕ − measuredₕ</code> has a different job: it feeds
+      the scorecard and the ±{learn.LARGE_ERR_KN:g} kn large-miss report. The regression trains on
+      <i>raw model → measurement</i>, never an already-corrected forecast. Only the first-issued
+      forecast and hours still in the future when it was issued can learn. Gusts use a separate
+      smoothed ratio <code>g ← clip[0.6,1.8](0.7g + 0.3·measured gust/raw gust)</code>, guarded to
+      {postproc.GUST_RATIO_LO}–{postproc.GUST_RATIO_HI}, where <code>g</code> is the bucket’s current gust multiplier.</p>
       <h3>Which truth it learned from</h3>
       <p>This matters more than it sounds: Ammersee's measured truth has <b>changed hands</b>
       — the on-water buoy until 15.06.2026, a calibrated shore blend since — and an error figure
