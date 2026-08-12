@@ -7,9 +7,9 @@ on:
   repository_dispatch:
     types: [hourly_forecast]
   schedule:
-    # Temporary scheduler validation: should create a run at 15:30 Berlin today
-    # (13:30 UTC). Keep the actual issue time in the record; cron itself is UTC.
-    - cron: "30 * * * *"
+    # Backup only. cron-job.org dispatches the primary :55 run; GitHub schedule can
+    # be delayed or dropped but provides an independent recovery opportunity.
+    - cron: "55 * * * *"
   workflow_dispatch:
 
 permissions:
