@@ -43,7 +43,8 @@ jobs:
           mkdir -p logs
           python - <<'PY'
           import datetime, json
-          row = {'ok': False, 'time': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+          now = datetime.datetime.now(datetime.timezone.utc)
+          row = {'ok': False, 'time': now.isoformat(), 'hour': (now + datetime.timedelta(hours=1)).hour,
                  'message': 'Hourly forecast issuance failed; displaying last valid records.'}
           with open('logs/hourly_status.json', 'w') as f: json.dump(row, f)
           with open('logs/hourly_status.jsonl', 'a') as f: f.write(json.dumps(row) + '\n')
@@ -54,8 +55,15 @@ jobs:
         run: |
           mkdir -p logs
           python - <<'PY'
-          import datetime, json
-          row = {'ok': True, 'time': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+          import datetime, json, glob
+          now = datetime.datetime.now(datetime.timezone.utc)
+          starts = []
+          for path in glob.glob('logs/*_hourly_forecast.jsonl'):
+              rows = [json.loads(x) for x in open(path) if x.strip()]
+              if rows: starts.append(rows[-1].get('valid_start'))
+          row = {'ok': True, 'time': now.isoformat(),
+                 'valid_start': min(starts) if starts else None,
+                 'hour': int(min(starts)[11:13]) if starts else (now + datetime.timedelta(hours=1)).hour,
                  'message': 'Hourly forecast issued successfully.'}
           with open('logs/hourly_status.json', 'w') as f: json.dump(row, f)
           with open('logs/hourly_status.jsonl', 'a') as f: f.write(json.dumps(row) + '\n')
