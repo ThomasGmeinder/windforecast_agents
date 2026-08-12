@@ -144,7 +144,42 @@ def reconcile_measurements(lake, now=None, actual_provider=wd.actual_hourly):
         with open(tmp, "w") as f:
             json.dump(bias, f, indent=2); f.flush(); os.fsync(f.fileno())
         os.replace(tmp, path)
+    _write_hourly_measurements(lake, records)
     return changed, learned
+
+
+def _write_hourly_measurements(lake, records):
+    """Materialize one source of truth for all reconciled hourly observations.
+
+    For each valid hour retain the frozen forecast-of-record row, including NR gaps.
+    Renderers and the measurements archive consume this instead of legacy daily diffs.
+    """
+    out = {}
+    now = datetime.datetime.now(wd.BERLIN)
+    for rec in records:
+        issued = datetime.datetime.fromisoformat(rec["issue_time"])
+        for row in rec.get("hourly", []):
+            vt = row.get("valid_time")
+            if not vt:
+                continue
+            valid = datetime.datetime.fromisoformat(vt)
+            if issued >= valid or valid >= now or row.get("legacy_calendar_backfill"):
+                continue
+            old = out.get(vt)
+            if old is None or issued > old[0]:
+                out[vt] = (issued, row)
+    path = os.path.join(wd.LOG_DIR, f"{lake}_hourly_measurements.jsonl")
+    rows = []
+    for vt, (issued, row) in sorted(out.items()):
+        measured = row.get("measured_kn")
+        rows.append({"lake": lake, "valid_time": vt, "issue_time": issued.isoformat(timespec="minutes"),
+                     "lead_minutes": row.get("lead_minutes"), "forecast_kn": row.get("mean_kn"),
+                     "measured_kn": measured, "fc_minus_measured_kn": row.get("fc_minus_measured_kn"),
+                     "measured_gust_kn": row.get("measured_gust_kn"),
+                     "measurement_source": row.get("measured_source"),
+                     "measurement_status": "present" if measured is not None else "NR"})
+    with open(path, "w") as f:
+        f.write("\n".join(json.dumps(r) for r in rows) + ("\n" if rows else ""))
 
 
 def verification_rows(lake):

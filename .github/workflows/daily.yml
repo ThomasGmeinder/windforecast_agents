@@ -48,35 +48,12 @@ jobs:
           .venv/bin/python lib/forecast.py selftest
           .venv/bin/python lib/simulate.py offline
 
-      - name: Daily run (learn from yesterday -> forecast today)
+      - name: Legacy daily audit (no model or Pages writes)
         env:
           # analyst is advisory + guarded: without this secret it cleanly skips.
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           # GEMINI_MODEL: gemini-3-flash   # pin once confirmed via AI Studio
-        run: .venv/bin/python daily_run.py
-
-      - name: Build static report
-        run: .venv/bin/python build_site.py
-
-      - name: Commit learned state
         run: |
-          git config user.name  "wind-bot"
-          git config user.email "wind-bot@users.noreply.github.com"
-          # config/ MUST be included: it holds params.json (shared defaults) and the per-lake
-          # params_<lake>.json the tuner writes. Without
-          # it every backtest-verified parameter change would be silently reverted on the
-          # next run while the param_change event claimed success.
-          git add models logs config
-          git commit -m "daily: forecast + learning $(date -u +%F)" || echo "nothing to commit"
-          git push
-        # NOTE: state is committed to the default branch (main) — simplest, small repo.
-        # To keep main code-only instead, push models/ + logs/ to a dedicated `data`
-        # branch here and have this job checkout/restore it at the start.
-
-      - name: Publish report to Pages
-        uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: site
-      - id: deploy
-        uses: actions/deploy-pages@v4
+          # Preserve the legacy audit code in the repository, but hourly_run.py owns
+          # forecasts, RLS updates, current measurements, commits, and Pages deployment.
+          .venv/bin/python lib/verify.py all

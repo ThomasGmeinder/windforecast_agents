@@ -959,33 +959,43 @@ worst in thermal/föhn.</footer></body></html>"""
 
 
 def _measurements_data():
-    """Everything the measurements browser needs, from the COMMITTED diffs log — the same
-    rows learning and verification consume, so the page cannot show a different truth than
-    the pipeline used. Shape: {lake: {date: {"src": str, "rows": [[hr,meas,gust,dir,fc,err]]}}}"""
+    """Measured archive from hourly reconciliation, with legacy diffs as fallback.
+
+    Shape: {lake: {date: {"src": str, "rows": [[hr,meas,gust,dir,fc,err]]}}}.
+    The hourly archive wins for a date because it contains the frozen hourly
+    forecast-of-record rather than a calendar-day daily forecast.
+    """
     out = {}
     for lake in ("ammersee", "kochelsee", "walchensee"):
-        p = os.path.join(wd.LOG_DIR, f"{lake}_diffs.jsonl")
-        if not os.path.exists(p):
-            continue
         days = {}
-        for line in open(p):
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                r = json.loads(line)
-            except Exception:
-                continue                      # a corrupt line must not blank the page
-            if r.get("actual_kn") is None:
-                continue
-            # Some early rows predate the source being recorded. Say so plainly rather
-            # than leaving the field blank, which would read as "no source needed".
-            d = days.setdefault(r["date"],
-                                {"src": r.get("source") or "source not recorded", "rows": []})
-            d["rows"].append([r["hour"],
-                              r.get("actual_kn"), r.get("actual_gust_kn"),
-                              r.get("dir_actual"), r.get("issued_kn"),
-                              r.get("err_issued_kn"), bool(r.get("leaked"))])
+        p = os.path.join(wd.LOG_DIR, f"{lake}_diffs.jsonl")
+        if os.path.exists(p):
+            for line in open(p):
+                try:
+                    r = json.loads(line)
+                except Exception:
+                    continue
+                if r.get("actual_kn") is None:
+                    continue
+                d = days.setdefault(r["date"], {"src": r.get("source") or "source not recorded", "rows": []})
+                d["rows"].append([r["hour"], r.get("actual_kn"), r.get("actual_gust_kn"),
+                                  r.get("dir_actual"), r.get("issued_kn"), r.get("err_issued_kn"),
+                                  bool(r.get("leaked"))])
+        hp = os.path.join(wd.LOG_DIR, f"{lake}_hourly_measurements.jsonl")
+        hourly = {}
+        if os.path.exists(hp):
+            for line in open(hp):
+                try:
+                    r = json.loads(line)
+                except Exception:
+                    continue
+                if r.get("measurement_status") != "present":
+                    continue
+                date, hour = r["valid_time"][:10], int(r["valid_time"][11:13])
+                d = hourly.setdefault(date, {"src": r.get("measurement_source") or "source not recorded", "rows": []})
+                d["rows"].append([hour, r.get("measured_kn"), r.get("measured_gust_kn"), None,
+                                  r.get("forecast_kn"), r.get("fc_minus_measured_kn"), False])
+        days.update(hourly)
         for d in days.values():
             d["rows"].sort(key=lambda x: x[0])
         if days:
