@@ -29,7 +29,9 @@ jobs:
 
       - name: Issue next 24-hour rolling windows
         id: issue
-        run: .venv/bin/python hourly_run.py
+        # Must finish before the valid hour. A timeout is a failed issuance, not a
+        # reason to block Pages or overlap the next scheduled :55 run.
+        run: timeout --signal=TERM 240s .venv/bin/python hourly_run.py
         # A transient upstream API/TLS failure must not prevent deployment of the
         # already-committed renderer and last valid hourly records. The failed issuance
         # remains red in this step; the next hourly run retries it.
