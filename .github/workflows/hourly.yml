@@ -28,11 +28,36 @@ jobs:
       - run: uv pip install --python .venv numpy
 
       - name: Issue next 24-hour rolling windows
+        id: issue
         run: .venv/bin/python hourly_run.py
         # A transient upstream API/TLS failure must not prevent deployment of the
         # already-committed renderer and last valid hourly records. The failed issuance
         # remains red in this step; the next hourly run retries it.
         continue-on-error: true
+
+      - name: Record issuance failure
+        if: steps.issue.outcome == 'failure'
+        run: |
+          mkdir -p logs
+          python - <<'PY'
+          import datetime, json
+          row = {'ok': False, 'time': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                 'message': 'Hourly forecast issuance failed; displaying last valid records.'}
+          with open('logs/hourly_status.json', 'w') as f: json.dump(row, f)
+          with open('logs/hourly_status.jsonl', 'a') as f: f.write(json.dumps(row) + '\n')
+          PY
+
+      - name: Record successful issuance
+        if: steps.issue.outcome == 'success'
+        run: |
+          mkdir -p logs
+          python - <<'PY'
+          import datetime, json
+          row = {'ok': True, 'time': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                 'message': 'Hourly forecast issued successfully.'}
+          with open('logs/hourly_status.json', 'w') as f: json.dump(row, f)
+          with open('logs/hourly_status.jsonl', 'a') as f: f.write(json.dumps(row) + '\n')
+          PY
 
       - name: Build static report
         run: .venv/bin/python build_site.py
@@ -51,3 +76,9 @@ jobs:
           path: site
       - id: deploy
         uses: actions/deploy-pages@v4
+
+      - name: Surface issuance failure after deployment
+        if: steps.issue.outcome == 'failure'
+        run: |
+          echo "Hourly forecast issuance failed; Pages deployed the last valid records."
+          exit 1

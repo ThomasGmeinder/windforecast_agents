@@ -106,6 +106,27 @@ def _generated():
                                            wd.BERLIN).strftime("%Y-%m-%d %H:%M %Z")
 
 
+def _hourly_status_section():
+    p = os.path.join(wd.LOG_DIR, "hourly_status.jsonl")
+    rows = []
+    if os.path.exists(p):
+        for line in open(p):
+            try:
+                rows.append(json.loads(line))
+            except Exception:
+                pass
+    rows = rows[-24:]
+    if not rows:
+        return '<section class="card"><h2>Hourly update status</h2><p class="muted">No hourly update has been recorded yet.</p></section>'
+    last = rows[-1]
+    state = 'success' if last.get('ok') else 'failure'
+    label = 'last update succeeded' if last.get('ok') else 'last update failed — showing last valid forecast'
+    table = ''.join(f'<tr><td>{html.escape(str(x.get("time", "—")))}</td><td class="{("ok" if x.get("ok") else "bad")}">{("success" if x.get("ok") else "failed")}</td><td>{html.escape(str(x.get("message", "")))}</td></tr>' for x in reversed(rows))
+    return f'''<section class="card hourly-status {state}"><h2>Hourly update status</h2>
+      <p class="summary"><b>{label}</b> · {html.escape(str(last.get("time", "—")))}</p>
+      <details><summary>Update results — last 24 runs</summary><table><thead><tr><th>time (UTC)</th><th>result</th><th>detail</th></tr></thead><tbody>{table}</tbody></table></details></section>'''
+
+
 def _dir_arrow(deg):
     if deg is None:
         return "·"
