@@ -29,6 +29,10 @@ jobs:
 
       - name: Issue next 24-hour rolling windows
         run: .venv/bin/python hourly_run.py
+        # A transient upstream API/TLS failure must not prevent deployment of the
+        # already-committed renderer and last valid hourly records. The failed issuance
+        # remains red in this step; the next hourly run retries it.
+        continue-on-error: true
 
       - name: Build static report
         run: .venv/bin/python build_site.py
