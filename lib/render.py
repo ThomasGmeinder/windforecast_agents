@@ -697,15 +697,17 @@ def _data_sources(group):
              "<code>api.open-meteo.com/v1/forecast?hourly=temperature_2m</code> at both lake points"),
         ]
         meas = [
-            ("addicted-sports Urfeld", "on-lake measured wind (Walchensee truth)",
+            ("addicted-sports Urfeld", "central-water surface-wind reference (Walchensee)",
              "<code>mavg</code>/<code>mmax</code>/<code>dir</code> from the same JSON feed "
-             "<code>…/forecast/walchensee/urfeld/?json=wind&amp;from=DATE</code> (daylight hours)"),
-            ("addicted-sports Trimini", "on-lake measured wind (Kochelsee truth)",
+             "<code>…/forecast/walchensee/urfeld/?json=wind&amp;from=DATE</code>. The operator places "
+             "the anemometer on a buoy near the lake centre at ~1.6 m above water: very representative "
+             "of surface wind there, but not a 10 m reference. Sensor model/calibration accuracy is not published."),
+            ("addicted-sports Trimini", "lake-edge local wind (Kochelsee south shore)",
              "<code>mavg</code>/<code>mmax</code>/<code>dir</code> from "
              "<code>…/forecast/kochelsee/trimini/?json=wind&amp;from=DATE</code> — the station at the "
-             "Kristall Therme Trimini on Kochelsee's south shore (~629 m; a genuinely separate sensor "
-             "from Urfeld, verified hour-by-hour), daylight hours; DWD Garmisch 01550 only as a "
-             "fallback if the on-lake feed is unavailable"),
+             "Kristall Therme Trimini grounds (~629 m, ~4 m above water). It is the best available local "
+             "spot reference but shore/terrain exposure means it is not lake-wide; sensor model/calibration "
+             "accuracy is not published. Speed gaps render as NR rather than a fabricated delta."),
         ]
     else:
         pred = [

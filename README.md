@@ -114,7 +114,17 @@ The forecast VALUE is the **equal-weight mean of several sources**, not one run:
   → hourly `mavg` (measured avg kn), `mmax` (gust), `dir`, webcam images, and the
   site's own `mae`/`guete`. `winddata.addicted_measured_hourly`. Daylight hours
   only. **Far better than any DWD station** — it captures the NE nozzle thermal a
-  valley station misses.
+  valley station misses. The operator documents its anemometer on a buoy roughly in the
+  middle of the lake, about 1.6 m above the water: highly representative of surface wind
+  at that buoy, but not a standard 10 m meteorological reference. No public sensor model,
+  calibration record, or traceable instrument-accuracy specification was found.
+- **Kochelsee / Trimini station** via the same endpoint → `mavg`, `mmax`, and direction.
+  The operator documents it at the lake edge on the Kristall Trimini grounds, about 4 m
+  above the water. It is the best available local operational truth for that south-shore
+  spot, but not a lake-wide or central-water reference: shore/terrain exposure can
+  matter, and no public sensor model, calibration record, or traceable accuracy
+  specification was found. When it provides no wind speed, the hourly table shows
+  **NR** and no forecast-minus-measurement value.
 - **Ammerseeboje** (`winddata.gkd_wind_hourly`, GKD Bayern station 16601050) — an
   official buoy **on Ammersee**, hourly, archive back to 2014, CC BY 4.0. It is the ONLY
   buoy in GKD's entire 127-station wind network, so there is no second one to fall back
