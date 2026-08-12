@@ -182,6 +182,41 @@ def write_scorecard(lake, issued):
         f.write(json.dumps(rec) + "\n")
 
 
+def purge_test_history(before):
+    """Remove explicitly identified pre-production hourly test records and rebuild bias.
+
+    This migration is intentionally explicit: production code never guesses whether a
+    record is synthetic. ``before`` is an aware issue timestamp supplied by the operator.
+    """
+    cutoff = datetime.datetime.fromisoformat(before)
+    if cutoff.tzinfo is None:
+        raise ValueError("cutoff must include a timezone offset")
+    result = {}
+    for lake in fc.LAKES:
+        path = os.path.join(wd.LOG_DIR, f"{lake}_hourly_forecast.jsonl")
+        records = [json.loads(x) for x in open(path) if x.strip()] if os.path.exists(path) else []
+        kept = [r for r in records if datetime.datetime.fromisoformat(r["issue_time"]) >= cutoff]
+        if os.path.exists(path):
+            with open(path, "w") as f:
+                f.write("\n".join(json.dumps(r) for r in kept) + ("\n" if kept else ""))
+        # Rebuild from legacy daily history, then replay only retained as-issued hourly
+        # observations. This removes test-row influence from the shared RLS state.
+        bias = verify.rebuild_bias(lake, fc.params_for(lake))
+        bpath, tmp = fc.bias_path(lake), fc.bias_path(lake) + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(bias, f, indent=2); f.flush(); os.fsync(f.fileno())
+        os.replace(tmp, bpath)
+        for rec in kept:
+            for row in rec.get("hourly", []):
+                row.pop("learned_hourly", None)
+        if kept:
+            with open(path, "w") as f:
+                f.write("\n".join(json.dumps(r) for r in kept) + "\n")
+            reconcile_measurements(lake, now=datetime.datetime.now(wd.BERLIN))
+        result[lake] = {"removed": len(records) - len(kept), "kept": len(kept)}
+    return result
+
+
 def fill_bootstrap_from_daily_log(lake):
     """Fill pre-05:00 rows from the real legacy calendar forecast log.
 
@@ -221,6 +256,7 @@ def main():
     ap.add_argument("--at", help="issue timestamp, ISO-8601; defaults to now in Berlin")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--selftest", action="store_true")
+    ap.add_argument("--purge-test-before", help="explicit aware issue-time cutoff for test-record purge")
     args = ap.parse_args()
     if args.selftest:
         a = datetime.datetime.fromisoformat("2026-08-12T04:55+02:00")
@@ -261,6 +297,9 @@ def main():
         finally:
             wd.LOG_DIR, fc.MODELS_DIR = old_log, old_models
         print("hourly_run self-test: PASS anchor 04:55→05:00, 05:00→05:00, 06:46→07:00")
+        return
+    if args.purge_test_before:
+        print(json.dumps(purge_test_history(args.purge_test_before), indent=2))
         return
     issued = (datetime.datetime.fromisoformat(args.at) if args.at else datetime.datetime.now(wd.BERLIN))
     if issued.tzinfo is None:
