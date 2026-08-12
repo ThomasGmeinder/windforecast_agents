@@ -1,1 +1,1 @@
-{"ok": false, "time": "2026-08-12T12:10:46.237512+00:00", "message": "Hourly forecast issuance failed; displaying last valid records."}
+{"ok": true, "time": "2026-08-12T12:41:14.716469+00:00", "message": "Hourly forecast issued successfully."}
