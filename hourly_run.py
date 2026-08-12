@@ -21,9 +21,14 @@ import verify
 
 
 def next_hour(now):
-    now = now.astimezone(wd.BERLIN)
-    return (now.replace(minute=0, second=0, microsecond=0) + datetime.timedelta(hours=1)
-            if now.minute or now.second or now.microsecond else now)
+    # Round in UTC, then convert back. Adding an hour to a Berlin wall-clock datetime
+    # can manufacture the nonexistent 02:00 during the spring DST transition.
+    local = now.astimezone(wd.BERLIN)
+    utc = local.astimezone(datetime.timezone.utc)
+    rounded = utc.replace(minute=0, second=0, microsecond=0)
+    if utc.minute or utc.second or utc.microsecond:
+        rounded += datetime.timedelta(hours=1)
+    return rounded.astimezone(wd.BERLIN)
 
 
 def select_forecast_of_record(records, valid_time):
@@ -265,6 +270,10 @@ def main():
         assert next_hour(b).isoformat() == "2026-08-12T05:00:00+02:00"
         late = datetime.datetime.fromisoformat("2026-08-12T06:46+02:00")
         assert next_hour(late).isoformat() == "2026-08-12T07:00:00+02:00"
+        spring = datetime.datetime(2026, 3, 29, 1, 55, tzinfo=wd.BERLIN)
+        assert next_hour(spring).isoformat() == "2026-03-29T03:00:00+02:00"
+        autumn = datetime.datetime(2026, 10, 25, 1, 55, tzinfo=wd.BERLIN)
+        assert next_hour(autumn).isoformat() == "2026-10-25T02:00:00+02:00"
         # The 00:00 row is supplied by 23:55, and a later 00:55 refresh must not
         # replace it. The 01:00 row correctly uses the 00:55 record.
         r0 = {"issue_time": "2026-08-11T23:55+02:00", "hourly": [
