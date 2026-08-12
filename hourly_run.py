@@ -10,7 +10,7 @@ Examples:
   .venv/bin/python hourly_run.py --dry-run
   .venv/bin/python hourly_run.py --at 2026-08-12T04:55+02:00
 """
-import argparse, datetime, json, os, sys, tempfile
+import argparse, datetime, json, os, sys, tempfile, time
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(ROOT, "lib"))
@@ -255,8 +255,22 @@ def main():
             write_scorecard(lake, issued)
             print(f"{lake}: reconciled {n} measured row(s); learned {learned}; "
                   f"hourly score n={sc['n']} MAE={sc['mae']} CRPS={sc['crps']}")
+    # Build every lake before writing any of them: an API timeout must not leave a
+    # half-issued cross-lake state. Short bounded retries handle transient TLS/API errors.
+    built = {}
     for lake in fc.LAKES:
-        rec = build_window(lake, issued)
+        last = None
+        for attempt in range(3):
+            try:
+                built[lake] = build_window(lake, issued)
+                break
+            except Exception as e:
+                last = e
+                if attempt < 2:
+                    time.sleep(2 * (attempt + 1))
+        if lake not in built:
+            raise RuntimeError(f"{lake}: hourly issuance failed after 3 attempts: {last}")
+    for lake, rec in built.items():
         if not args.dry_run:
             write(rec)
         print(f"{lake}: issued {rec['issue_time']} | {rec['valid_start']} → {rec['valid_end']} "
