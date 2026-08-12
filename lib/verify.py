@@ -157,6 +157,52 @@ def evaluate_hourly(lake):
     return overall
 
 
+def _hourly_walk_forward(lake, params, rows):
+    bias, errs = {"buckets": {}}, []
+    for vt, _issue, row in rows:
+        y, raw = row.get("measured_kn"), row.get("raw_kn")
+        if y is None or raw is None or not row.get("inputs"):
+            continue
+        hour = int(vt[11:13])
+        regime, cs, _, _, _ = fc.replay_hour(
+            lake, hour, fc.row_from_logged(row), row.get("dp"), {"dtheta": row.get("dtheta")},
+            raw, row.get("raw_gust_kn") or raw, params=params, bias=bias,
+            gust_ceiling_kn=row.get("gust_ceiling_kn"))
+        errs.append((vt[:10], abs(cs - y)))
+        st = bias["buckets"].setdefault(fc._bucket_key(regime, hour), postproc.new_state())
+        postproc.update(st, raw, y)
+    return errs
+
+
+def hourly_backtest(lake, param, value, params=None):
+    """Paired hourly walk-forward MAE gate for an hourly parameter proposal."""
+    base = dict(params or fc.params_for(lake))
+    if param not in base:
+        return {"error": f"unknown param {param}"}
+    cand = dict(base); cand[param] = value
+    rows = hourly_forecast_of_record(lake)
+    cur, alt = _hourly_walk_forward(lake, base, rows), _hourly_walk_forward(lake, cand, rows)
+    if not cur:
+        return {"mae_current": None, "mae_candidate": None, "mae_skill": None,
+                "n_days": 0, "n_pairs": 0, "enough_data": False,
+                "delta_kn": None, "ci_lo": None, "ci_hi": None, "significant": False}
+    by_day = {}
+    for (d, e0), (_, e1) in zip(cur, alt):
+        by_day.setdefault(d, []).append(e1 - e0)
+    diffs = [x for xs in by_day.values() for x in xs]
+    delta = sum(diffs) / len(diffs)
+    lo, hi = _block_bootstrap_ci(by_day)
+    c0, c1 = sum(x for _, x in cur) / len(cur), sum(x for _, x in alt) / len(alt)
+    nd = len(by_day)
+    return {"mae_current": round(c0, 3), "mae_candidate": round(c1, 3),
+            "mae_skill": round(1 - c1 / c0, 4) if c0 else None,
+            "n_days": nd, "n_pairs": len(cur),
+            "enough_data": nd >= N_MIN_BACKTEST_DAYS and len(cur) >= N_MIN_BACKTEST_PAIRS,
+            "delta_kn": round(delta, 4), "ci_lo": None if lo is None else round(lo, 4),
+            "ci_hi": None if hi is None else round(hi, 4),
+            "significant": bool(hi is not None and hi < 0 and delta <= -MIN_EFFECT_KN)}
+
+
 # ---------------------------------------------------------------- log loading
 def _load_forecasts(lake):
     """{date: {hour: hourrec}} of the forecast OF RECORD for each date.
