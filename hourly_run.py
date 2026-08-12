@@ -222,12 +222,12 @@ def purge_test_history(before):
     return result
 
 
-def fill_bootstrap_from_daily_log(lake):
-    """Fill pre-05:00 rows from the real legacy calendar forecast log.
+def fill_legacy_display_gaps(lake):
+    """Fill missing current-day display rows from the real daily forecast log.
 
-    This is only a migration bridge until the prior 23:55 hourly record exists. Rows
-    retain ``legacy_calendar_backfill`` so they are never mistaken for hourly-issued
-    forecasts in later verification.
+    This is a display bridge while hourly issuance begins mid-day or its historical
+    record is intentionally unavailable. Rows retain ``legacy_calendar_backfill`` so
+    they are never mistaken for hourly-issued forecasts in learning or verification.
     """
     hp = os.path.join(wd.LOG_DIR, f"{lake}_hourly_forecast.jsonl")
     dp = os.path.join(wd.LOG_DIR, f"{lake}_forecast.jsonl")
@@ -243,8 +243,6 @@ def fill_bootstrap_from_daily_log(lake):
     have = {r["valid_time"] for r in rec["hourly"]}
     added = 0
     for row in legacy["hourly"]:
-        if row["hour"] >= 5:
-            continue
         valid = f"{day}T{row['hour']:02d}:00:00+02:00"
         if valid not in have:
             rec["hourly"].append({**row, "valid_time": valid, "legacy_calendar_backfill": True})
@@ -254,6 +252,33 @@ def fill_bootstrap_from_daily_log(lake):
     with open(hp, "w") as f:
         f.write("\n".join(json.dumps(x) for x in records) + "\n")
     return added
+
+
+def reconcile_legacy_display_measurements(lake):
+    """Attach current measurements to legacy display-only rows, never learning them."""
+    path = os.path.join(wd.LOG_DIR, f"{lake}_hourly_forecast.jsonl")
+    if not os.path.exists(path):
+        return 0
+    records = [json.loads(x) for x in open(path) if x.strip()]
+    by_date, sources, changed = {}, {}, 0
+    for rec in records:
+        for row in rec.get("hourly", []):
+            if not row.get("legacy_calendar_backfill") or row.get("measured_kn") is not None:
+                continue
+            d, h = row["valid_time"][:10], int(row["valid_time"][11:13])
+            if d not in by_date:
+                by_date[d], sources[d] = wd.actual_hourly(lake, d)
+            obs = by_date[d].get(h)
+            if obs is None:
+                continue
+            row["measured_kn"] = obs["mean_kn"]
+            row["measured_gust_kn"] = obs.get("gust_kn")
+            row["measured_source"] = sources[d]
+            row["fc_minus_measured_kn"] = round(row["mean_kn"] - obs["mean_kn"], 1)
+            changed += 1
+    with open(path, "w") as f:
+        f.write("\n".join(json.dumps(r) for r in records) + "\n")
+    return changed
 
 
 def main():
@@ -341,6 +366,12 @@ def main():
     for lake, rec in built.items():
         if not args.dry_run:
             write(rec)
+            # Today's pre-hourly gaps can still be shown honestly from the persisted
+            # daily forecast; they are display-only and excluded from hourly scoring.
+            fill_legacy_display_gaps(lake)
+            legacy_n = reconcile_legacy_display_measurements(lake)
+            n, learned = reconcile_measurements(lake)
+            print(f"{lake}: filled legacy gaps; attached {legacy_n} legacy measurement(s); reconciled {n} measured row(s); learned {learned}")
         print(f"{lake}: issued {rec['issue_time']} | {rec['valid_start']} → {rec['valid_end']} "
               f"| {len(rec['hourly'])} rows" + (" (dry run)" if args.dry_run else ""))
 

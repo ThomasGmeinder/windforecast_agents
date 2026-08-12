@@ -48,6 +48,30 @@ def _wind_cell_style(kn):
 
 
 def _latest_forecast(lake):
+    def legacy_rows(date):
+        """Real daily forecast rows used only to fill a visual transition gap.
+
+        The hourly issuer began part-way through the day. Its missing earlier hours must
+        not render as empty, but the daily record is never eligible for hourly learning
+        or lead-time scoring. ``legacy_calendar_backfill`` makes that boundary explicit.
+        """
+        path = os.path.join(wd.LOG_DIR, f"{lake}_forecast.jsonl")
+        candidates = []
+        if os.path.exists(path):
+            for line in open(path):
+                try:
+                    r = json.loads(line)
+                except Exception:
+                    continue
+                if r.get("date") == date and r.get("hourly"):
+                    candidates.append(r)
+        if not candidates:
+            return {}
+        rec = min(candidates, key=lambda r: verify._rank(r.get("run_stamp")))
+        return {r["hour"]: {**r, "legacy_calendar_backfill": True,
+                            "issue_time": rec.get("run_stamp"), "lead_minutes": None}
+                for r in rec["hourly"]}
+
     hp = os.path.join(wd.LOG_DIR, f"{lake}_hourly_forecast.jsonl")
     if os.path.exists(hp):
         try:
@@ -58,6 +82,7 @@ def _latest_forecast(lake):
                 day = start[:10]
                 now = datetime.datetime.now(wd.BERLIN)
                 rows = []
+                legacy = legacy_rows(day)
                 for hour in range(24):
                     vt = f"{day}T{hour:02d}:00:00+02:00"
                     valid = datetime.datetime.fromisoformat(vt)
@@ -70,9 +95,17 @@ def _latest_forecast(lake):
                     # Past: last forecast available before the valid hour. Future: newest
                     # currently issued update for that hour.
                     allowed = [x for x in candidates if x[0] < valid] if valid < now else candidates
+                    if not allowed and valid < now:
+                        # Prefer the reconciled legacy copy persisted by hourly_run.py.
+                        # It carries measured/delta values; the daily log alone does not.
+                        allowed = [x for x in candidates if x[1].get("legacy_calendar_backfill")]
                     if allowed:
                         issued, row = max(allowed, key=lambda x: x[0])
                         rows.append({**row, "issue_time": issued.isoformat(timespec="minutes")})
+                    elif hour in legacy:
+                        # Display-only transition bridge. The row receives the persisted
+                        # measurement/delta below, but cannot enter hourly score/learning.
+                        rows.append(legacy[hour])
                 return {"lake": lake, "label": fc.LAKES.get(lake, (0, 0, lake.title()))[2],
                         "date": start[:10], "run_stamp": r.get("issue_time"),
                         "summary": f"rolling window {start[11:16]} → {end[11:16]} next day",
@@ -309,12 +342,15 @@ def _forecast_card(rec):
                     ("—" if obs is None else f'{obs["actual_kn"]:{fc.KN_FMT}}'))
         own_delta = r.get("fc_minus_measured_kn")
         delta = (f'{own_delta:+.1f}' if own_delta is not None else
-                 ("—" if obs is None else ("not forecastable" if obs.get("leaked")
-                  else f'{obs.get("err_issued_kn", 0):+.1f}')))
+                 ("—" if obs is None else
+                  (f'{obs.get("err_issued_kn", 0):+.1f}' if r.get("legacy_calendar_backfill")
+                   else ("not forecastable" if obs.get("leaked") else f'{obs.get("err_issued_kn", 0):+.1f}'))))
         scenario = html.escape(_scenario_label(reg))
         issue = r.get("issue_time") or rec.get("run_stamp")
         lead = r.get("lead_minutes")
         issued = "—" if not issue else (issue[11:16] + (f' · {lead // 60}h{lead % 60:02d}' if lead is not None else ''))
+        if r.get("legacy_calendar_backfill"):
+            note.append("legacy daily row; display-only")
         rows.append(
             f'<tr><td class="hr">{r["hour"]:02d}</td><td class="note">{issued}</td>'
             # No arrow when the direction is flagged variable — a rotated arrow reads as a
