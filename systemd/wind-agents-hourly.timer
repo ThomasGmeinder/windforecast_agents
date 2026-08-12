@@ -1,0 +1,10 @@
+[Unit]
+Description=Run rolling hourly wind forecast at :55 Berlin time
+
+[Timer]
+OnCalendar=*-*-* *:55:00 Europe/Berlin
+Persistent=true
+Unit=wind-agents-hourly.service
+
+[Install]
+WantedBy=timers.target

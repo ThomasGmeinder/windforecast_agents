@@ -395,6 +395,23 @@ skips cleanly and the deterministic forecast is unaffected.
 
 ## 6. Daily automation (`daily_run.py` + systemd)
 
+### Hourly trigger
+
+The public hourly path is primarily dispatched by cron-job.org through GitHub
+`repository_dispatch`; GitHub's own `schedule:` remains a non-punctual backup. For a
+local mirror, install the bundled user units:
+
+```bash
+mkdir -p ~/.config/systemd/user
+cp systemd/wind-agents-hourly.{service,timer} ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now wind-agents-hourly.timer
+systemctl --user list-timers wind-agents-hourly.timer
+```
+
+The timer runs `hourly_run.py` at `:55` Europe/Berlin. It issues the next valid hourly
+window locally; it does not dispatch or deploy GitHub Pages.
+
 `daily_run.py`:
 0. STEP 0 — **measurement-source watch**: probe the Ammerseeboje, log which truth is in
    force, and announce any change loudly. Runs first because learning consumes whatever it
