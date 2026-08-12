@@ -5,7 +5,9 @@ name: hourly rolling wind forecast
 # claims to have forecast an hour that had already begun.
 on:
   schedule:
-    - cron: "55 * * * *"
+    # Temporary scheduler validation: should create a run at 15:30 Berlin today
+    # (13:30 UTC). Keep the actual issue time in the record; cron itself is UTC.
+    - cron: "30 * * * *"
   workflow_dispatch:
 
 permissions:
