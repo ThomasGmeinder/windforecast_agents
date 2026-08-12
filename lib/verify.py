@@ -123,7 +123,7 @@ def hourly_forecast_of_record(lake):
                 valid = datetime.datetime.fromisoformat(row["valid_time"])
             except Exception:
                 continue
-            if rec["_issued"] >= valid or row.get("measured_kn") is None:
+            if rec["_issued"] >= valid or row.get("measured_kn") is None or row.get("legacy_calendar_backfill"):
                 continue
             old = by_valid.get(row["valid_time"])
             if old is None or rec["_issued"] > old[0]:

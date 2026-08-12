@@ -124,7 +124,7 @@ def reconcile_measurements(lake, now=None, actual_provider=wd.actual_hourly):
         row["fc_minus_measured_kn"] = round(row["mean_kn"] - obs["mean_kn"], 1)
         # Exactly once per selected forecast-of-record row. The hourly record carries the
         # marker, so a later reconciliation cannot train the same observation twice.
-        if not row.get("learned_hourly"):
+        if not row.get("legacy_calendar_backfill") and not row.get("learned_hourly"):
             st = bias.setdefault("buckets", {}).setdefault(fc._bucket_key(row.get("regime", "gradient"), hour),
                                                            postproc.new_state())
             postproc.update(st, row["raw_kn"], obs["mean_kn"])
