@@ -916,7 +916,6 @@ def report_html(group, static=False):
   {_legend()}
 </header>
 <main>
-  {_hourly_status_section()}
   {('<div class="analyst"><b>Hourly transition.</b> This table uses timestamped 24-hour records, forecast-of-record selection, and reconciled measurements; selected rows can make one guarded hourly RLS update. The scorecard and tuner below still evaluate legacy daily records, so do not compare their lead times or skill directly with this table.</div>' if hourly else '')}
   <div class="sec"><span class="chip fc">forecast</span> Predicted — today ({date})</div>
   {fcards or '<p class="muted">No forecast logged yet — run daily_run.py.</p>'}
