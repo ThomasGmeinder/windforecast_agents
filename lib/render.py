@@ -48,6 +48,37 @@ def _wind_cell_style(kn):
 
 
 def _latest_forecast(lake):
+    hp = os.path.join(wd.LOG_DIR, f"{lake}_hourly_forecast.jsonl")
+    if os.path.exists(hp):
+        try:
+            records = [json.loads(x) for x in open(hp) if x.strip()]
+            r = records[-1]
+            if r.get("hourly"):
+                start, end = r.get("valid_start", ""), r.get("valid_end", "")
+                day = start[:10]
+                now = datetime.datetime.now(wd.BERLIN)
+                rows = []
+                for hour in range(24):
+                    vt = f"{day}T{hour:02d}:00:00+02:00"
+                    valid = datetime.datetime.fromisoformat(vt)
+                    candidates = []
+                    for rec in records:
+                        issued = datetime.datetime.fromisoformat(rec["issue_time"])
+                        for row in rec.get("hourly", []):
+                            if row.get("valid_time") == vt and issued <= now:
+                                candidates.append((issued, row))
+                    # Past: last forecast available before the valid hour. Future: newest
+                    # currently issued update for that hour.
+                    allowed = [x for x in candidates if x[0] < valid] if valid < now else candidates
+                    if allowed:
+                        issued, row = max(allowed, key=lambda x: x[0])
+                        rows.append({**row, "issue_time": issued.isoformat(timespec="minutes")})
+                return {"lake": lake, "label": fc.LAKES.get(lake, (0, 0, lake.title()))[2],
+                        "date": start[:10], "run_stamp": r.get("issue_time"),
+                        "summary": f"rolling window {start[11:16]} → {end[11:16]} next day",
+                        "hourly": rows, "rolling": True}
+        except Exception:
+            pass
     p = os.path.join(wd.LOG_DIR, f"{lake}_forecast.jsonl")
     if not os.path.exists(p):
         return None
@@ -199,8 +230,36 @@ def _forecast_card(rec):
         return ""
     label = html.escape(rec.get("label", rec["lake"].title()))
     summ = html.escape(rec.get("summary", ""))
+    # Measurements arrive after the forecast and are persisted in the diffs log. Joining
+    # them here gives one operational table: future rows show dashes, while a rendered
+    # historical/current row can show the recorded measurement and signed error.
+    observed = {}
+    p = os.path.join(wd.LOG_DIR, f"{rec['lake']}_diffs.jsonl")
+    if os.path.exists(p):
+        for line in open(p):
+            try:
+                d = json.loads(line)
+            except Exception:
+                continue
+            if d.get("date") == rec.get("date") and d.get("actual_kn") is not None:
+                observed[d.get("hour")] = d
+    forecast_rows = rec["hourly"]
+    if rec.get("rolling"):
+        # Render the familiar current calendar day, not the raw 05:00→05:00 issuance
+        # horizon. Once the hourly service has run through a midnight, 00:00–04:00 come
+        # from the prior 23:55 record. During bootstrap they remain explicit gaps.
+        by_hour = {int(r["valid_time"][11:13]): r for r in rec["hourly"]
+                   if r.get("valid_time", "").startswith(rec["date"])}
+        forecast_rows = [by_hour.get(h, {"hour": h, "missing": True}) for h in range(24)]
     rows = []
-    for r in rec["hourly"]:
+    for r in forecast_rows:
+        if r.get("missing"):
+            rows.append(f'<tr class="elapsed"><td class="hr">{r["hour"]:02d}</td><td class="note">—</td>'
+                        '<td class="dir">—</td><td class="wind">—</td><td class="measured">—</td>'
+                        '<td class="delta">—</td><td class="gust">—</td><td class="scenario-code">—</td>'
+                        '<td class="note">no prior hourly forecast</td><td class="conf">—</td>'
+                        '<td class="note">hourly service bootstrap</td></tr>')
+            continue
         kn = r.get("mean_kn") or 0
         reg = r.get("regime", "gradient")
         note = []
@@ -216,15 +275,27 @@ def _forecast_card(rec):
         # Walchensee hours and left no trace anywhere, so a clamped value read as a forecast
         note += [fc.GUST_FLAG_NOTE[f] for f in (r.get("gust_flags") or [])
                  if f in fc.GUST_FLAG_NOTE]
+        obs = observed.get(r["hour"])
+        own_measured = r.get("measured_kn")
+        measured = (f'{own_measured:{fc.KN_FMT}}' if own_measured is not None else
+                    ("—" if obs is None else f'{obs["actual_kn"]:{fc.KN_FMT}}'))
+        own_delta = r.get("fc_minus_measured_kn")
+        delta = (f'{own_delta:+.1f}' if own_delta is not None else
+                 ("—" if obs is None else ("not forecastable" if obs.get("leaked")
+                  else f'{obs.get("err_issued_kn", 0):+.1f}')))
         scenario = html.escape(_scenario_label(reg))
+        issue = r.get("issue_time") or rec.get("run_stamp")
+        lead = r.get("lead_minutes")
+        issued = "—" if not issue else (issue[11:16] + (f' · {lead // 60}h{lead % 60:02d}' if lead is not None else ''))
         rows.append(
-            f'<tr><td class="hr">{r["hour"]:02d}</td>'
+            f'<tr><td class="hr">{r["hour"]:02d}</td><td class="note">{issued}</td>'
             # No arrow when the direction is flagged variable — a rotated arrow reads as a
             # firm bearing even next to the word "VAR". fc.dir_label is the one authority.
             f'<td class="dir">{_dir_arrow(None if r.get("dir_variable") else r.get("dir"))} '
             f'{fc.dir_label(r)}</td>'
             f'<td class="wind" style="{_wind_cell_style(kn)}">{kn:{fc.KN_FMT}}'
             f'<span class="bft">{fc.beaufort(kn)}</span></td>'
+            f'<td class="measured">{measured}</td><td class="delta">{delta}</td>'
             f'<td class="gust" style="{_wind_cell_style(r.get("gust_kn") or 0)}">'
             f'{(r.get("gust_kn") or 0):{fc.KN_FMT}}</td>'
             f'<td class="scenario-code"><i class="sw {reg}" title="{scenario}" '
@@ -238,7 +309,7 @@ def _forecast_card(rec):
       <h2>{label} <span class="chip fc">forecast · {date}</span></h2>
       <p class="summary">{summ}</p>
       <table>
-        <thead><tr><th>h</th><th>dir</th><th>mean kn (Bft)</th><th>gust</th>
+        <thead><tr><th>h</th><th>issued / lead</th><th>dir</th><th>forecast kn (Bft)</th><th>measured</th><th>Δ fc−meas</th><th>gust</th>
           <th>scenario</th><th>support</th><th>conf</th><th>note</th></tr></thead>
         <tbody>{''.join(rows)}</tbody>
       </table>
@@ -397,12 +468,11 @@ def _methodology(group, static=False):
       recursive least squares: <code>error = measuredₕ − (a + b·rₕ)</code>; the new <code>a</code>
       and <code>b</code> move toward that error with forgetting factor λ = {postproc.FORGET:g}. The
       initial model is <code>a = 0, b = 1</code> (“trust the raw model”), so local evidence builds
-      gradually and older evidence fades. A single update is limited to ±{postproc.INNOVATION_CAP_KN:g} kn,
-      and the learned scaling stays between {postproc.SLOPE_LO:g} and {postproc.SLOPE_HI:g}; this prevents an
-      isolated burst from producing an inverse or extreme local relationship. Equivalently, each bucket continually minimises
-      <code>Σᵢ₌₁ⁿ λ^(n−i)·[measuredᵢ − (a + b·rᵢ)]²</code> over its <code>n</code> prior eligible observations,
-      where <code>i</code> runs from the oldest observation (1) to the latest (<code>n</code>),
-      and <code>rᵢ</code> and <code>measuredᵢ</code> are that observation’s raw forecast and wind measurement.</p>
+      gradually and older evidence fades. Standard RLS would target the weighted squared-error sum
+      <code>Σᵢ₌₁ⁿ λ^(n−i)·[measuredᵢ − (a + b·rᵢ)]²</code>. This implementation is deliberately safer:
+      it first clips each new error to ±{postproc.INNOVATION_CAP_KN:g} kn, updates <code>a</code> and <code>b</code>
+      recursively, then projects <code>b</code> into [{postproc.SLOPE_LO:g}, {postproc.SLOPE_HI:g}]. It is therefore
+      a robust online approximation, not the exact unconstrained minimum of that sum.</p>
       <p>The published difference <code>forecastₕ − measuredₕ</code> has a different job: it feeds
       the scorecard and the ±{learn.LARGE_ERR_KN:g} kn large-miss report. The regression trains on
       <i>raw model → measurement</i>, never an already-corrected forecast. Only the first-issued
@@ -473,12 +543,11 @@ def _methodology(group, static=False):
       recursive least squares: <code>error = measuredₕ − (a + b·rₕ)</code>; the new <code>a</code>
       and <code>b</code> move toward that error with forgetting factor λ = {postproc.FORGET:g}. The
       initial model is <code>a = 0, b = 1</code> (“trust the raw model”), so local evidence builds
-      gradually and older evidence fades. A single update is limited to ±{postproc.INNOVATION_CAP_KN:g} kn,
-      and the learned scaling stays between {postproc.SLOPE_LO:g} and {postproc.SLOPE_HI:g}; this prevents an
-      isolated burst from producing an inverse or extreme local relationship. Equivalently, each bucket continually minimises
-      <code>Σᵢ₌₁ⁿ λ^(n−i)·[measuredᵢ − (a + b·rᵢ)]²</code> over its <code>n</code> prior eligible observations,
-      where <code>i</code> runs from the oldest observation (1) to the latest (<code>n</code>),
-      and <code>rᵢ</code> and <code>measuredᵢ</code> are that observation’s raw forecast and wind measurement.</p>
+      gradually and older evidence fades. Standard RLS would target the weighted squared-error sum
+      <code>Σᵢ₌₁ⁿ λ^(n−i)·[measuredᵢ − (a + b·rᵢ)]²</code>. This implementation is deliberately safer:
+      it first clips each new error to ±{postproc.INNOVATION_CAP_KN:g} kn, updates <code>a</code> and <code>b</code>
+      recursively, then projects <code>b</code> into [{postproc.SLOPE_LO:g}, {postproc.SLOPE_HI:g}]. It is therefore
+      a robust online approximation, not the exact unconstrained minimum of that sum.</p>
       <p>The published difference <code>forecastₕ − measuredₕ</code> has a different job: it feeds
       the scorecard and the ±{learn.LARGE_ERR_KN:g} kn large-miss report. The regression trains on
       <i>raw model → measurement</i>, never an already-corrected forecast. Only the first-issued
@@ -698,7 +767,10 @@ def _legend():
   </div>
   <div class="reghint"><b>Scenario colour code</b> — a rule-based weather pattern that selects the local correction; it is not a confirmed physical regime:
     <b>thermal-favourable</b> sun-driven lake/valley breeze · <b>föhn-favourable</b> warm, gusty south fall-wind ·
-    <b>gradient</b> frontal / pressure-driven flow · <b>calm</b> little or no wind.</div>"""
+    <b>gradient</b> frontal / pressure-driven flow · <b>calm</b> little or no wind.</div>
+  <div class="reghint"><b>Reading the table</b> — forecast is the wind issued for that hour; measured and
+    <b>Δ fc−meas</b> appear once an observation is available. Positive Δ means the forecast was too strong;
+    negative Δ means it was too weak. Future or not-yet-reported hours show —.</div>"""
 
 
 def _overview_date(recs):
@@ -751,12 +823,11 @@ def report_html(group, static=False):
            + f' &nbsp;·&nbsp; <a href="{_href("measurements", static)}">📊 measured archive</a>'
            + "</div>")
     fcards = "".join(_forecast_card(_latest_forecast(l)) for l in g["lakes"])
+    hourly = any((_latest_forecast(l) or {}).get("rolling") for l in g["lakes"])
     # Pair each lake's big-miss table with ITS OWN "all measured hours" dropdown, wrapped
     # so the two read as one unit (tighter internal gap than between lakes). Previously
     # both diff tables came first and both dropdowns after, so the Walchensee dropdown sat
     # under the Kochelsee table.
-    meascards = "".join(f'<div class="lakegroup">{_bigdiff_card(l)}{_measured_card(l)}</div>'
-                        for l in g["lakes"])
     date = next((r["date"] for r in (_latest_forecast(l) for l in g["lakes"]) if r), "—")
     return f"""<!doctype html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -767,10 +838,9 @@ def report_html(group, static=False):
   {_legend()}
 </header>
 <main>
+  {('<div class="analyst"><b>Hourly prototype.</b> This local table uses timestamped 24-hour records and currently available measurements. The learner and verification scorecard below still use the daily production records; do not compare their lead times directly.</div>' if hourly else '')}
   <div class="sec"><span class="chip fc">forecast</span> Predicted — today ({date})</div>
   {fcards or '<p class="muted">No forecast logged yet — run daily_run.py.</p>'}
-  <div class="sec"><span class="chip meas">measured</span> Yesterday: forecast vs measured — big misses</div>
-  {meascards}
   {_methodology(group, static)}
   {_data_sources(group)}
   {_learning_section(g["lakes"])}

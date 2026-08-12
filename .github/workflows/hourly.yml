@@ -1,0 +1,49 @@
+name: hourly rolling wind forecast
+
+# GitHub cron is best-effort and may start late. hourly_run.py records the real issue
+# time and moves the valid window to the next complete hour, so a delayed runner never
+# claims to have forecast an hour that had already begun.
+on:
+  schedule:
+    - cron: "55 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  # Serialize with the daily learner: both write logs/models and publish Pages.
+  group: wind-forecast-pipeline
+  cancel-in-progress: false
+
+jobs:
+  issue:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - run: uv venv
+      - run: uv pip install --python .venv numpy
+
+      - name: Issue next 24-hour rolling windows
+        run: .venv/bin/python hourly_run.py
+
+      - name: Build static report
+        run: .venv/bin/python build_site.py
+
+      - name: Commit hourly forecast records
+        run: |
+          git config user.name "wind-bot"
+          git config user.email "wind-bot@users.noreply.github.com"
+          git add logs site
+          git commit -m "hourly: rolling forecast $(date -u +%FT%H:%MZ)" || echo "nothing to commit"
+          git push
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4

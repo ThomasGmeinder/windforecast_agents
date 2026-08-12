@@ -8,6 +8,13 @@
 Each page shows today's hourly forecast, yesterday's measured wind beside it, and the
 self-learning report that connects the two.
 
+> **Hourly-cadence migration status.** The committed production loop is still the daily
+> forecast/learn/verify cycle described below. A local hourly issuer (`hourly_run.py`) now
+> writes 24-hour timestamped prototype records and can backfill currently available
+> measurements into their table rows, but hourly learning, verification, and GitHub Pages
+> rendering are not yet production-integrated. The local prototype must not be compared
+> with the daily scorecard as though it had the same lead time.
+
 ---
 
 Hourly, next-day surface-wind forecasting for two windsurf lakes at the northern
@@ -278,8 +285,10 @@ immediately.
 
 To keep one burst or timing mismatch from corrupting a sparse bucket, each RLS update
 clips its innovation to ±4 kn and constrains the wind-speed scaling coefficient to
-`0 ≤ b ≤ 2`. Repeated evidence can still move the correction; an isolated 6–10 kn
-residual cannot create a negative or extreme slope.
+`0 ≤ b ≤ 2`. The resulting learner is a robust online approximation to weighted
+least squares, rather than the exact unconstrained least-squares minimum. Repeated
+evidence can still move the correction; an isolated 6–10 kn residual cannot create a
+negative or extreme slope.
 
 Only the first forecast issued for a date is eligible, and hours that had already elapsed
 when it was issued are recorded but neither scored nor learned from.
