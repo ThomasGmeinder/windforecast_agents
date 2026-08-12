@@ -4,6 +4,8 @@ name: hourly rolling wind forecast
 # time and moves the valid window to the next complete hour, so a delayed runner never
 # claims to have forecast an hour that had already begun.
 on:
+  repository_dispatch:
+    types: [hourly_forecast]
   schedule:
     # Temporary scheduler validation: should create a run at 15:30 Berlin today
     # (13:30 UTC). Keep the actual issue time in the record; cron itself is UTC.
