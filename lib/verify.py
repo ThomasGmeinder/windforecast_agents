@@ -805,6 +805,26 @@ def _selftest_realdata():
     return checked
 
 
+def _selftest_hourly():
+    import tempfile
+    tmp = tempfile.mkdtemp()
+    old_dir, wd.LOG_DIR = wd.LOG_DIR, tmp
+    try:
+        a = {"issue_time": "2026-08-11T23:55+02:00", "hourly": [
+            {"valid_time": "2026-08-12T00:00:00+02:00", "mean_kn": 4.0, "measured_kn": 5.0, "lead_minutes": 5, "regime": "gradient", "q_kn": {"10":3,"50":4,"90":5}},
+            {"valid_time": "2026-08-12T01:00:00+02:00", "mean_kn": 5.0, "measured_kn": 6.0, "lead_minutes": 65, "regime": "thermal", "q_kn": {"10":4,"50":5,"90":6}}]}
+        a["hourly"].append({"valid_time": "2026-08-12T02:00:00+02:00", "mean_kn": 7.0, "measured_kn": 7.0, "lead_minutes": 125, "regime": "thermal", "q_kn": {"10":6,"50":7,"90":8}})
+        b = {"issue_time": "2026-08-12T00:55+02:00", "hourly": [
+            {"valid_time": "2026-08-12T01:00:00+02:00", "mean_kn": 6.0, "measured_kn": 6.0, "lead_minutes": 5, "regime": "thermal", "q_kn": {"10":5,"50":6,"90":7}}]}
+        with open(os.path.join(tmp, "walchensee_hourly_forecast.jsonl"), "w") as f:
+            f.write(json.dumps(a)+"\n"+json.dumps(b)+"\n")
+        sc = evaluate_hourly("walchensee")
+        assert sc["n_pairs"] == 3 and sc["by_lead"]["0–1h"]["n_pairs"] == 2 and sc["by_lead"]["1–3h"]["n_pairs"] == 1, sc
+        assert round(sc["mae"], 3) == round(1/3, 3), sc
+    finally:
+        wd.LOG_DIR = old_dir
+
+
 if __name__ == "__main__":
     arg = sys.argv[1] if len(sys.argv) > 1 else None
     if arg in (None, "selftest", "test"):
@@ -829,6 +849,8 @@ if __name__ == "__main__":
               f"'{'insufficient' if not th['enough_data'] else 'ENOUGH?!'}')")
         n_checked = _selftest_realdata()
         print(f"E. real-data honesty .......... PASS  ({n_checked} lake(s) with data asserted)")
+        _selftest_hourly()
+        print("F. hourly record verifier ..... PASS  (forecast-of-record + lead bins)")
         print("ALL SELF-TESTS PASSED")
     else:
         for lake in (list(fc.LAKES) if arg == "all" else [arg]):
