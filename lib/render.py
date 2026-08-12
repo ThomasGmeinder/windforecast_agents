@@ -365,7 +365,7 @@ def _forecast_card(rec):
         past = bool(r.get("valid_time") and datetime.datetime.fromisoformat(r["valid_time"]) < datetime.datetime.now(wd.BERLIN))
         unavailable = past and rec.get("rolling") and r["hour"] not in live_obs and obs is None
         measured = (f'{own_measured:{fc.KN_FMT}}' if own_measured is not None else
-                    (("not reported" if unavailable else "—") if obs is None else f'{obs["actual_kn"]:{fc.KN_FMT}}'))
+                    (("NR" if unavailable else "—") if obs is None else f'{obs["actual_kn"]:{fc.KN_FMT}}'))
         own_delta = r.get("fc_minus_measured_kn", r.get("_display_live_delta"))
         delta = (f'{own_delta:+.1f}' if own_delta is not None else
                  ("—" if obs is None else
@@ -873,7 +873,8 @@ def _legend():
     <b>gradient</b> frontal / pressure-driven flow · <b>calm</b> little or no wind.</div>
   <div class="reghint"><b>Reading the table</b> — forecast is the wind issued for that hour; measured and
     <b>Δ fc−meas</b> appear once an observation is available. Positive Δ means the forecast was too strong;
-    negative Δ means it was too weak. Future or not-yet-reported hours show —.</div>"""
+    negative Δ means it was too weak. <b>NR</b> means the selected measurement source did not report that
+    elapsed hour; future hours show —.</div>"""
 
 
 def _overview_date(recs):
