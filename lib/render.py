@@ -161,10 +161,10 @@ def _hourly_status_section():
             return f'{(datetime.datetime.fromisoformat(x["time"]) + datetime.timedelta(hours=1)).hour:02d}'
         except Exception:
             return '—'
-    table = ''.join(f'<tr><td class="hr">{hour(x)}</td><td>{html.escape(str(x.get("time", "—")))}</td><td>{html.escape(str(x.get("trigger", "legacy")))}</td><td class="{("ok" if x.get("ok") else "bad")}">{("success" if x.get("ok") else "failed")}</td><td>{html.escape(str(x.get("message", "")))}</td></tr>' for x in reversed(rows))
+    table = ''.join(f'<tr><td class="hr">{hour(x)}</td><td>{html.escape(str(x.get("time", "—")))}</td><td>{html.escape(str(x.get("trigger", "legacy")))}</td><td>{html.escape(str(x.get("source", "legacy")))}</td><td class="{("ok" if x.get("ok") else "bad")}">{("success" if x.get("ok") else "failed")}</td><td>{html.escape(str(x.get("message", "")))}</td></tr>' for x in reversed(rows))
     return f'''<section class="card hourly-status {state}"><h2>Hourly update status</h2>
       <p class="summary"><b>{label}</b> · {html.escape(str(last.get("time", "—")))}</p>
-      <details><summary>Update results — last 24 runs</summary><table><thead><tr><th>H</th><th>time (UTC)</th><th>trigger</th><th>result</th><th>detail</th></tr></thead><tbody>{table}</tbody></table></details></section>'''
+      <details><summary>Update results — last 24 runs</summary><table><thead><tr><th>H</th><th>time (UTC)</th><th>trigger</th><th>source</th><th>result</th><th>detail</th></tr></thead><tbody>{table}</tbody></table></details></section>'''
 
 
 def _dir_arrow(deg):
