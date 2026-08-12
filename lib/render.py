@@ -358,11 +358,13 @@ def _forecast_card(rec):
                 own_measured = live.get("mean_kn")
                 r = {**r, "_display_live_delta": round(r["mean_kn"] - own_measured, 1),
                      "_display_live_source": live_source}
+        past = bool(r.get("valid_time") and datetime.datetime.fromisoformat(r["valid_time"]) < datetime.datetime.now(wd.BERLIN))
+        unavailable = past and rec.get("rolling") and r["hour"] not in live_obs and obs is None
         measured = (f'{own_measured:{fc.KN_FMT}}' if own_measured is not None else
-                    ("—" if obs is None else f'{obs["actual_kn"]:{fc.KN_FMT}}'))
+                    (("not reported" if unavailable else "—") if obs is None else f'{obs["actual_kn"]:{fc.KN_FMT}}'))
         own_delta = r.get("fc_minus_measured_kn", r.get("_display_live_delta"))
         delta = (f'{own_delta:+.1f}' if own_delta is not None else
-                 ("—" if obs is None else
+                 (("not reported" if unavailable else "—") if obs is None else
                   (f'{obs.get("err_issued_kn", 0):+.1f}' if r.get("legacy_calendar_backfill")
                    else ("not forecastable" if obs.get("leaked") else f'{obs.get("err_issued_kn", 0):+.1f}'))))
         scenario = html.escape(_scenario_label(reg))
