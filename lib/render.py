@@ -490,6 +490,29 @@ def _hourly_verification_block(lake):
             f'Lead coverage: {html.escape(coverage)}. Empty bins are not yet evaluated.</div></div>')
 
 
+def _hourly_learning_section(lakes):
+    blocks = []
+    for lake in lakes:
+        path = os.path.join(wd.LOG_DIR, f"{lake}_hourly_measurements.jsonl")
+        rows = []
+        if os.path.exists(path):
+            for line in open(path):
+                try:
+                    rows.append(json.loads(line))
+                except Exception:
+                    pass
+        present = sum(r.get("measurement_status") == "present" for r in rows)
+        nr = sum(r.get("measurement_status") == "NR" for r in rows)
+        sc = verify.evaluate_hourly(lake)
+        blocks.append(f'<div class="analyst"><b>⏱ {html.escape(_lake_label(lake))} hourly reconciliation:</b> '
+                      f'{present} measured forecast-of-record row(s), {nr} NR source gap(s). '
+                      f'Hourly RLS updates are idempotent; legacy display rows never train. '
+                      f'<div class="muted" style="margin-top:4px">'
+                      f'Current hourly MAE: {("n/a" if sc.get("mae") is None else f"{sc["mae"]:.2f} kn")} '
+                      f'over {sc.get("n_pairs", 0)} scored row(s). Lead-bin coverage is shown above each table.</div></div>')
+    return '<section class="card"><h2>Hourly reconciliation &amp; learning</h2>' + ''.join(blocks) + '</section>'
+
+
 def _learning_section(lakes):
     blocks = []
     for lake in lakes:
@@ -950,6 +973,7 @@ def report_html(group, static=False):
   {fcards or '<p class="muted">No forecast logged yet — run daily_run.py.</p>'}
   {_methodology(group, static)}
   {_data_sources(group)}
+  {_hourly_learning_section(g["lakes"])}
   {_hourly_status_section()}
   {_learning_section(g["lakes"])}
 </main>
