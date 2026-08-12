@@ -6,10 +6,6 @@ name: hourly rolling wind forecast
 on:
   repository_dispatch:
     types: [hourly_forecast]
-  schedule:
-    # Backup only. cron-job.org dispatches the primary :55 run; GitHub schedule can
-    # be delayed or dropped but provides an independent recovery opportunity.
-    - cron: "55 * * * *"
   workflow_dispatch:
 
 permissions:

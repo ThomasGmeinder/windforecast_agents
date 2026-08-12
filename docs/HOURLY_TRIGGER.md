@@ -1,9 +1,8 @@
 # Reliable hourly trigger
 
-GitHub Actions executes the forecast and publishes GitHub Pages. Its native `schedule:`
-event is retained as a backup, but it is not a punctual clock: GitHub documents that
-scheduled runs can be delayed or dropped under load, and this repository has observed a
-scheduled event at a minute different from the configured cron expression.
+GitHub Actions executes the forecast and publishes GitHub Pages. It does **not** use
+GitHub's native `schedule:` event for hourly issuance: observed scheduled events were
+late and could occur at a minute different from the configured cron expression.
 
 Use [cron-job.org](https://cron-job.org/en/) as the primary clock. It is free, supports
 custom HTTP headers/body, has a test-run button, and keeps recent execution history.
@@ -44,7 +43,5 @@ Actions should then show event `repository_dispatch` for `hourly rolling wind fo
 - cron-job.org retains its own execution result/history and can notify the account owner.
 - GitHub records the issued workflow, commits the hourly status history, and deploys the
   last valid table even if the upstream weather fetch fails.
-- The GitHub `schedule:` rule remains a backup. Duplicate external/backup triggers are
-  harmless to forecast scoring because the forecast-of-record selector freezes the last
-  issue before each valid hour; completing the hourly dedupe gate remains required before
-  treating duplicate learning as production-safe.
+- The workflow can still be launched manually with `workflow_dispatch` for maintenance
+  and testing, but hourly production issuance comes only from cron-job.org.
