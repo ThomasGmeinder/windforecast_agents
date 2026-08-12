@@ -33,7 +33,7 @@ Headers:
   Authorization: Bearer YOUR_FINE_GRAINED_TOKEN
   X-GitHub-Api-Version: 2022-11-28
 Body:
-  {"event_type":"hourly_forecast"}
+  {"event_type":"hourly_forecast","client_payload":{"source":"cron-job.org"}}
 ```
 
 Use cron-job.org's **Test run** button once. A successful response is HTTP 204; GitHub

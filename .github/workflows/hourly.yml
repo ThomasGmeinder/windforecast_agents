@@ -43,12 +43,14 @@ jobs:
 
       - name: Record issuance failure
         if: steps.issue.outcome == 'failure'
+        env:
+          TRIGGER_EVENT: ${{ github.event_name }}
         run: |
           mkdir -p logs
           python - <<'PY'
           import datetime, json
           now = datetime.datetime.now(datetime.timezone.utc)
-          row = {'ok': False, 'time': now.isoformat(), 'hour': (now + datetime.timedelta(hours=1)).hour,
+          row = {'ok': False, 'time': now.isoformat(), 'trigger': __import__('os').environ['TRIGGER_EVENT'], 'hour': (now + datetime.timedelta(hours=1)).hour,
                  'message': 'Hourly forecast issuance failed; displaying last valid records.'}
           with open('logs/hourly_status.json', 'w') as f: json.dump(row, f)
           with open('logs/hourly_status.jsonl', 'a') as f: f.write(json.dumps(row) + '\n')
@@ -56,6 +58,8 @@ jobs:
 
       - name: Record successful issuance
         if: steps.issue.outcome == 'success'
+        env:
+          TRIGGER_EVENT: ${{ github.event_name }}
         run: |
           mkdir -p logs
           python - <<'PY'
@@ -65,7 +69,7 @@ jobs:
           for path in glob.glob('logs/*_hourly_forecast.jsonl'):
               rows = [json.loads(x) for x in open(path) if x.strip()]
               if rows: starts.append(rows[-1].get('valid_start'))
-          row = {'ok': True, 'time': now.isoformat(),
+          row = {'ok': True, 'time': now.isoformat(), 'trigger': __import__('os').environ['TRIGGER_EVENT'],
                  'valid_start': min(starts) if starts else None,
                  'hour': int(min(starts)[11:13]) if starts else (now + datetime.timedelta(hours=1)).hour,
                  'message': 'Hourly forecast issued successfully.'}
