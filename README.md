@@ -407,9 +407,11 @@ skips cleanly and the deterministic forecast is unaffected.
 
 ### Hourly trigger
 
-The public hourly path is primarily dispatched by cron-job.org through GitHub
-`repository_dispatch`; GitHub's own `schedule:` remains a non-punctual backup. For a
-local mirror, install the bundled user units:
+The public hourly path is dispatched by cron-job.org through GitHub
+`repository_dispatch`. The hourly workflow deliberately has no GitHub `schedule:`
+trigger: GitHub documents scheduled workflows as best-effort, whereas the external
+trigger calls the dispatch API at `:55` Europe/Berlin. A manual workflow dispatch is
+available for recovery/testing. For a local mirror, install the bundled user units:
 
 ```bash
 mkdir -p ~/.config/systemd/user

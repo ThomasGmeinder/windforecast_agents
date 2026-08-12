@@ -130,8 +130,20 @@ def _latest_learning(lake):
 
 
 def _generated():
-    """Build time in Europe/Berlin, LABELLED. A naive fromtimestamp renders in the build
-    machine's zone — UTC on the GitHub runner — next to tables whose hours are all Berlin."""
+    """Most recent hourly issuance in Europe/Berlin.
+
+    ``latest_report.txt`` belongs to the retained daily audit and therefore becomes stale
+    between morning runs.  The status record is written by every hourly workflow run,
+    including a failed one, and is the timestamp users need when judging the table.
+    """
+    status = os.path.join(wd.LOG_DIR, "hourly_status.json")
+    if os.path.exists(status):
+        try:
+            stamp = json.load(open(status)).get("time")
+            if stamp:
+                return datetime.datetime.fromisoformat(stamp).astimezone(wd.BERLIN).strftime("%Y-%m-%d %H:%M %Z")
+        except (OSError, ValueError, TypeError, json.JSONDecodeError):
+            pass
     lrp = os.path.join(wd.LOG_DIR, "latest_report.txt")
     if not os.path.exists(lrp):
         return "—"
@@ -968,7 +980,7 @@ def report_html(group, static=False):
   {_legend()}
 </header>
 <main>
-  {('<div class="analyst"><b>Hourly transition.</b> This table uses timestamped 24-hour records, forecast-of-record selection, and reconciled measurements; selected rows can make one guarded hourly RLS update. The scorecard and tuner below still evaluate legacy daily records, so do not compare their lead times or skill directly with this table.</div>' if hourly else '')}
+  {('<div class="analyst"><b>Hourly forecasting and reconciliation.</b> This table uses timestamped 24-hour records and forecast-of-record selection. Reconciled rows feed hourly verification, the guarded hourly RLS update, and (once sufficient history exists) the tuning gate. The legacy daily reports below are retained for historical context; do not compare their lead times or skill directly with the hourly figures.</div>' if hourly else '')}
   <div class="sec"><span class="chip fc">forecast</span> Predicted — today ({date})</div>
   {fcards or '<p class="muted">No forecast logged yet — run daily_run.py.</p>'}
   {_methodology(group, static)}
