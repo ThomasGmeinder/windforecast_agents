@@ -53,7 +53,9 @@ def build_window(lake, issued):
             valid = datetime.datetime.combine(day, datetime.time(row["hour"]), wd.BERLIN)
             if start <= valid < end:
                 rows.append({**fc.logged_row(row), "valid_time": valid.isoformat(),
-                             "lead_minutes": int((valid - issued).total_seconds() // 60)})
+                             "lead_minutes": int((valid - issued).total_seconds() // 60),
+                             "blend_kn": row.get("blend_kn"),
+                             "blend_range_kn": row.get("blend_range_kn")})
     rows.sort(key=lambda r: r["valid_time"])
     assert len(rows) == 24, f"{lake}: expected 24 rows, got {len(rows)}"
     return {"lake": lake, "kind": "hourly_forecast", "issue_time": issued.isoformat(timespec="minutes"),
