@@ -304,6 +304,17 @@ def _forecast_card(rec):
                 continue
             if d.get("date") == rec.get("date") and d.get("actual_kn") is not None:
                 observed[d.get("hour")] = d
+    # The hourly migration can start after midnight, while daily diffs are only written
+    # the following day. For display-only legacy bridge rows, query the same measured
+    # source directly so current-day H00–H13 never become blank merely because a daily
+    # report has not been produced yet. These values are deliberately not written back
+    # into hourly learning/verification state here.
+    live_obs, live_source = {}, None
+    if rec.get("rolling"):
+        try:
+            live_obs, live_source = wd.actual_hourly(rec["lake"], rec["date"])
+        except Exception:
+            live_obs, live_source = {}, None
     forecast_rows = rec["hourly"]
     if rec.get("rolling"):
         # Render the familiar current calendar day, not the raw 05:00→05:00 issuance
@@ -311,6 +322,9 @@ def _forecast_card(rec):
         # from the prior 23:55 record. During bootstrap they remain explicit gaps.
         by_hour = {int(r["valid_time"][11:13]): r for r in rec["hourly"]
                    if r.get("valid_time", "").startswith(rec["date"])}
+        # Daily bridge rows intentionally have no valid_time: include them only to
+        # populate the current display during the hourly migration.
+        by_hour.update({r["hour"]: r for r in rec["hourly"] if r.get("legacy_calendar_backfill")})
         forecast_rows = [by_hour.get(h, {"hour": h, "missing": True}) for h in range(24)]
     rows = []
     for r in forecast_rows:
@@ -338,9 +352,15 @@ def _forecast_card(rec):
                  if f in fc.GUST_FLAG_NOTE]
         obs = observed.get(r["hour"])
         own_measured = r.get("measured_kn")
+        if own_measured is None and r.get("legacy_calendar_backfill"):
+            live = live_obs.get(r["hour"])
+            if live is not None:
+                own_measured = live.get("mean_kn")
+                r = {**r, "_display_live_delta": round(r["mean_kn"] - own_measured, 1),
+                     "_display_live_source": live_source}
         measured = (f'{own_measured:{fc.KN_FMT}}' if own_measured is not None else
                     ("—" if obs is None else f'{obs["actual_kn"]:{fc.KN_FMT}}'))
-        own_delta = r.get("fc_minus_measured_kn")
+        own_delta = r.get("fc_minus_measured_kn", r.get("_display_live_delta"))
         delta = (f'{own_delta:+.1f}' if own_delta is not None else
                  ("—" if obs is None else
                   (f'{obs.get("err_issued_kn", 0):+.1f}' if r.get("legacy_calendar_backfill")
@@ -350,7 +370,7 @@ def _forecast_card(rec):
         lead = r.get("lead_minutes")
         issued = "—" if not issue else (issue[11:16] + (f' · {lead // 60}h{lead % 60:02d}' if lead is not None else ''))
         if r.get("legacy_calendar_backfill"):
-            note.append("legacy daily row; display-only")
+            note.append("legacy daily row; display-only" + ("; current source" if r.get("_display_live_source") else ""))
         rows.append(
             f'<tr><td class="hr">{r["hour"]:02d}</td><td class="note">{issued}</td>'
             # No arrow when the direction is flagged variable — a rotated arrow reads as a
