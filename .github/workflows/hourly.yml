@@ -69,7 +69,7 @@ jobs:
           git config user.name "wind-bot"
           git config user.email "wind-bot@users.noreply.github.com"
           # site/ is intentionally ignored; deploy it as the Pages artifact below.
-          git add logs
+          git add logs models
           git commit -m "hourly: rolling forecast $(date -u +%FT%H:%MZ)" || echo "nothing to commit"
           git push
 

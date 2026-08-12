@@ -61,6 +61,27 @@ def _forecast_for(lake, date):
     return rec
 
 
+def _hourly_learned_hours(lake, date):
+    """Hours already consumed by the timestamped hourly forecast-of-record path.
+
+    The daily learner keeps its legacy report/scorecard during migration, but must never
+    update the same RLS bucket observation a second time.
+    """
+    path = os.path.join(wd.LOG_DIR, f"{lake}_hourly_forecast.jsonl")
+    out = set()
+    if not os.path.exists(path):
+        return out
+    for line in open(path):
+        try:
+            rec = json.loads(line)
+        except Exception:
+            continue
+        for row in rec.get("hourly", []):
+            if row.get("learned_hourly") and str(row.get("valid_time", "")).startswith(date):
+                out.add(int(row.get("hour", -1)))
+    return out
+
+
 def _mean(xs):
     return round(sum(xs) / len(xs), 2) if xs else None
 
@@ -137,7 +158,8 @@ def update_from_day(lake, date):
     by_regime = {}
 
     run_stamp = rec.get("run_stamp")
-    n_leaked = 0
+    n_leaked = n_hourly_already_learned = 0
+    hourly_learned = _hourly_learned_hours(lake, date)
     for hp in rec["hourly"]:
         hour = hp["hour"]
         if hour not in actual:
@@ -170,10 +192,13 @@ def update_from_day(lake, date):
                       "actual_kn": act, "err_issued_kn": err_issued, "err_raw_kn": err_raw,
                       "issued_gust_kn": hp.get("gust_kn"), "actual_gust_kn": actg,
                       "dir_pred": hp.get("dir"), "dir_actual": actd, "dir_err_deg": derr,
-                      "leaked": leaked})
+                      "leaked": leaked, "learned_hourly": hour in hourly_learned})
         if leaked:
             n_leaked += 1
             continue                       # measurement kept; training and scoring skipped
+        if hour in hourly_learned:
+            n_hourly_already_learned += 1
+            continue                       # daily report retains it, hourly path owns RLS update
         scored.append(diffs[-1])
         ei.append(abs(err_issued)); er.append(abs(err_raw)); signed.append(err_issued)
         if derr is not None:
@@ -210,8 +235,8 @@ def update_from_day(lake, date):
         # aggregates would all be None and format_report would crash formatting them, which
         # killed learning and the tuner for the whole lake.
         return {"lake": lake, "date": date,
-                "skipped": (f"all {n_leaked} matched hour(s) had already elapsed when the "
-                            f"forecast was issued — measurements logged, nothing to learn from"),
+                "skipped": (f"no daily RLS rows: {n_leaked} already elapsed and "
+                            f"{n_hourly_already_learned} already learned hourly"),
                 "diffs": diffs, "_bias": bias
                 if n_leaked else "no overlapping hours between forecast and measurements"}
 

@@ -430,7 +430,7 @@ def _learning_section(lakes):
     caveat = ('<p class="muted">Scenario names in archived automated reports may use the '
               'older “regime” wording. They describe rule-selected buckets or measured '
               'direction sectors, not confirmed physical causes.</p>')
-    return ('<section class="card"><h2>Self-learning (yesterday vs measured)</h2>' + caveat
+    return ('<section class="card"><h2>Legacy daily learning &amp; verification</h2>' + caveat
             + "".join(blocks) + "</section>")
 
 
@@ -484,7 +484,7 @@ def _methodology(group, static=False):
       </ol>
       <p class="muted"><b>Föhn caveat:</b> “föhn-favourable” means forecast pressure and upper-air thresholds were crossed. Hohenpeißenberg is a confidence cross-check, not a classification condition; measured S–SE flow alone cannot distinguish föhn from drainage or fall-wind.</p>
       <h3>How it learns</h3>
-      <p>For every eligible measured hour, the learner updates only that hour’s
+      <p>In the legacy daily path, every eligible measured hour updates only that hour’s
       <code>(lake, scenario, hour)</code> bucket. It fits <code>measuredₕ ≈ a + b·rₕ</code> with
       recursive least squares: <code>error = measuredₕ − (a + b·rₕ)</code>; the new <code>a</code>
       and <code>b</code> move toward that error with forgetting factor λ = {postproc.FORGET:g}. The
@@ -559,7 +559,7 @@ def _methodology(group, static=False):
       LLM tuner reviews its earlier proposals against subsequent forecast scores and may suggest small
       threshold changes, but a change reaches the forecaster only if a backtest over at least {nmin} replayable days shows it lowers mean absolute error.</p>
       <h3>How it learns</h3>
-      <p>For every eligible measured hour, the learner updates only that hour’s
+      <p>In the legacy daily path, every eligible measured hour updates only that hour’s
       <code>(lake, scenario, hour)</code> bucket. It fits <code>measuredₕ ≈ a + b·rₕ</code> with
       recursive least squares: <code>error = measuredₕ − (a + b·rₕ)</code>; the new <code>a</code>
       and <code>b</code> move toward that error with forgetting factor λ = {postproc.FORGET:g}. The
@@ -675,7 +675,7 @@ def _data_sources(group):
       <p>{common}</p>
       <h3><span class="chip fc">forecast</span> Prediction inputs — today</h3>
       {_tbl(pred)}
-      <h3><span class="chip meas">measured</span> Measured inputs — yesterday (verification &amp; learning)</h3>
+      <h3><span class="chip meas">measured</span> Measured inputs — reconciled when reported</h3>
       {_tbl(meas)}
     </section>"""
 
@@ -717,6 +717,8 @@ td{padding:3px 8px;border-bottom:1px solid var(--grid);font-size:13.5px}
    föhn-favourable forecast scenario. */
 .badge.flow{background:transparent;border:1px solid var(--muted);color:var(--ink2)}
 .elapsed td{opacity:.48}
+.hourly-status.success{border-left:3px solid var(--t)} .hourly-status.failure{border-left:3px solid var(--f)}
+.ok{color:var(--t);font-weight:600}.bad{color:var(--f);font-weight:600}
 .scenario-code{width:38px;text-align:center}
 .sw.gradient{background:var(--g)}.sw.thermal{background:var(--t)}
 .sw.foehn{background:var(--f)}.sw.calm{background:var(--c)}
@@ -845,6 +847,7 @@ def report_html(group, static=False):
            + "</div>")
     fcards = "".join(_forecast_card(_latest_forecast(l)) for l in g["lakes"])
     hourly = any((_latest_forecast(l) or {}).get("rolling") for l in g["lakes"])
+    cadence = "updates hourly · timestamped 24-hour windows" if hourly else "updates ~05:00 daily"
     # Pair each lake's big-miss table with ITS OWN "all measured hours" dropdown, wrapped
     # so the two read as one unit (tighter internal gap than between lakes). Previously
     # both diff tables came first and both dropdowns after, so the Walchensee dropdown sat
@@ -855,11 +858,12 @@ def report_html(group, static=False):
 <title>{html.escape(g['title'])} wind — {date}</title><style>{_css()}</style></head><body>
 <header>{nav}
   <h1>{html.escape(g['title'])} — {date}</h1>
-  <div class="sub">generated {_generated()} · updates ~05:00 daily · knots (Beaufort) · gusts in kn</div>
+  <div class="sub">generated {_generated()} · {cadence} · knots (Beaufort) · gusts in kn</div>
   {_legend()}
 </header>
 <main>
-  {('<div class="analyst"><b>Hourly prototype.</b> This local table uses timestamped 24-hour records and currently available measurements. The learner and verification scorecard below still use the daily production records; do not compare their lead times directly.</div>' if hourly else '')}
+  {_hourly_status_section()}
+  {('<div class="analyst"><b>Hourly transition.</b> This table uses timestamped 24-hour records, forecast-of-record selection, and reconciled measurements; selected rows can make one guarded hourly RLS update. The scorecard and tuner below still evaluate legacy daily records, so do not compare their lead times or skill directly with this table.</div>' if hourly else '')}
   <div class="sec"><span class="chip fc">forecast</span> Predicted — today ({date})</div>
   {fcards or '<p class="muted">No forecast logged yet — run daily_run.py.</p>'}
   {_methodology(group, static)}

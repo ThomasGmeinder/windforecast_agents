@@ -9,11 +9,11 @@ Each page shows today's hourly forecast, yesterday's measured wind beside it, an
 self-learning report that connects the two.
 
 > **Hourly-cadence migration status.** The committed production loop is still the daily
-> forecast/learn/verify cycle described below. A local hourly issuer (`hourly_run.py`) now
-> writes 24-hour timestamped prototype records and can backfill currently available
-> measurements into their table rows, but hourly learning, verification, and GitHub Pages
-> rendering are not yet production-integrated. The local prototype must not be compared
-> with the daily scorecard as though it had the same lead time.
+> forecast/learn/verify cycle described below. The hourly issuer (`hourly_run.py`) now
+> writes timestamped 24-hour records, reconciles measurements, and can make a guarded
+> hourly RLS update. Its CRPS verification, lead-time scorecard, tuner input, and Pages
+> deployment are still transitioning from the daily path. Do not compare its short leads
+> with the legacy daily scorecard as though they measured the same forecast problem.
 
 ---
 

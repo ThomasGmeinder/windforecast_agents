@@ -47,15 +47,33 @@ def build_window(lake, issued):
     start = next_hour(issued)
     end = start + datetime.timedelta(hours=24)
     rows = []
-    for day in sorted({start.date(), (end - datetime.timedelta(hours=1)).date()}):
-        table = fc.build_table(lake, day.isoformat(), run_stamp=issued.isoformat(timespec="minutes"))
-        for row in table["rows"]:
-            valid = datetime.datetime.combine(day, datetime.time(row["hour"]), wd.BERLIN)
-            if start <= valid < end:
-                rows.append({**fc.logged_row(row), "valid_time": valid.isoformat(),
-                             "lead_minutes": int((valid - issued).total_seconds() // 60),
-                             "blend_kn": row.get("blend_kn"),
-                             "blend_range_kn": row.get("blend_range_kn")})
+    # fc.build_table currently filters a calendar date after fetching a three-day model
+    # response. A window crossing midnight needs two calls, so cache the identical model
+    # and MOSMIX fetches during this one issuance.
+    cache = {}
+    old_point, old_ens, old_dp = wd.openmeteo_point, wd.openmeteo_ensemble, wd.foehn_delta_p
+    def cached(fn, name):
+        def inner(*args, **kwargs):
+            key = (name, repr(args), repr(sorted(kwargs.items())))
+            if key not in cache:
+                cache[key] = fn(*args, **kwargs)
+            return cache[key]
+        return inner
+    wd.openmeteo_point = cached(old_point, "point")
+    wd.openmeteo_ensemble = cached(old_ens, "ensemble")
+    wd.foehn_delta_p = cached(old_dp, "dp")
+    try:
+        for day in sorted({start.date(), (end - datetime.timedelta(hours=1)).date()}):
+            table = fc.build_table(lake, day.isoformat(), run_stamp=issued.isoformat(timespec="minutes"))
+            for row in table["rows"]:
+                valid = datetime.datetime.combine(day, datetime.time(row["hour"]), wd.BERLIN)
+                if start <= valid < end:
+                    rows.append({**fc.logged_row(row), "valid_time": valid.isoformat(),
+                                 "lead_minutes": int((valid - issued).total_seconds() // 60),
+                                 "blend_kn": row.get("blend_kn"),
+                                 "blend_range_kn": row.get("blend_range_kn")})
+    finally:
+        wd.openmeteo_point, wd.openmeteo_ensemble, wd.foehn_delta_p = old_point, old_ens, old_dp
     rows.sort(key=lambda r: r["valid_time"])
     assert len(rows) == 24, f"{lake}: expected 24 rows, got {len(rows)}"
     return {"lake": lake, "kind": "hourly_forecast", "issue_time": issued.isoformat(timespec="minutes"),

@@ -52,6 +52,21 @@ def _multiday_errors(lake, days=ERROR_WINDOW_DAYS):
     return [{k: v for k, v in r.items() if k in keep} for r in rows if r["date"] in dates]
 
 
+def _hourly_errors(lake, limit=14 * 24):
+    rows = []
+    for vt, issued, row in verify.hourly_forecast_of_record(lake):
+        if row.get("measured_kn") is None:
+            continue
+        rows.append({"date": vt[:10], "hour": int(vt[11:13]), "valid_time": vt,
+                     "issue_time": issued.isoformat(timespec="minutes"),
+                     "lead_minutes": row.get("lead_minutes"), "regime": row.get("regime"),
+                     "issued_kn": row.get("mean_kn"), "raw_kn": row.get("raw_kn"),
+                     "actual_kn": row.get("measured_kn"),
+                     "err_issued_kn": row.get("fc_minus_measured_kn"),
+                     "measurement_source": row.get("measured_source")})
+    return rows[-limit:]
+
+
 def _jump_audit(rows):
     """Large misses or corrections that made the raw forecast materially worse.
 
@@ -143,10 +158,13 @@ def _recent_proposals(lake):
 
 def build_evidence(lake, date, agg=None, diffs=None):
     """Everything the analyst perceives this morning."""
-    sc = verify.evaluate(lake)
-    window = _multiday_errors(lake)
+    hourly_sc = verify.evaluate_hourly(lake)
+    use_hourly = bool(hourly_sc.get("n_pairs"))
+    sc = hourly_sc if use_hourly else verify.evaluate(lake)
+    window = _hourly_errors(lake) if use_hourly else _multiday_errors(lake)
     return {
         "lake": lake, "date": date,
+        "hourly_mode": use_hourly,
         "current_params": fc.params_for(lake),
         "param_bounds": fc.PARAM_BOUNDS,
         "yesterday_aggregate": agg,

@@ -41,6 +41,8 @@ QLEVELS = (10, 25, 50, 75, 90)   # the persisted decile levels (percent)
 _ND = NormalDist()
 _SQRT_PI = math.sqrt(math.pi)
 LOW_CONF_DAYS = 10               # below this many days, flag the scorecard as low-confidence
+LEAD_BINS = ((0, 60, "0–1h"), (60, 180, "1–3h"), (180, 360, "3–6h"),
+             (360, 720, "6–12h"), (720, 1441, "12–24h"))
 
 
 # ---------------------------------------------------------------- CRPS estimators
@@ -99,6 +101,60 @@ def forecast_members(hourrec):
     if mean is not None and sd:
         return [mean + _ND.inv_cdf(p / 100.0) * sd for p in QLEVELS]
     return [mean] if mean is not None else []
+
+
+def hourly_forecast_of_record(lake):
+    """Frozen measured rows from timestamped hourly records, selected by valid time."""
+    path = os.path.join(wd.LOG_DIR, f"{lake}_hourly_forecast.jsonl")
+    if not os.path.exists(path):
+        return []
+    records = []
+    for line in open(path):
+        try:
+            r = json.loads(line)
+            r["_issued"] = datetime.datetime.fromisoformat(r["issue_time"])
+            records.append(r)
+        except Exception:
+            continue
+    by_valid = {}
+    for rec in records:
+        for row in rec.get("hourly", []):
+            try:
+                valid = datetime.datetime.fromisoformat(row["valid_time"])
+            except Exception:
+                continue
+            if rec["_issued"] >= valid or row.get("measured_kn") is None:
+                continue
+            old = by_valid.get(row["valid_time"])
+            if old is None or rec["_issued"] > old[0]:
+                by_valid[row["valid_time"]] = (rec["_issued"], row)
+    return [(vt, issue, row) for vt, (issue, row) in sorted(by_valid.items())]
+
+
+def evaluate_hourly(lake):
+    """Hourly forecast-of-record CRPS/MAE with lead-time bins.
+
+    Baselines are intentionally omitted until hourly observations have enough immutable
+    history to construct them without mixing legacy daily truth sources.
+    """
+    recs = []
+    for vt, issue, row in hourly_forecast_of_record(lake):
+        y, mean = row.get("measured_kn"), row.get("mean_kn")
+        if y is None or mean is None:
+            continue
+        lead = row.get("lead_minutes")
+        if lead is None:
+            lead = max(0, round((datetime.datetime.fromisoformat(vt) - issue).total_seconds() / 60))
+        recs.append({"valid_time": vt, "date": vt[:10], "hour": int(vt[11:13]),
+                     "lead_minutes": lead, "regime": row.get("regime", "?"),
+                     "y": y, "mean": mean, "crps": crps_ensemble(forecast_members(row), y),
+                     "crps_pers": None, "crps_clim": None,
+                     "ae": abs(mean-y), "se": (mean-y)**2, "signed": mean-y})
+    overall = _summarize(lake, recs)
+    overall["by_lead"] = {name: _summarize(lake, [r for r in recs if lo <= r["lead_minutes"] < hi])
+                          for lo, hi, name in LEAD_BINS}
+    overall["hourly"] = True
+    return overall
 
 
 # ---------------------------------------------------------------- log loading
