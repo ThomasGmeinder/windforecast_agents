@@ -417,6 +417,17 @@ def _verification_block(lake):
             f'the mean; for a single-number forecast it equals the absolute error.</div></div>')
 
 
+def _hourly_verification_block(lake):
+    sc = verify.evaluate_hourly(lake)
+    if not sc.get("n_pairs"):
+        return ""
+    coverage = " · ".join(f"{name}: {part['n_pairs']}" for name, part in sc["by_lead"].items())
+    return (f'<div class="analyst"><b>⏱ Hourly forecast-of-record · {_lake_label(lake)}:</b> '
+            f'CRPS {sc["crps"]:.2f} kn · MAE {sc["mae"]:.2f} · bias {sc["bias"]:+.2f} '
+            f'over {sc["n_pairs"]} reconciled row(s).<div class="muted" style="margin-top:4px">'
+            f'Lead coverage: {html.escape(coverage)}. Empty bins are not yet evaluated.</div></div>')
+
+
 def _learning_section(lakes):
     blocks = []
     for lake in lakes:
@@ -852,7 +863,7 @@ def report_html(group, static=False):
                      for k in other)
            + f' &nbsp;·&nbsp; <a href="{_href("measurements", static)}">📊 measured archive</a>'
            + "</div>")
-    fcards = "".join(_forecast_card(_latest_forecast(l)) for l in g["lakes"])
+    fcards = "".join(_hourly_verification_block(l) + _forecast_card(_latest_forecast(l)) for l in g["lakes"])
     hourly = any((_latest_forecast(l) or {}).get("rolling") for l in g["lakes"])
     cadence = "updates hourly · timestamped 24-hour windows" if hourly else "updates ~05:00 daily"
     # Pair each lake's big-miss table with ITS OWN "all measured hours" dropdown, wrapped
@@ -869,6 +880,7 @@ def report_html(group, static=False):
   {_legend()}
 </header>
 <main>
+  {_hourly_status_section()}
   {('<div class="analyst"><b>Hourly transition.</b> This table uses timestamped 24-hour records, forecast-of-record selection, and reconciled measurements; selected rows can make one guarded hourly RLS update. The scorecard and tuner below still evaluate legacy daily records, so do not compare their lead times or skill directly with this table.</div>' if hourly else '')}
   <div class="sec"><span class="chip fc">forecast</span> Predicted — today ({date})</div>
   {fcards or '<p class="muted">No forecast logged yet — run daily_run.py.</p>'}
