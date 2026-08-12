@@ -352,7 +352,11 @@ def _forecast_card(rec):
                  if f in fc.GUST_FLAG_NOTE]
         obs = observed.get(r["hour"])
         own_measured = r.get("measured_kn")
-        if own_measured is None and r.get("legacy_calendar_backfill"):
+        # Measurement feeds can publish a completed hour after the last :55 issuer ran.
+        # Use the same live source for any elapsed display row, so H22 does not stay
+        # blank until the next scheduled reconciliation. This is display-only; state is
+        # still persisted/reconciled by hourly_run.py on the next issuance.
+        if own_measured is None:
             live = live_obs.get(r["hour"])
             if live is not None:
                 own_measured = live.get("mean_kn")
@@ -364,7 +368,7 @@ def _forecast_card(rec):
                     (("not reported" if unavailable else "—") if obs is None else f'{obs["actual_kn"]:{fc.KN_FMT}}'))
         own_delta = r.get("fc_minus_measured_kn", r.get("_display_live_delta"))
         delta = (f'{own_delta:+.1f}' if own_delta is not None else
-                 (("not reported" if unavailable else "—") if obs is None else
+                 ("—" if obs is None else
                   (f'{obs.get("err_issued_kn", 0):+.1f}' if r.get("legacy_calendar_backfill")
                    else ("not forecastable" if obs.get("leaked") else f'{obs.get("err_issued_kn", 0):+.1f}'))))
         scenario = html.escape(_scenario_label(reg))
