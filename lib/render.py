@@ -991,7 +991,7 @@ def report_html(group, static=False):
   {_legend()}
 </header>
 <main>
-  {('<div class="analyst"><b>How hourly forecasting works.</b> Shortly before each hour begins, the system issues a fresh 24-hour forecast and keeps today’s 00–23 table up to date. Its starting point is a blend of ICON-D2, ICON-EU and ensemble weather-model data, plus a local spot forecast where available; the “How it’s predicted” and input sections below explain the calculation and sources. Every run also reads the station, compares each newly available completed hour with its forecast, and uses that reading once to improve future forecasts.</div>' if hourly else '')}
+  {('<div class="analyst"><b>How hourly forecasting works.</b> Shortly before each hour begins, the system issues a fresh 24-hour forecast and keeps today’s 00–23 table up to date. Its starting point is a blend of ICON-D2, ICON-EU and ensemble weather-model data, plus a local spot forecast where available; the “How it’s predicted” and input sections below explain the calculation and sources. Every run also reads the station. For each newly available completed hour it calculates <b>FC−MEAS</b>, the forecast’s mistake, and learns from it: repeated over- or under-prediction in similar conditions adjusts future forecasts. A station reading is used once, so it is never counted repeatedly.</div>' if hourly else '')}
   <div class="sec"><span class="chip fc">forecast</span> Predicted — today ({date})</div>
   {fcards or '<p class="muted">No hourly forecast logged yet — run hourly_run.py.</p>'}
   {_methodology(group, static)}
