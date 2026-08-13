@@ -507,22 +507,12 @@ def _hourly_verification_block(lake):
     sc = verify.evaluate_hourly(lake)
     if not sc.get("n_pairs"):
         return ""
-    # These counts are evidence coverage, not another forecast.  State that in the
-    # reader's terms instead of exposing the verifier's empty histogram bins.
-    lead_words = (("0–1h", "under 1 hour ahead"), ("1–3h", "1–3 hours ahead"),
-                  ("3–6h", "3–6 hours ahead"), ("6–12h", "6–12 hours ahead"),
-                  ("12–24h", "12–24 hours ahead"))
-    covered = [f"{sc['by_lead'][key]['n_pairs']} forecast hour(s) issued {words}"
-               for key, words in lead_words if sc["by_lead"][key]["n_pairs"]]
-    later = sum(sc["by_lead"][key]["n_pairs"] for key, _ in lead_words[2:])
-    coverage = ("Scored forecast lead times (issue → predicted hour): "
-                + "; ".join(covered) + ".")
-    if later == 0:
-        coverage += " No measured results yet for forecasts issued 3 or more hours ahead."
-    return (f'<div class="analyst"><b>⏱ Hourly forecast-of-record · {_lake_label(lake)}:</b> '
-            f'CRPS {sc["crps"]:.2f} kn · MAE {sc["mae"]:.2f} · bias {sc["bias"]:+.2f} '
-            f'over {sc["n_pairs"]} reconciled row(s).<div class="muted" style="margin-top:4px">'
-            f'{html.escape(coverage)}</div></div>')
+    return (f'<div class="analyst"><b>How this hourly forecast is checked.</b> '
+            f'After an hour ends, its forecast is compared with the station measurement that '
+            f'arrives afterwards. The forecast made before that hour began is kept for this '
+            f'comparison; later refreshes do not rewrite it. So far, {_lake_label(lake)} has '
+            f'{sc["n_pairs"]} comparable hour(s), with an average miss of {sc["mae"]:.2f} kn. '
+            f'As more measured hours accumulate, the system also checks longer-range forecasts.</div>')
 
 
 def _hourly_learning_section(lakes):
@@ -540,11 +530,12 @@ def _hourly_learning_section(lakes):
         nr = sum(r.get("measurement_status") == "NR" for r in rows)
         sc = verify.evaluate_hourly(lake)
         blocks.append(f'<div class="analyst"><b>⏱ {html.escape(_lake_label(lake))} hourly reconciliation:</b> '
-                      f'{present} measured forecast-of-record row(s), {nr} NR source gap(s). '
-                      f'Hourly RLS updates are idempotent; legacy display rows never train. '
+                      f'{present} completed hour(s) have a station measurement; {nr} hour(s) were not reported. '
+                      f'Each newly reported measurement is compared once with the forecast for that hour and '
+                      f'used to make future forecasts a little better. '
                       f'<div class="muted" style="margin-top:4px">'
                       f'Current hourly MAE: {("n/a" if sc.get("mae") is None else f"{sc["mae"]:.2f} kn")} '
-                      f'over {sc.get("n_pairs", 0)} scored row(s). The score above says which forecast lead times are represented.</div></div>')
+                      f'over {sc.get("n_pairs", 0)} measured hour(s).</div></div>')
     return '<section class="card"><h2>Hourly reconciliation &amp; learning</h2>' + ''.join(blocks) + '</section>'
 
 
@@ -1003,7 +994,7 @@ def report_html(group, static=False):
   {_legend()}
 </header>
 <main>
-  {('<div class="analyst"><b>Hourly forecasting.</b> Each row is frozen when it is issued. Once the selected station reports that hour, its measured wind and forecast error are added; those paired values check and update the hourly model.</div>' if hourly else '')}
+  {('<div class="analyst"><b>Hourly forecasting.</b> Shortly before each hour begins, the system issues a fresh 24-hour forecast and keeps today’s 00–23 table up to date. When a station later reports a completed hour, its measured wind and forecast error are added. The system uses that comparison once to improve future forecasts.</div>' if hourly else '')}
   <div class="sec"><span class="chip fc">forecast</span> Predicted — today ({date})</div>
   {fcards or '<p class="muted">No hourly forecast logged yet — run hourly_run.py.</p>'}
   {_methodology(group, static)}
