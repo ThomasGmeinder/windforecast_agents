@@ -244,6 +244,15 @@ def write_scorecard(lake, issued):
         f.write(json.dumps(rec) + "\n")
 
 
+def write_learning_update(lake, run_time, reconciled, learned):
+    """Small, user-facing ledger of what this hourly learning pass actually did."""
+    path = os.path.join(wd.LOG_DIR, f"{lake}_hourly_learning.jsonl")
+    rec = {"time": run_time.astimezone(wd.BERLIN).isoformat(timespec="minutes"),
+           "new_measurements": reconciled, "learning_updates": learned}
+    with open(path, "a") as f:
+        f.write(json.dumps(rec) + "\n")
+
+
 def purge_test_history(before):
     """Remove explicitly identified pre-production hourly test records and rebuild bias.
 
@@ -398,7 +407,9 @@ def main():
         for lake in fc.LAKES:
             n, learned = reconcile_measurements(lake)
             reconcile_legacy_display_measurements(lake)
-            write_scorecard(lake, datetime.datetime.now(wd.BERLIN))
+            now = datetime.datetime.now(wd.BERLIN)
+            write_scorecard(lake, now)
+            write_learning_update(lake, now, n, learned)
             print(f"{lake}: reconciled {n} measured row(s); learned {learned}")
         return
     issued = (datetime.datetime.fromisoformat(args.at) if args.at else datetime.datetime.now(wd.BERLIN))
@@ -412,6 +423,7 @@ def main():
             n, learned = reconcile_measurements(lake)
             sc = scorecard(lake)["overall"]
             write_scorecard(lake, issued)
+            write_learning_update(lake, issued, n, learned)
             print(f"{lake}: reconciled {n} measured row(s); learned {learned}; "
                   f"hourly score n={sc['n']} MAE={sc['mae']} CRPS={sc['crps']}")
     # Build every lake before writing any of them: an API timeout must not leave a

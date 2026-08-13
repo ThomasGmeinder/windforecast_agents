@@ -40,6 +40,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, render.index_html())
             elif group in render.GROUPS:
                 self._send(200, render.report_html(group))
+            elif path in ("/measurements", "/measurements.html"):
+                self._send(200, render.measurements_html())
             elif path == "/health":
                 self._send(200, "ok", "text/plain; charset=utf-8")
             elif path == "/favicon.ico":

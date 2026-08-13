@@ -503,18 +503,6 @@ def _verification_block(lake):
             f'the mean; for a single-number forecast it equals the absolute error.</div></div>')
 
 
-def _hourly_verification_block(lake):
-    sc = verify.evaluate_hourly(lake)
-    if not sc.get("n_pairs"):
-        return ""
-    return (f'<div class="analyst"><b>How this hourly forecast is checked.</b> '
-            f'Every hourly run reads the station. For each completed hour with a station '
-            f'reading, it compares that reading with the forecast made for that hour. The '
-            f'forecast is kept unchanged for a fair comparison. So far, {_lake_label(lake)} has '
-            f'{sc["n_pairs"]} comparable hour(s), with an average miss of {sc["mae"]:.2f} kn. '
-            f'As more measured hours accumulate, the system also checks longer-range forecasts.</div>')
-
-
 def _hourly_learning_section(lakes):
     blocks = []
     for lake in lakes:
@@ -529,11 +517,19 @@ def _hourly_learning_section(lakes):
         present = sum(r.get("measurement_status") == "present" for r in rows)
         nr = sum(r.get("measurement_status") == "NR" for r in rows)
         sc = verify.evaluate_hourly(lake)
-        blocks.append(f'<div class="analyst"><b>⏱ {html.escape(_lake_label(lake))} hourly reconciliation:</b> '
-                      f'{present} completed hour(s) have a station measurement; {nr} hour(s) were not reported. '
-                      f'On every run, each newly available measurement is compared with the forecast for its '
-                      f'hour and used to make future forecasts a little better. The same reading is used only '
-                      f'once, so later runs do not count it again. '
+        update = None
+        lp = os.path.join(wd.LOG_DIR, f"{lake}_hourly_learning.jsonl")
+        if os.path.exists(lp):
+            for line in open(lp):
+                try: update = json.loads(line)
+                except Exception: pass
+        latest = (f'Latest run ({html.escape(str(update.get("time", "—")))}): '
+                  f'{update.get("new_measurements", 0)} new station reading(s) incorporated; '
+                  f'{update.get("learning_updates", 0)} learning update(s) applied.' if update else
+                  'The next hourly run will record its learning result here.')
+        blocks.append(f'<div class="analyst"><b>⏱ {_lake_label(lake)} — latest hourly learning result.</b> '
+                      f'{latest} {present} completed hour(s) currently have a station measurement; '
+                      f'{nr} hour(s) were not reported. '
                       f'<div class="muted" style="margin-top:4px">'
                       f'Current hourly MAE: {("n/a" if sc.get("mae") is None else f"{sc["mae"]:.2f} kn")} '
                       f'over {sc.get("n_pairs", 0)} measured hour(s).</div></div>')
@@ -978,7 +974,7 @@ def report_html(group, static=False):
                      for k in other)
            + f' &nbsp;·&nbsp; <a href="{_href("measurements", static)}">📊 measured archive</a>'
            + "</div>")
-    fcards = "".join(_hourly_verification_block(l) + _forecast_card(_latest_forecast(l)) for l in g["lakes"])
+    fcards = "".join(_forecast_card(_latest_forecast(l)) for l in g["lakes"])
     hourly = any((_latest_forecast(l) or {}).get("rolling") for l in g["lakes"])
     cadence = "updates hourly · timestamped 24-hour windows" if hourly else "updates ~05:00 daily"
     # Pair each lake's big-miss table with ITS OWN "all measured hours" dropdown, wrapped
@@ -995,7 +991,7 @@ def report_html(group, static=False):
   {_legend()}
 </header>
 <main>
-  {('<div class="analyst"><b>Hourly forecasting.</b> Shortly before each hour begins, the system issues a fresh 24-hour forecast and keeps today’s 00–23 table up to date. Every hourly run also reads the station. For each completed hour with a reading, it adds the measured wind and forecast error, then learns from that new comparison. It never counts the same reading twice.</div>' if hourly else '')}
+  {('<div class="analyst"><b>How hourly forecasting works.</b> Shortly before each hour begins, the system issues a fresh 24-hour forecast and keeps today’s 00–23 table up to date. Its starting point is a blend of ICON-D2, ICON-EU and ensemble weather-model data, plus a local spot forecast where available; the “How it’s predicted” and input sections below explain the calculation and sources. Every run also reads the station, compares each newly available completed hour with its forecast, and uses that reading once to improve future forecasts.</div>' if hourly else '')}
   <div class="sec"><span class="chip fc">forecast</span> Predicted — today ({date})</div>
   {fcards or '<p class="muted">No hourly forecast logged yet — run hourly_run.py.</p>'}
   {_methodology(group, static)}
