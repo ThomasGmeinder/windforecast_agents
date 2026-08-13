@@ -523,10 +523,15 @@ def _hourly_learning_section(lakes):
             for line in open(lp):
                 try: update = json.loads(line)
                 except Exception: pass
-        latest = (f'Latest run ({html.escape(str(update.get("time", "—")))}): '
-                  f'{update.get("new_measurements", 0)} new station reading(s) incorporated; '
-                  f'{update.get("learning_updates", 0)} learning update(s) applied.' if update else
-                  'The next hourly run will record its learning result here.')
+        if update:
+            stamp = html.escape(str(update.get("time", "—")))
+            new, learned = update.get("new_measurements", 0), update.get("learning_updates", 0)
+            latest = (f'Latest run ({stamp}): {new} new station reading(s) incorporated; '
+                      f'{learned} learning update(s) applied.' if new or learned else
+                      f'Latest run ({stamp}): no new station readings were available to learn from; '
+                      f'the {present} reported reading(s) had already been incorporated.')
+        else:
+            latest = 'The next hourly run will record its learning result here.'
         blocks.append(f'<div class="analyst"><b>⏱ {_lake_label(lake)} — latest hourly learning result.</b> '
                       f'{latest} {present} completed hour(s) currently have a station measurement; '
                       f'{nr} hour(s) were not reported. '
