@@ -460,11 +460,11 @@ def _confidence(regime, spread_kn, learned):
 def build_table(lake, target_date, run_stamp=None):
     """target_date: 'YYYY-MM-DD'. Returns dict with 'rows' (hourly) and 'summary'."""
     lat, lon, label, alpine = LAKES[lake]
-    pt = wd.openmeteo_point(lat, lon, OM_VARS, models="icon_d2", forecast_days=3)
+    pt = wd.openmeteo_point(lat, lon, OM_VARS, models="icon_d2", forecast_days=5)
     h = pt["hourly"]
     # multi-member / multi-model inputs so the VALUE is an average, not one run
     try:
-        ens = wd.openmeteo_ensemble(lat, lon, ["wind_speed_10m", "wind_gusts_10m"], forecast_days=3)
+        ens = wd.openmeteo_ensemble(lat, lon, ["wind_speed_10m", "wind_gusts_10m"], forecast_days=5)
         eh = ens["hourly"]
         smembers = [k for k in eh if k.startswith("wind_speed_10m")]
         gmembers = [k for k in eh if k.startswith("wind_gusts_10m")]
@@ -472,7 +472,7 @@ def build_table(lake, target_date, run_stamp=None):
         eh, smembers, gmembers = None, [], []
     try:  # ICON-EU as an independent second model in the blend
         euh = wd.openmeteo_point(lat, lon, ["wind_speed_10m", "wind_gusts_10m"],
-                                 models="icon_eu", forecast_days=3)["hourly"]
+                                 models="icon_eu", forecast_days=5)["hourly"]
     except Exception:
         euh = None
     # foehn dp series (align by ISO hour prefix)

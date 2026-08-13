@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Issue a rolling 24-hour forecast window for local testing.
+"""Issue a rolling 96-hour forecast window for local testing.
 
 The daily pipeline remains untouched while the hourly forecast-of-record migration is
 being built. This command writes separate ``logs/<lake>_hourly_forecast.jsonl`` files:
-one record contains 24 rows valid from the next full Berlin hour through the following
-24 hours. It never overwrites the calendar-day forecast log.
+one record contains 96 individual hourly rows valid from the next full Berlin hour
+through the following four days. It never overwrites the calendar-day forecast log.
 
 Examples:
   .venv/bin/python hourly_run.py --dry-run
@@ -84,15 +84,15 @@ def _rebuild_hourly_bias(lake, records, cutoff):
 
 
 FETCH_TIMEOUT_S = 18
+HOURLY_HORIZON_HOURS = 96
 
 
 def build_window(lake, issued, cache=None):
     start = next_hour(issued)
-    end = start + datetime.timedelta(hours=24)
+    end = start + datetime.timedelta(hours=HOURLY_HORIZON_HOURS)
     rows = []
-    # fc.build_table currently filters a calendar date after fetching a three-day model
-    # response. A window crossing midnight needs two calls, so cache the identical model
-    # and MOSMIX fetches during this one issuance.
+    # build_table filters calendar dates. A 96-hour window can cross five dates, so cache
+    # identical upstream responses while building every touched date.
     # A single issuance builds three lakes and may cross midnight.  Sharing successful
     # responses across those builds avoids refetching the same MOSMIX, Peißenberg and
     # valley-stability inputs three times.  It is both faster and less exposed to a
@@ -124,7 +124,9 @@ def build_window(lake, issued, cache=None):
         return value
     wd._get = bounded_get
     try:
-        for day in sorted({start.date(), (end - datetime.timedelta(hours=1)).date()}):
+        days = {start.date() + datetime.timedelta(days=i)
+                for i in range((end.date() - start.date()).days + 1)}
+        for day in sorted(days):
             table = fc.build_table(lake, day.isoformat(), run_stamp=issued.isoformat(timespec="minutes"))
             for row in table["rows"]:
                 valid = datetime.datetime.combine(day, datetime.time(row["hour"]), wd.BERLIN)
@@ -136,7 +138,7 @@ def build_window(lake, issued, cache=None):
     finally:
         wd.openmeteo_point, wd.openmeteo_ensemble, wd.foehn_delta_p, wd._get = old_point, old_ens, old_dp, old_get
     rows.sort(key=lambda r: r["valid_time"])
-    assert len(rows) == 24, f"{lake}: expected 24 rows, got {len(rows)}"
+    assert len(rows) == HOURLY_HORIZON_HOURS, f"{lake}: expected {HOURLY_HORIZON_HOURS} rows, got {len(rows)}"
     return {"lake": lake, "kind": "hourly_forecast", "issue_time": issued.isoformat(timespec="minutes"),
             "valid_start": start.isoformat(), "valid_end": end.isoformat(), "hourly": rows}
 

@@ -577,8 +577,8 @@ def stability_dtheta(yyyy_mm_dd, low="kochelsee", high="walchensee"):
     Uses Open-Meteo T2m at both lake points (accounts for each cell's elevation).
     Returns {hour:int -> {'t_low','t_high','dt_low_minus_high','dtheta'}}."""
     (la1, lo1), (la2, lo2) = LAKE_LATLON[low], LAKE_LATLON[high]
-    dlo = openmeteo_point(la1, lo1, ["temperature_2m"], forecast_days=3)
-    dhi = openmeteo_point(la2, lo2, ["temperature_2m"], forecast_days=3)
+    dlo = openmeteo_point(la1, lo1, ["temperature_2m"], forecast_days=5)
+    dhi = openmeteo_point(la2, lo2, ["temperature_2m"], forecast_days=5)
     zlo, zhi = dlo.get("elevation", 598.0), dhi.get("elevation", 800.0)
     Tlo, Thi, tt = dlo["hourly"]["temperature_2m"], dhi["hourly"]["temperature_2m"], dlo["hourly"]["time"]
     off = DALR * (zhi - zlo) / 1000.0

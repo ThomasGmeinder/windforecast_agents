@@ -47,7 +47,7 @@ def _wind_cell_style(kn):
     return f"background:{hexc};color:{'#0b0b0b' if hexc in _WIND_DARKTEXT else '#fff'}"
 
 
-def _latest_forecast(lake):
+def _latest_forecast(lake, target_date=None):
     def legacy_rows(date):
         """Real daily forecast rows used only to fill a visual transition gap.
 
@@ -79,7 +79,7 @@ def _latest_forecast(lake):
             r = records[-1]
             if r.get("hourly"):
                 start, end = r.get("valid_start", ""), r.get("valid_end", "")
-                day = start[:10]
+                day = target_date or datetime.datetime.now(wd.BERLIN).date().isoformat()
                 now = datetime.datetime.now(wd.BERLIN)
                 rows = []
                 legacy = legacy_rows(day)
@@ -106,12 +106,16 @@ def _latest_forecast(lake):
                         # Display-only transition bridge. The row receives the persisted
                         # measurement/delta below, but cannot enter hourly score/learning.
                         rows.append(legacy[hour])
+                if not rows:
+                    return None
                 return {"lake": lake, "label": fc.LAKES.get(lake, (0, 0, lake.title()))[2],
                         "date": start[:10], "run_stamp": r.get("issue_time"),
                         "summary": f"rolling window {start[11:16]} → {end[11:16]} next day",
                         "hourly": rows, "rolling": True}
         except Exception:
             pass
+    if target_date:
+        return None
     p = os.path.join(wd.LOG_DIR, f"{lake}_forecast.jsonl")
     if not os.path.exists(p):
         return None
@@ -1003,17 +1007,47 @@ def report_html(group, static=False):
                      for k in other)
            + f' &nbsp;·&nbsp; <a href="{_href("measurements", static)}">📊 measured archive</a>'
            + "</div>")
-    fcards = "".join(_forecast_card(_latest_forecast(l)) for l in g["lakes"])
+    # The latest 96-hour issuance spans several calendar dates.  Render all its dates
+    # but let the page show one day at a time, with Today selected by default.
+    today = datetime.datetime.now(wd.BERLIN).date().isoformat()
+    dates = {today}
+    for lake in g["lakes"]:
+        p = os.path.join(wd.LOG_DIR, f"{lake}_hourly_forecast.jsonl")
+        if os.path.exists(p):
+            try:
+                latest = json.loads([x for x in open(p) if x.strip()][-1])
+                dates.update(r["valid_time"][:10] for r in latest.get("hourly", []) if r.get("valid_time"))
+            except Exception:
+                pass
+    dates = sorted(d for d in dates if d >= today)
+    panels = []
+    for day in dates:
+        recs = [_latest_forecast(l, day) for l in g["lakes"]]
+        cards = "".join(_forecast_card(r) for r in recs if r)
+        if not cards:
+            continue
+        label = "Today" if day == today else datetime.date.fromisoformat(day).strftime("%a %d %b")
+        rows = [row for rec in recs if rec for row in rec.get("hourly", [])]
+        sources = sorted({s for row in rows for s in (row.get("blend_kn") or {})})
+        measured = sum(row.get("measured_kn") is not None for row in rows)
+        info = (f'<div class="analyst"><b>{label} information.</b> Sources used in this day’s forecast: '
+                f'{html.escape(", ".join(sources) if sources else "source details unavailable")}. '
+                + (f'{measured} completed hourly measurement(s) from this day have been incorporated into learning.'
+                   if measured else 'No learning from this day yet; measurements are incorporated after its hours complete.') + '</div>')
+        panels.append(f'<div class="day-panel" data-day="{day}"><div class="sec"><span class="chip fc">forecast</span> {label} ({day})</div>{info}{cards}</div>')
+    fcards = "".join(panels)
     hourly = any((_latest_forecast(l) or {}).get("rolling") for l in g["lakes"])
     cadence = "updates hourly · timestamped 24-hour windows" if hourly else "updates ~05:00 daily"
     # Pair each lake's big-miss table with ITS OWN "all measured hours" dropdown, wrapped
     # so the two read as one unit (tighter internal gap than between lakes). Previously
     # both diff tables came first and both dropdowns after, so the Walchensee dropdown sat
     # under the Kochelsee table.
-    date = next((r["date"] for r in (_latest_forecast(l) for l in g["lakes"]) if r), "—")
+    date = today
+    tabs = ''.join(f'<button class="day-tab" data-day="{d}">{("Today" if d == today else datetime.date.fromisoformat(d).strftime("%a %d"))}</button>' for d in dates)
     return f"""<!doctype html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{html.escape(g['title'])} wind — {date}</title><style>{_css()}</style></head><body>
+<title>{html.escape(g['title'])} wind — {date}</title><style>{_css()}
+.day-tabs{{display:flex;gap:7px;overflow-x:auto;margin:14px 0 10px;padding-bottom:3px}}.day-tab{{white-space:nowrap;border:1px solid var(--grid);border-radius:999px;background:var(--plane);color:var(--ink);padding:6px 10px;font:inherit;cursor:pointer}}.day-tab.on{{background:var(--ink);color:var(--plane)}}</style></head><body>
 <header>{nav}
   <h1>{html.escape(g['title'])} — {date}</h1>
   <div class="sub">generated {_generated()} · {cadence} · knots (Beaufort) · gusts in kn</div>
@@ -1021,13 +1055,14 @@ def report_html(group, static=False):
 </header>
 <main>
   {('<div class="analyst"><b>How hourly forecasting works.</b> Shortly before each hour begins, the system issues a fresh 24-hour forecast and keeps today’s 00–23 table up to date. Its starting point is a blend of ICON-D2, ICON-EU and ensemble weather-model data, plus a local spot forecast where available; the “How it’s predicted” and input sections below explain the calculation and sources. Every run also reads the station. For each newly available completed hour it calculates <b>FC−MEAS</b>, the forecast’s mistake, and learns from it: repeated over- or under-prediction in similar conditions adjusts future forecasts. A station reading is used once, so it is never counted repeatedly.</div>' if hourly else '')}
-  <div class="sec"><span class="chip fc">forecast</span> Predicted — today ({date})</div>
+  <div class="day-tabs">{tabs}</div>
   {fcards or '<p class="muted">No hourly forecast logged yet — run hourly_run.py.</p>'}
   {_methodology(group, static)}
   {_data_sources(group)}
   {_hourly_learning_section(g["lakes"])}
   {_hourly_status_section()}
 </main>
+<script>const ps=[...document.querySelectorAll('.day-panel')],ts=[...document.querySelectorAll('.day-tab')];function show(d){{let x=ps.some(p=>p.dataset.day===d)?d:ps[0]?.dataset.day;ps.forEach(p=>p.hidden=p.dataset.day!==x);ts.forEach(t=>t.classList.toggle('on',t.dataset.day===x));if(x)history.replaceState(null,'','#day='+x)}}ts.forEach(t=>t.onclick=()=>show(t.dataset.day));show(location.hash.replace('#day=', ''));</script>
 <footer>Raw model wind is a first guess, corrected toward measured wind and improved as hourly
 self-learning pairs accumulate; "raw (no local calib yet)" hours are uncalibrated. Residual error ~1–1.5 kn+,
 worst in thermal/föhn.</footer></body></html>"""
