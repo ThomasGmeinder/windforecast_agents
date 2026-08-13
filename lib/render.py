@@ -507,11 +507,22 @@ def _hourly_verification_block(lake):
     sc = verify.evaluate_hourly(lake)
     if not sc.get("n_pairs"):
         return ""
-    coverage = " · ".join(f"{name}: {part['n_pairs']}" for name, part in sc["by_lead"].items())
+    # These counts are evidence coverage, not another forecast.  State that in the
+    # reader's terms instead of exposing the verifier's empty histogram bins.
+    lead_words = (("0–1h", "under 1 hour ahead"), ("1–3h", "1–3 hours ahead"),
+                  ("3–6h", "3–6 hours ahead"), ("6–12h", "6–12 hours ahead"),
+                  ("12–24h", "12–24 hours ahead"))
+    covered = [f"{sc['by_lead'][key]['n_pairs']} forecast hour(s) issued {words}"
+               for key, words in lead_words if sc["by_lead"][key]["n_pairs"]]
+    later = sum(sc["by_lead"][key]["n_pairs"] for key, _ in lead_words[2:])
+    coverage = ("Scored forecast lead times (issue → predicted hour): "
+                + "; ".join(covered) + ".")
+    if later == 0:
+        coverage += " No measured results yet for forecasts issued 3 or more hours ahead."
     return (f'<div class="analyst"><b>⏱ Hourly forecast-of-record · {_lake_label(lake)}:</b> '
             f'CRPS {sc["crps"]:.2f} kn · MAE {sc["mae"]:.2f} · bias {sc["bias"]:+.2f} '
             f'over {sc["n_pairs"]} reconciled row(s).<div class="muted" style="margin-top:4px">'
-            f'Lead coverage: {html.escape(coverage)}. Empty bins are not yet evaluated.</div></div>')
+            f'{html.escape(coverage)}</div></div>')
 
 
 def _hourly_learning_section(lakes):
@@ -533,7 +544,7 @@ def _hourly_learning_section(lakes):
                       f'Hourly RLS updates are idempotent; legacy display rows never train. '
                       f'<div class="muted" style="margin-top:4px">'
                       f'Current hourly MAE: {("n/a" if sc.get("mae") is None else f"{sc["mae"]:.2f} kn")} '
-                      f'over {sc.get("n_pairs", 0)} scored row(s). Lead-bin coverage is shown above each table.</div></div>')
+                      f'over {sc.get("n_pairs", 0)} scored row(s). The score above says which forecast lead times are represented.</div></div>')
     return '<section class="card"><h2>Hourly reconciliation &amp; learning</h2>' + ''.join(blocks) + '</section>'
 
 
