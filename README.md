@@ -403,7 +403,7 @@ skips cleanly and the deterministic forecast is unaffected.
 
 ---
 
-## 6. Daily automation (`daily_run.py` + systemd)
+## 6. Hourly automation (`hourly_run.py` + systemd)
 
 ### Hourly trigger
 
@@ -424,48 +424,22 @@ systemctl --user list-timers wind-agents-hourly.timer
 The timer runs `hourly_run.py` at `:55` Europe/Berlin. It issues the next valid hourly
 window locally; it does not dispatch or deploy GitHub Pages.
 
-`daily_run.py`:
-0. STEP 0 — **measurement-source watch**: probe the Ammerseeboje, log which truth is in
-   force, and announce any change loudly. Runs first because learning consumes whatever it
-   reports;
-1. STEP 1 — learn from yesterday (writes the detailed reports above), then run the
-   self-tuning loop (review past hypotheses → propose → backtest-gated apply);
-2. STEP 2 — build today's tables from the just-updated model, print them, write
-   `logs/tables/<lake>_<date>.txt` and `logs/latest_report.txt`, and log the
-   forecast (with raw values, features, predictive deciles and the classification
-   inputs needed for replay) for tomorrow to learn from;
-3. STEP 3 — verify: score the logged forecasts with CRPS against persistence and
-   climatology and log a `verification` event.
+Each hourly run first reconciles every elapsed forecast-of-record row for which the
+measurement source has reported a value. It records forecast-minus-measurement, makes at
+most one guarded RLS update per row, scores the hourly record, then issues the next
+24-hour window. GitHub Actions commits the resulting hourly logs/model state and deploys
+the static Pages report.
 
-Idempotent per (date, run_stamp): a same-day re-run is kept as a separate record
-rather than replacing the morning one, so verification and learning can always use the
-forecast that was actually issued first (see 5b).
-
-**Where it actually runs:** the pipeline runs **in GitHub Actions**, not on the laptop.
-`.github/workflows/daily.yml` is on a `7 3 * * *` **UTC** cron (≈05:07 Berlin in summer,
-04:07 in winter — GitHub cron has no timezone), and it also runs the self-tests before the
-pipeline, then commits `models/`, `logs/` and `config/` back to `main` and publishes Pages.
-
-The local **systemd user timer** `wind-agents-daily.timer` fires at **05:00 local** and
-does *not* run `daily_run.py` — it only dispatches the cloud workflow
-(`gh workflow run daily.yml`), because GitHub's own cron can lag by many minutes and this
-makes the morning publish punctual. `Persistent=true`, so a dispatch missed while the
-laptop slept fires on next wake. Linger **is** enabled (`loginctl show-user $USER`
-reports `Linger=yes`), so the timer also fires without an active login session; the cloud
-cron remains the backstop that guarantees a run even if the laptop is off.
-
-```
-systemctl --user list-timers wind-agents-daily.timer
-journalctl --user -u wind-agents-daily.service -n 40
-gh run list -R ThomasGmeinder/windforecast_agents -L 5     # what the cloud actually did
-```
+`daily_run.py` and `.github/workflows/daily.yml` are retained only as a legacy daily
+verification audit. They do not own the production forecast, hourly learner, model state,
+or Pages deployment, and their old reports are not displayed on the public forecast pages.
 
 ---
 
 ## 6b. Web report
 
-The report is published as a static site to **GitHub Pages** (rebuilt each morning
-by the daily workflow), split into a top-level index and one dedicated page per lake
+The report is published as a static site to **GitHub Pages** (rebuilt after every successful
+hourly run), split into a top-level index and one dedicated page per lake
 group:
 
 - **Live: https://thomasgmeinder.github.io/windforecast_agents/** — landing page, headed

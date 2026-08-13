@@ -972,7 +972,7 @@ def index_html(static=False):
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Bavarian lake wind</title><style>{_css()}</style></head><body>
 <header><h1>Bavarian lake wind forecasts</h1>
-<div class="sub">generated {_generated()} · updates ~05:00 daily · self-learning</div></header>
+<div class="sub">generated {_generated()} · updates hourly · hourly learning</div></header>
 <main>{heading}<div class="tiles">{''.join(tiles)}</div></main>
 <footer>Choose a report. Each has its own hourly forecast, self-learning history, and the
 prediction methodology for those lakes.</footer></body></html>"""
@@ -1003,17 +1003,16 @@ def report_html(group, static=False):
   {_legend()}
 </header>
 <main>
-  {('<div class="analyst"><b>Hourly forecasting and reconciliation.</b> This table uses timestamped 24-hour records and forecast-of-record selection. Reconciled rows feed hourly verification, the guarded hourly RLS update, and (once sufficient history exists) the tuning gate. The legacy daily reports below are retained for historical context; do not compare their lead times or skill directly with the hourly figures.</div>' if hourly else '')}
+  {('<div class="analyst"><b>Hourly forecasting.</b> Each row is frozen when it is issued. Once the selected station reports that hour, its measured wind and forecast error are added; those paired values check and update the hourly model.</div>' if hourly else '')}
   <div class="sec"><span class="chip fc">forecast</span> Predicted — today ({date})</div>
-  {fcards or '<p class="muted">No forecast logged yet — run daily_run.py.</p>'}
+  {fcards or '<p class="muted">No hourly forecast logged yet — run hourly_run.py.</p>'}
   {_methodology(group, static)}
   {_data_sources(group)}
   {_hourly_learning_section(g["lakes"])}
   {_hourly_status_section()}
-  {_learning_section(g["lakes"])}
 </main>
-<footer>Raw model wind is a first guess, corrected toward measured wind and improved daily by the
-self-learning loop; "raw (no local calib yet)" hours are uncalibrated. Residual error ~1–1.5 kn+,
+<footer>Raw model wind is a first guess, corrected toward measured wind and improved as hourly
+self-learning pairs accumulate; "raw (no local calib yet)" hours are uncalibrated. Residual error ~1–1.5 kn+,
 worst in thermal/föhn.</footer></body></html>"""
 
 
@@ -1185,7 +1184,8 @@ def _selftest():
         for stale in ("measured regime", "terrain then fixes direction", "lowers CRPS"):
             assert stale not in page, f"stale methodology claim on {g}: {stale!r}"
         assert "scenario" in page.lower(), f"{g} page does not explain forecast scenarios"
-        assert "physical cause" in page.lower(), f"{g} page omits scenario-causality caveat"
+        assert "not a confirmed physical regime" in page.lower(), \
+            f"{g} page omits scenario-causality caveat"
     amm = report_html("ammersee", static=True)
     assert "blend" in amm.lower(), "the Ammersee page must say its truth is a blend"
     assert "Ammerseeboje" in amm, "the Ammersee page must name the preferred on-water source"
