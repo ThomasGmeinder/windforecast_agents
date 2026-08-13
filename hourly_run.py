@@ -11,6 +11,7 @@ Examples:
   .venv/bin/python hourly_run.py --at 2026-08-12T04:55+02:00
 """
 import argparse, datetime, json, os, sys, tempfile, time
+from urllib.parse import urlparse
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(ROOT, "lib"))
@@ -48,15 +49,22 @@ def select_forecast_of_record(records, valid_time):
     return max(candidates, key=lambda x: x[0]) if candidates else None
 
 
-def build_window(lake, issued):
+FETCH_TIMEOUT_S = 18
+
+
+def build_window(lake, issued, cache=None):
     start = next_hour(issued)
     end = start + datetime.timedelta(hours=24)
     rows = []
     # fc.build_table currently filters a calendar date after fetching a three-day model
     # response. A window crossing midnight needs two calls, so cache the identical model
     # and MOSMIX fetches during this one issuance.
-    cache = {}
-    old_point, old_ens, old_dp = wd.openmeteo_point, wd.openmeteo_ensemble, wd.foehn_delta_p
+    # A single issuance builds three lakes and may cross midnight.  Sharing successful
+    # responses across those builds avoids refetching the same MOSMIX, Peißenberg and
+    # valley-stability inputs three times.  It is both faster and less exposed to a
+    # transient upstream stall.
+    cache = cache if cache is not None else {}
+    old_point, old_ens, old_dp, old_get = wd.openmeteo_point, wd.openmeteo_ensemble, wd.foehn_delta_p, wd._get
     def cached(fn, name):
         def inner(*args, **kwargs):
             key = (name, repr(args), repr(sorted(kwargs.items())))
@@ -67,6 +75,20 @@ def build_window(lake, issued):
     wd.openmeteo_point = cached(old_point, "point")
     wd.openmeteo_ensemble = cached(old_ens, "ensemble")
     wd.foehn_delta_p = cached(old_dp, "dp")
+    def bounded_get(url, nbytes=None, timeout=60):
+        """Make a single stalled upstream visible and unable to consume the run."""
+        limit = min(float(timeout), FETCH_TIMEOUT_S)
+        host = urlparse(url).netloc
+        started = time.monotonic()
+        try:
+            value = old_get(url, nbytes=nbytes, timeout=limit)
+        except Exception as exc:
+            print(f"fetch {host}: failed after {time.monotonic() - started:.1f}s "
+                  f"(limit {limit:.0f}s): {type(exc).__name__}: {exc}", file=sys.stderr, flush=True)
+            raise
+        print(f"fetch {host}: {time.monotonic() - started:.1f}s", file=sys.stderr, flush=True)
+        return value
+    wd._get = bounded_get
     try:
         for day in sorted({start.date(), (end - datetime.timedelta(hours=1)).date()}):
             table = fc.build_table(lake, day.isoformat(), run_stamp=issued.isoformat(timespec="minutes"))
@@ -78,7 +100,7 @@ def build_window(lake, issued):
                                  "blend_kn": row.get("blend_kn"),
                                  "blend_range_kn": row.get("blend_range_kn")})
     finally:
-        wd.openmeteo_point, wd.openmeteo_ensemble, wd.foehn_delta_p = old_point, old_ens, old_dp
+        wd.openmeteo_point, wd.openmeteo_ensemble, wd.foehn_delta_p, wd._get = old_point, old_ens, old_dp, old_get
     rows.sort(key=lambda r: r["valid_time"])
     assert len(rows) == 24, f"{lake}: expected 24 rows, got {len(rows)}"
     return {"lake": lake, "kind": "hourly_forecast", "issue_time": issued.isoformat(timespec="minutes"),
@@ -321,6 +343,8 @@ def main():
     ap.add_argument("--at", help="issue timestamp, ISO-8601; defaults to now in Berlin")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--selftest", action="store_true")
+    ap.add_argument("--reconcile-only", action="store_true",
+                    help="attach newly reported observations without issuing a new window")
     ap.add_argument("--purge-test-before", help="explicit aware issue-time cutoff for test-record purge")
     args = ap.parse_args()
     if args.selftest:
@@ -370,6 +394,13 @@ def main():
     if args.purge_test_before:
         print(json.dumps(purge_test_history(args.purge_test_before), indent=2))
         return
+    if args.reconcile_only:
+        for lake in fc.LAKES:
+            n, learned = reconcile_measurements(lake)
+            reconcile_legacy_display_measurements(lake)
+            write_scorecard(lake, datetime.datetime.now(wd.BERLIN))
+            print(f"{lake}: reconciled {n} measured row(s); learned {learned}")
+        return
     issued = (datetime.datetime.fromisoformat(args.at) if args.at else datetime.datetime.now(wd.BERLIN))
     if issued.tzinfo is None:
         issued = issued.replace(tzinfo=wd.BERLIN)
@@ -385,12 +416,12 @@ def main():
                   f"hourly score n={sc['n']} MAE={sc['mae']} CRPS={sc['crps']}")
     # Build every lake before writing any of them: an API timeout must not leave a
     # half-issued cross-lake state. Short bounded retries handle transient TLS/API errors.
-    built = {}
+    built, shared_cache = {}, {}
     for lake in fc.LAKES:
         last = None
         for attempt in range(3):
             try:
-                built[lake] = build_window(lake, issued)
+                built[lake] = build_window(lake, issued, cache=shared_cache)
                 break
             except Exception as e:
                 last = e
