@@ -239,8 +239,25 @@ def _write_hourly_measurements(lake, records):
             if old is None or issued > old[0]:
                 out[vt] = (issued, row)
     path = os.path.join(wd.LOG_DIR, f"{lake}_hourly_measurements.jsonl")
+    # Retain source-only historical rows that were deliberately backfilled for the
+    # measurement archive before hourly forecasting existed.  They have no forecast,
+    # are never scored/learned from, and are replaced if a real forecast-linked row exists.
+    archive_only = {}
+    if os.path.exists(path):
+        for line in open(path):
+            try:
+                old = json.loads(line)
+                if old.get("archive_only"):
+                    archive_only[old["valid_time"]] = old
+            except Exception:
+                pass
     rows = []
-    for vt, (issued, row) in sorted(out.items()):
+    archive_only.update({vt: None for vt in out})
+    for vt in sorted(set(out) | set(archive_only)):
+        if vt not in out:
+            rows.append(archive_only[vt])
+            continue
+        issued, row = out[vt]
         measured = row.get("measured_kn")
         rows.append({"lake": lake, "valid_time": vt, "issue_time": issued.isoformat(timespec="minutes"),
                      "lead_minutes": row.get("lead_minutes"), "forecast_kn": row.get("mean_kn"),
@@ -252,6 +269,31 @@ def _write_hourly_measurements(lake, records):
                      "measurement_status": "present" if measured is not None else "NR"})
     with open(path, "w") as f:
         f.write("\n".join(json.dumps(r) for r in rows) + ("\n" if rows else ""))
+
+
+def backfill_source_measurements(date):
+    """Persist source readings for an archive date without fabricating forecast errors."""
+    for lake in fc.LAKES:
+        data, source = wd.actual_hourly(lake, date)
+        path = os.path.join(wd.LOG_DIR, f"{lake}_hourly_measurements.jsonl")
+        rows = {}
+        if os.path.exists(path):
+            for line in open(path):
+                try:
+                    old = json.loads(line); rows[old["valid_time"]] = old
+                except Exception: pass
+        for hour, obs in data.items():
+            vt = f"{date}T{hour:02d}:00:00+02:00"
+            if vt in rows and not rows[vt].get("archive_only"):
+                continue
+            rows[vt] = {"lake": lake, "valid_time": vt, "issue_time": None,
+                        "lead_minutes": None, "forecast_kn": None, "measured_kn": obs.get("mean_kn"),
+                        "fc_minus_measured_kn": None, "forecast_gust_kn": None,
+                        "measured_gust_kn": obs.get("gust_kn"), "gust_fc_minus_measured_kn": None,
+                        "measurement_source": source, "measurement_status": "present", "archive_only": True}
+        with open(path, "w") as f:
+            f.write("\n".join(json.dumps(r) for _, r in sorted(rows.items())) + ("\n" if rows else ""))
+        print(f"{lake}: backfilled {len(data)} source measurement(s) for {date}")
 
 
 def verification_rows(lake):
@@ -432,6 +474,8 @@ def main():
                     help="copy the repository production snapshot into WIND_STATE_DIR")
     ap.add_argument("--reset-local-state", action="store_true",
                     help="replace the existing WIND_STATE_DIR snapshot")
+    ap.add_argument("--backfill-source-measurements", metavar="YYYY-MM-DD",
+                    help="archive source readings without adding forecast/learning rows")
     ap.add_argument("--purge-test-before", help="explicit aware issue-time cutoff for test-record purge")
     args = ap.parse_args()
     if args.selftest:
@@ -483,6 +527,9 @@ def main():
         return
     if args.seed_local_state or args.reset_local_state:
         seed_local_state(reset=args.reset_local_state)
+        return
+    if args.backfill_source_measurements:
+        backfill_source_measurements(args.backfill_source_measurements)
         return
     if args.reconcile_only:
         for lake in fc.LAKES:
