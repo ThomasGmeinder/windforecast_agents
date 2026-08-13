@@ -74,6 +74,8 @@ def _rebuild_hourly_bias(lake, records, cutoff):
                                                        postproc.new_state())
         postproc.update(st, row["raw_kn"], row["measured_kn"])
         postproc.update_gust(st, row.get("raw_gust_kn") or row["raw_kn"], row.get("measured_gust_kn"))
+        if row.get("measured_gust_kn") is not None:
+            row["gust_fc_minus_measured_kn"] = round((row.get("gust_kn") or 0) - row["measured_gust_kn"], 1)
         row["learned_hourly"] = True
     path = fc.bias_path(lake); tmp = path + ".tmp"
     with open(tmp, "w") as f:
@@ -184,6 +186,8 @@ def reconcile_measurements(lake, now=None, actual_provider=wd.actual_hourly):
         row["measured_gust_kn"] = obs.get("gust_kn")
         row["measured_source"] = sources[d]
         row["fc_minus_measured_kn"] = round(row["mean_kn"] - obs["mean_kn"], 1)
+        row["gust_fc_minus_measured_kn"] = (round((row.get("gust_kn") or 0) - obs["gust_kn"], 1)
+                                             if obs.get("gust_kn") is not None else None)
         row["measurement_finalized"] = True
         # Exactly once per selected forecast-of-record row. The hourly record carries the
         # marker, so a later reconciliation cannot train the same observation twice.
@@ -241,7 +245,9 @@ def _write_hourly_measurements(lake, records):
         rows.append({"lake": lake, "valid_time": vt, "issue_time": issued.isoformat(timespec="minutes"),
                      "lead_minutes": row.get("lead_minutes"), "forecast_kn": row.get("mean_kn"),
                      "measured_kn": measured, "fc_minus_measured_kn": row.get("fc_minus_measured_kn"),
+                     "forecast_gust_kn": row.get("gust_kn"),
                      "measured_gust_kn": row.get("measured_gust_kn"),
+                     "gust_fc_minus_measured_kn": row.get("gust_fc_minus_measured_kn"),
                      "measurement_source": row.get("measured_source"),
                      "measurement_status": "present" if measured is not None else "NR"})
     with open(path, "w") as f:

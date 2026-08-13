@@ -355,7 +355,7 @@ def _forecast_card(rec):
         if r.get("missing"):
             rows.append(f'<tr class="elapsed"><td class="hr">{r["hour"]:02d}</td><td class="note">—</td>'
                         '<td class="dir">—</td><td class="wind">—</td><td class="measured">—</td>'
-                        '<td class="delta">—</td><td class="gust">—</td><td class="scenario-code">—</td>'
+                        '<td class="delta">—</td><td class="gust">—</td><td class="measured">—</td><td class="delta">—</td><td class="scenario-code">—</td>'
                         '<td class="note">no prior hourly forecast</td><td class="conf">—</td>'
                         '<td class="note">hourly service bootstrap</td></tr>')
             continue
@@ -381,6 +381,7 @@ def _forecast_card(rec):
         # show or score it: the hour must have ended before measured/FC−MEAS is meaningful.
         obs = observed.get(r["hour"]) if completed else None
         own_measured = r.get("measured_kn") if completed else None
+        own_gust = r.get("measured_gust_kn") if completed else None
         # Measurement feeds can publish a completed hour after the last :55 issuer ran.
         # Use the same live source for any elapsed display row, so H22 does not stay
         # blank until the next scheduled reconciliation. This is display-only; state is
@@ -390,7 +391,10 @@ def _forecast_card(rec):
             if live is not None:
                 own_measured = live.get("mean_kn")
                 r = {**r, "_display_live_delta": round(r["mean_kn"] - own_measured, 1),
+                     "_display_live_gust_delta": (round((r.get("gust_kn") or 0) - live["gust_kn"], 1)
+                                                  if live.get("gust_kn") is not None else None),
                      "_display_live_source": live_source}
+                own_gust = live.get("gust_kn")
         past = completed
         unavailable = past and rec.get("rolling") and r["hour"] not in live_obs and obs is None
         measured = (f'{own_measured:{fc.KN_FMT}}' if own_measured is not None else
@@ -400,6 +404,11 @@ def _forecast_card(rec):
                  ("—" if obs is None else
                   (f'{obs.get("err_issued_kn", 0):+.1f}' if r.get("legacy_calendar_backfill")
                    else ("not forecastable" if obs.get("leaked") else f'{obs.get("err_issued_kn", 0):+.1f}'))))
+        gust_measured = f'{own_gust:{fc.KN_FMT}}' if own_gust is not None else '—'
+        gust_delta_value = r.get("gust_fc_minus_measured_kn", r.get("_display_live_gust_delta"))
+        if gust_delta_value is None and own_gust is not None:
+            gust_delta_value = round((r.get("gust_kn") or 0) - own_gust, 1)
+        gust_delta = f'{gust_delta_value:+.1f}' if gust_delta_value is not None else '—'
         scenario = html.escape(_scenario_label(reg))
         issue = r.get("issue_time") or rec.get("run_stamp")
         lead = r.get("lead_minutes")
@@ -417,6 +426,7 @@ def _forecast_card(rec):
             f'<td class="measured">{measured}</td><td class="delta">{delta}</td>'
             f'<td class="gust" style="{_wind_cell_style(r.get("gust_kn") or 0)}">'
             f'{(r.get("gust_kn") or 0):{fc.KN_FMT}}</td>'
+            f'<td class="measured">{gust_measured}</td><td class="delta">{gust_delta}</td>'
             f'<td class="scenario-code"><i class="sw {reg}" title="{scenario}" '
             f'aria-label="{scenario}"></i></td>'
             f'<td class="note">{"not recorded" if "calib_n" not in r else ("raw" if not r.get("calib_n") else "n=" + str(r.get("calib_n")))}</td>'
@@ -428,7 +438,7 @@ def _forecast_card(rec):
       <h2>{label} <span class="chip fc">forecast · {date}</span></h2>
       <p class="summary">{summ}</p>
       <table>
-        <thead><tr><th>h</th><th>issued / lead</th><th>dir</th><th>forecast kn (Bft)</th><th>measured</th><th>Δ fc−meas</th><th>gust</th>
+        <thead><tr><th>h</th><th>issued / lead</th><th>dir</th><th>forecast kn (Bft)</th><th>measured</th><th>Δ fc−meas</th><th>Gust FC</th><th>Gust meas</th><th>Δ gust</th>
           <th>scenario</th><th>support</th><th>conf</th><th>note</th></tr></thead>
         <tbody>{''.join(rows)}</tbody>
       </table>
@@ -522,6 +532,9 @@ def _hourly_learning_section(lakes):
         present = sum(r.get("measurement_status") == "present" for r in rows)
         nr = sum(r.get("measurement_status") == "NR" for r in rows)
         sc = verify.evaluate_hourly(lake)
+        gust_errors = [r.get("gust_fc_minus_measured_kn") for r in rows
+                       if r.get("gust_fc_minus_measured_kn") is not None]
+        gust_mae = (sum(abs(x) for x in gust_errors) / len(gust_errors)) if gust_errors else None
         update = None
         lp = os.path.join(wd.LOG_DIR, f"{lake}_hourly_learning.jsonl")
         if os.path.exists(lp):
@@ -542,7 +555,8 @@ def _hourly_learning_section(lakes):
                       f'{nr} hour(s) were not reported. '
                       f'<div class="muted" style="margin-top:4px">'
                       f'Current hourly MAE: {("n/a" if sc.get("mae") is None else f"{sc["mae"]:.2f} kn")} '
-                      f'over {sc.get("n_pairs", 0)} measured hour(s).</div></div>')
+                      f'over {sc.get("n_pairs", 0)} measured hour(s). Gust MAE: '
+                      f'{("n/a" if gust_mae is None else f"{gust_mae:.2f} kn")} over {len(gust_errors)} measured gust hour(s).</div></div>')
     return '<section class="card"><h2>Hourly reconciliation &amp; learning</h2>' + ''.join(blocks) + '</section>'
 
 
@@ -1050,7 +1064,8 @@ def _measurements_data():
                 date, hour = r["valid_time"][:10], int(r["valid_time"][11:13])
                 d = hourly.setdefault(date, {"src": r.get("measurement_source") or "source not recorded", "rows": []})
                 d["rows"].append([hour, r.get("measured_kn"), r.get("measured_gust_kn"), None,
-                                  r.get("forecast_kn"), r.get("fc_minus_measured_kn"), False])
+                                  r.get("forecast_kn"), r.get("fc_minus_measured_kn"),
+                                  r.get("forecast_gust_kn"), r.get("gust_fc_minus_measured_kn"), False])
         days.update(hourly)
         for d in days.values():
             d["rows"].sort(key=lambda x: x[0])
@@ -1095,8 +1110,8 @@ def measurements_html(static=False):
     <span id="count" class="muted"></span>
   </div>
   <div id="src" class="srcline"></div>
-  <table id="tbl"><thead><tr><th>Hour</th><th>Dir</th><th>Measured</th><th>Gust</th>
-  <th>Forecast</th><th>&Delta; fc&minus;meas</th></tr></thead><tbody></tbody></table>
+  <table id="tbl"><thead><tr><th>Hour</th><th>Dir</th><th>Measured</th><th>Gust meas</th>
+  <th>Forecast</th><th>&Delta; fc&minus;meas</th><th>Gust FC</th><th>&Delta; gust</th></tr></thead><tbody></tbody></table>
   <p class="blurb" style="margin-top:10px">
     &Delta; is forecast minus measured, so positive means the forecast was too strong.
     Greyed rows had already elapsed when the forecast was issued, so they were recorded but
@@ -1120,12 +1135,13 @@ function draw() {{
     ? 'Measured by: <b>' + day.src.replace(/[<>&]/g, '') + '</b>' : '';
   document.getElementById('count').textContent = day ? day.rows.length + ' hours' : 'no data';
   tb.innerHTML = (day ? day.rows : []).map(r => {{
-    const [hr, meas, gust, dir, fc, err, leaked] = r;
+    const [hr, meas, gust, dir, fc, err, gustFc, gustErr, leaked] = r;
     const f = v => (v === null || v === undefined) ? '&middot;' : (+v).toFixed(1);
     return `<tr class="${{leaked ? 'leaked' : ''}}"><td class="hr">${{String(hr).padStart(2,'0')}}</td>`
       + `<td class="dir">${{dir === null || dir === undefined ? '&middot;' : Math.round(dir) + '&deg;'}}</td>`
       + `<td class="wind">${{f(meas)}}</td><td class="gust">${{f(gust)}}</td>`
-      + `<td>${{f(fc)}}</td><td>${{err === null || err === undefined ? '&middot;' : (err > 0 ? '+' : '') + (+err).toFixed(1)}}</td></tr>`;
+      + `<td>${{f(fc)}}</td><td>${{err === null || err === undefined ? '&middot;' : (err > 0 ? '+' : '') + (+err).toFixed(1)}}</td>`
+      + `<td>${{f(gustFc)}}</td><td>${{gustErr === null || gustErr === undefined ? '&middot;' : (gustErr > 0 ? '+' : '') + (+gustErr).toFixed(1)}}</td></tr>`;
   }}).join('');
 }}
 lakeSel.addEventListener('change', fillDays);
