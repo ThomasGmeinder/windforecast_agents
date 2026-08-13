@@ -386,7 +386,9 @@ def _forecast_card(rec):
                 own_measured = live.get("mean_kn")
                 r = {**r, "_display_live_delta": round(r["mean_kn"] - own_measured, 1),
                      "_display_live_source": live_source}
-        past = bool(r.get("valid_time") and datetime.datetime.fromisoformat(r["valid_time"]) < datetime.datetime.now(wd.BERLIN))
+        now = datetime.datetime.now(wd.BERLIN)
+        completed_cutoff = now.replace(minute=0, second=0, microsecond=0)
+        past = bool(r.get("valid_time") and datetime.datetime.fromisoformat(r["valid_time"]) < completed_cutoff)
         unavailable = past and rec.get("rolling") and r["hour"] not in live_obs and obs is None
         measured = (f'{own_measured:{fc.KN_FMT}}' if own_measured is not None else
                     (("NR" if unavailable else "—") if obs is None else f'{obs["actual_kn"]:{fc.KN_FMT}}'))

@@ -49,6 +49,38 @@ def select_forecast_of_record(records, valid_time):
     return max(candidates, key=lambda x: x[0]) if candidates else None
 
 
+def completed_hour_cutoff(now):
+    """Start of the current Berlin hour; only earlier hours are complete."""
+    return now.astimezone(wd.BERLIN).replace(minute=0, second=0, microsecond=0)
+
+
+def _rebuild_hourly_bias(lake, records, cutoff):
+    """Replay finalized hourly observations once after a provisional-value repair."""
+    bias = verify.rebuild_bias(lake, fc.params_for(lake))
+    selected = {}
+    for rec in records:
+        for row in rec.get("hourly", []):
+            vt = row.get("valid_time")
+            if vt and datetime.datetime.fromisoformat(vt) < cutoff:
+                got = select_forecast_of_record(records, vt)
+                if got and got[1] is row:
+                    selected[vt] = row
+    for row in selected.values():
+        row.pop("learned_hourly", None)
+        if row.get("legacy_calendar_backfill") or row.get("measured_kn") is None:
+            continue
+        hour = int(row["valid_time"][11:13])
+        st = bias.setdefault("buckets", {}).setdefault(fc._bucket_key(row.get("regime", "gradient"), hour),
+                                                       postproc.new_state())
+        postproc.update(st, row["raw_kn"], row["measured_kn"])
+        postproc.update_gust(st, row.get("raw_gust_kn") or row["raw_kn"], row.get("measured_gust_kn"))
+        row["learned_hourly"] = True
+    path = fc.bias_path(lake); tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(bias, f, indent=2); f.flush(); os.fsync(f.fileno())
+    os.replace(tmp, path)
+
+
 FETCH_TIMEOUT_S = 18
 
 
@@ -127,16 +159,18 @@ def reconcile_measurements(lake, now=None, actual_provider=wd.actual_hourly):
     records = [json.loads(x) for x in open(path) if x.strip()]
     by_date, sources = {}, {}
     now = (now or datetime.datetime.now(wd.BERLIN)).astimezone(wd.BERLIN)
+    cutoff = completed_hour_cutoff(now)
     valid_times = sorted({r["valid_time"] for rec in records for r in rec.get("hourly", [])
-                          if datetime.datetime.fromisoformat(r["valid_time"]) < now})
+                          if datetime.datetime.fromisoformat(r["valid_time"]) < cutoff})
     changed = learned = 0
+    repair_needed = False
     bias = fc.load_bias(lake)
     for vt in valid_times:
         selected = select_forecast_of_record(records, vt)
         if selected is None:
             continue
         _issued, row, _rec = selected
-        if row.get("measured_kn") is not None:
+        if row.get("measurement_finalized"):
             continue
         d = vt[:10]
         if d not in by_date:
@@ -145,20 +179,30 @@ def reconcile_measurements(lake, now=None, actual_provider=wd.actual_hourly):
         obs = by_date[d].get(hour)
         if obs is None:
             continue
+        old_measured = row.get("measured_kn")
         row["measured_kn"] = obs["mean_kn"]
         row["measured_gust_kn"] = obs.get("gust_kn")
         row["measured_source"] = sources[d]
         row["fc_minus_measured_kn"] = round(row["mean_kn"] - obs["mean_kn"], 1)
+        row["measurement_finalized"] = True
         # Exactly once per selected forecast-of-record row. The hourly record carries the
         # marker, so a later reconciliation cannot train the same observation twice.
-        if not row.get("legacy_calendar_backfill") and not row.get("learned_hourly"):
+        if row.get("learned_hourly"):
+            # Old records made before the completed-hour rule may contain a partial
+            # station value.  Finalizing any such record requires a clean replay.
+            repair_needed = True
+        elif not row.get("legacy_calendar_backfill"):
             st = bias.setdefault("buckets", {}).setdefault(fc._bucket_key(row.get("regime", "gradient"), hour),
                                                            postproc.new_state())
             postproc.update(st, row["raw_kn"], obs["mean_kn"])
             postproc.update_gust(st, row.get("raw_gust_kn") or row["raw_kn"], obs.get("gust_kn"))
             row["learned_hourly"] = True
             learned += 1
-        changed += 1
+        changed += old_measured != obs["mean_kn"]
+    if repair_needed:
+        _rebuild_hourly_bias(lake, records, cutoff)
+        learned = sum(1 for r in (select_forecast_of_record(records, vt) or (None, {}, None))[1:2]
+                      if r.get("learned_hourly"))
     with open(path, "w") as f:
         f.write("\n".join(json.dumps(x) for x in records) + "\n")
     if learned:
@@ -177,7 +221,7 @@ def _write_hourly_measurements(lake, records):
     Renderers and the measurements archive consume this instead of legacy daily diffs.
     """
     out = {}
-    now = datetime.datetime.now(wd.BERLIN)
+    cutoff = completed_hour_cutoff(datetime.datetime.now(wd.BERLIN))
     for rec in records:
         issued = datetime.datetime.fromisoformat(rec["issue_time"])
         for row in rec.get("hourly", []):
@@ -185,7 +229,7 @@ def _write_hourly_measurements(lake, records):
             if not vt:
                 continue
             valid = datetime.datetime.fromisoformat(vt)
-            if issued >= valid or valid >= now or row.get("legacy_calendar_backfill"):
+            if issued >= valid or valid >= cutoff or row.get("legacy_calendar_backfill"):
                 continue
             old = out.get(vt)
             if old is None or issued > old[0]:
