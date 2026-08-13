@@ -343,7 +343,7 @@ def _forecast_card(rec):
     # report has not been produced yet. These values are deliberately not written back
     # into hourly learning/verification state here.
     live_obs, live_source = {}, None
-    if rec.get("rolling"):
+    if rec.get("rolling") and rec.get("date") == datetime.datetime.now(wd.BERLIN).date().isoformat():
         try:
             live_obs, live_source = wd.actual_hourly(rec["lake"], rec["date"])
         except Exception:
