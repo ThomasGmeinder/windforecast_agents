@@ -508,9 +508,9 @@ def _hourly_verification_block(lake):
     if not sc.get("n_pairs"):
         return ""
     return (f'<div class="analyst"><b>How this hourly forecast is checked.</b> '
-            f'After an hour ends, its forecast is compared with the station measurement that '
-            f'arrives afterwards. The forecast made before that hour began is kept for this '
-            f'comparison; later refreshes do not rewrite it. So far, {_lake_label(lake)} has '
+            f'Every hourly run reads the station. For each completed hour with a station '
+            f'reading, it compares that reading with the forecast made for that hour. The '
+            f'forecast is kept unchanged for a fair comparison. So far, {_lake_label(lake)} has '
             f'{sc["n_pairs"]} comparable hour(s), with an average miss of {sc["mae"]:.2f} kn. '
             f'As more measured hours accumulate, the system also checks longer-range forecasts.</div>')
 
@@ -531,8 +531,9 @@ def _hourly_learning_section(lakes):
         sc = verify.evaluate_hourly(lake)
         blocks.append(f'<div class="analyst"><b>⏱ {html.escape(_lake_label(lake))} hourly reconciliation:</b> '
                       f'{present} completed hour(s) have a station measurement; {nr} hour(s) were not reported. '
-                      f'Each newly reported measurement is compared once with the forecast for that hour and '
-                      f'used to make future forecasts a little better. '
+                      f'On every run, each newly available measurement is compared with the forecast for its '
+                      f'hour and used to make future forecasts a little better. The same reading is used only '
+                      f'once, so later runs do not count it again. '
                       f'<div class="muted" style="margin-top:4px">'
                       f'Current hourly MAE: {("n/a" if sc.get("mae") is None else f"{sc["mae"]:.2f} kn")} '
                       f'over {sc.get("n_pairs", 0)} measured hour(s).</div></div>')
@@ -994,7 +995,7 @@ def report_html(group, static=False):
   {_legend()}
 </header>
 <main>
-  {('<div class="analyst"><b>Hourly forecasting.</b> Shortly before each hour begins, the system issues a fresh 24-hour forecast and keeps today’s 00–23 table up to date. When a station later reports a completed hour, its measured wind and forecast error are added. The system uses that comparison once to improve future forecasts.</div>' if hourly else '')}
+  {('<div class="analyst"><b>Hourly forecasting.</b> Shortly before each hour begins, the system issues a fresh 24-hour forecast and keeps today’s 00–23 table up to date. Every hourly run also reads the station. For each completed hour with a reading, it adds the measured wind and forecast error, then learns from that new comparison. It never counts the same reading twice.</div>' if hourly else '')}
   <div class="sec"><span class="chip fc">forecast</span> Predicted — today ({date})</div>
   {fcards or '<p class="muted">No hourly forecast logged yet — run hourly_run.py.</p>'}
   {_methodology(group, static)}
