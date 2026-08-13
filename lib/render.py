@@ -167,6 +167,18 @@ def _hourly_status_section():
     state = 'success' if last.get('ok') else 'failure'
     label = 'last update succeeded' if last.get('ok') else 'last update failed — showing last valid forecast'
     def hour(x):
+        # Older workflow failures wrote a UTC-based fallback hour.  A status card must
+        # identify the Berlin calendar row that was being issued, so derive failures
+        # from their timestamp rather than perpetuating that stored-label bug.
+        if not x.get("ok"):
+            try:
+                local = datetime.datetime.fromisoformat(x["time"]).astimezone(wd.BERLIN)
+                valid = local.replace(minute=0, second=0, microsecond=0)
+                if local > valid:
+                    valid += datetime.timedelta(hours=1)
+                return f'{valid.hour:02d}'
+            except (KeyError, TypeError, ValueError):
+                pass
         if x.get("hour") is not None:
             return f'{int(x["hour"]):02d}'
         try:
