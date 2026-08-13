@@ -42,6 +42,13 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, render.report_html(group))
             elif path in ("/measurements", "/measurements.html"):
                 self._send(200, render.measurements_html())
+            elif path.startswith("/_data/") and path.endswith("_hourly_measurements.jsonl"):
+                lake = path.rsplit("/", 1)[-1].removesuffix("_hourly_measurements.jsonl")
+                if lake not in ("ammersee", "kochelsee", "walchensee"):
+                    self._send(404, "not found", "text/plain; charset=utf-8")
+                else:
+                    p = os.path.join(render.wd.LOG_DIR, f"{lake}_hourly_measurements.jsonl")
+                    self._send(200, open(p).read() if os.path.exists(p) else "", "application/x-ndjson; charset=utf-8")
             elif path == "/health":
                 self._send(200, "ok", "text/plain; charset=utf-8")
             elif path == "/favicon.ico":

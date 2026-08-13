@@ -1089,6 +1089,8 @@ def measurements_html(static=False):
     lakes = [l for l in ("ammersee", "kochelsee", "walchensee") if l in data]
     default_lake = lakes[0] if lakes else ""
     payload = json.dumps(data, separators=(",", ":"))
+    raw_base = ("https://raw.githubusercontent.com/ThomasGmeinder/windforecast_agents/main/logs"
+                if static else "/_data")
     opts = "".join(f'<option value="{l}">{html.escape(_lake_label(l))}</option>' for l in lakes)
     return f"""<!doctype html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -1122,6 +1124,7 @@ def measurements_html(static=False):
 </main>
 <script>
 const DATA = {payload};
+const RAW_BASE = {json.dumps(raw_base)};
 const lakeSel = document.getElementById('lake'), daySel = document.getElementById('day');
 function fillDays() {{
   const days = Object.keys(DATA[lakeSel.value] || {{}}).sort().reverse();
@@ -1147,6 +1150,32 @@ function draw() {{
 lakeSel.addEventListener('change', fillDays);
 daySel.addEventListener('change', draw);
 fillDays();
+// The embedded DATA is a historical/offline fallback.  Fetch the committed hourly
+// JSONL directly so a data-only correction (for example an archive backfill) appears
+// without waiting for the next Pages artifact deployment.
+async function refreshHourlyData() {{
+  const lakes = ['ammersee', 'kochelsee', 'walchensee'];
+  await Promise.all(lakes.map(async lake => {{
+    try {{
+      const response = await fetch(`${{RAW_BASE}}/${{lake}}_hourly_measurements.jsonl?v=${{Date.now()}}`, {{cache:'no-store'}});
+      if (!response.ok) throw new Error(response.status);
+      const rows = (await response.text()).trim().split(/\\n+/).filter(Boolean).map(JSON.parse);
+      for (const r of rows) {{
+        if (r.measurement_status !== 'present') continue;
+        const date = r.valid_time.slice(0,10), hour = Number(r.valid_time.slice(11,13));
+        const days = (DATA[lake] ||= {{}});
+        const day = (days[date] ||= {{src:r.measurement_source || 'source not recorded', rows:[]}});
+        const byHour = new Map(day.rows.map(x => [x[0], x]));
+        byHour.set(hour, [hour, r.measured_kn, r.measured_gust_kn, null,
+                         r.forecast_kn, r.fc_minus_measured_kn,
+                         r.forecast_gust_kn, r.gust_fc_minus_measured_kn, false]);
+        day.rows = [...byHour.values()].sort((a,b) => a[0]-b[0]);
+      }}
+    }} catch (e) {{ console.warn('hourly archive refresh failed for ' + lake, e); }}
+  }}));
+  fillDays();
+}}
+refreshHourlyData();
 </script>
 </body></html>"""
 
