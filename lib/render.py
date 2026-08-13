@@ -46,6 +46,18 @@ def _wind_cell_style(kn):
             break
     return f"background:{hexc};color:{'#0b0b0b' if hexc in _WIND_DARKTEXT else '#fff'}"
 
+def _weather_icon(row):
+    code, cloud = row.get("weather_code"), row.get("cloud_cover_pct")
+    if code is None and cloud is None: return ("—", "weather data not recorded")
+    # Same Wx glyph vocabulary emitted in Addicted Sports' Urfeld tableHtml.
+    if code in (45,48): return ("🌫️", "fog")
+    if code in (95,96,99): return ("🌦️", "thunderstorm / shower")
+    if code in (51,53,55,56,57,61,63,65,66,67,80,81,82): return ("🌦️", "rain / shower")
+    if code in (71,73,75,77,85,86): return ("❄", "snow")
+    if code in (0,): return ("☀️", "clear")
+    if code in (1,2) or (cloud is not None and cloud < 65): return ("🌤️", "partly cloudy")
+    return ("☁️", "cloudy")
+
 
 def _latest_forecast(lake, target_date=None):
     def legacy_rows(date):
@@ -364,7 +376,7 @@ def _forecast_card(rec):
         if r.get("missing"):
             rows.append(f'<tr class="elapsed"><td class="hr">{r["hour"]:02d}</td><td class="note">—</td>'
                         '<td class="dir">—</td><td class="wind">—</td><td class="measured">—</td>'
-                        '<td class="delta">—</td><td class="gust">—</td><td class="measured">—</td><td class="delta">—</td><td class="scenario-code">—</td>'
+                        '<td class="delta">—</td><td class="gust">—</td><td class="measured">—</td><td class="delta">—</td><td class="weather">—</td><td class="weather">—</td><td class="weather">—</td><td class="scenario-code">—</td>'
                         '<td class="note">no prior hourly forecast</td><td class="conf">—</td>'
                         '<td class="note">hourly service bootstrap</td></tr>')
             continue
@@ -418,6 +430,9 @@ def _forecast_card(rec):
         if gust_delta_value is None and own_gust is not None:
             gust_delta_value = round((r.get("gust_kn") or 0) - own_gust, 1)
         gust_delta = f'{gust_delta_value:+.1f}' if gust_delta_value is not None else '—'
+        wi, wi_title = _weather_icon(r)
+        temp = "—" if r.get("temp_c") is None else f'{r["temp_c"]:.0f}°'
+        rain = "—" if not r.get("precip_mm") else f'🌦️ {r["precip_mm"]:.1f}'
         scenario = html.escape(_scenario_label(reg))
         issue = r.get("issue_time") or rec.get("run_stamp")
         lead = r.get("lead_minutes")
@@ -436,6 +451,7 @@ def _forecast_card(rec):
             f'<td class="gust" style="{_wind_cell_style(r.get("gust_kn") or 0)}">'
             f'{(r.get("gust_kn") or 0):{fc.KN_FMT}}</td>'
             f'<td class="measured">{gust_measured}</td><td class="delta">{gust_delta}</td>'
+            f'<td class="weather">{temp}</td><td class="weather" title="{wi_title}" aria-label="{wi_title}">{wi}</td><td class="weather">{rain}</td>'
             f'<td class="scenario-code"><i class="sw {reg}" title="{scenario}" '
             f'aria-label="{scenario}"></i></td>'
             f'<td class="note">{"not recorded" if "calib_n" not in r else ("raw" if not r.get("calib_n") else "n=" + str(r.get("calib_n")))}</td>'
@@ -447,7 +463,7 @@ def _forecast_card(rec):
       <h2>{label} <span class="chip fc">forecast · {date}</span></h2>
       <p class="summary">{summ}</p>
       <table>
-        <thead><tr><th>h</th><th>issued / lead</th><th>dir</th><th>forecast kn (Bft)</th><th>measured</th><th>Δ fc−meas</th><th>Gust FC</th><th>Gust meas</th><th>Δ gust</th>
+        <thead><tr><th>h</th><th>issued / lead</th><th>dir</th><th>forecast kn (Bft)</th><th>measured</th><th>Δ fc−meas</th><th>Gust FC</th><th>Gust meas</th><th>Δ gust</th><th>Temp FC</th><th>Sky FC</th><th>Rain FC mm</th>
           <th>scenario</th><th>support</th><th>conf</th><th>note</th></tr></thead>
         <tbody>{''.join(rows)}</tbody>
       </table>

@@ -28,7 +28,7 @@ LAKES = {
 }
 
 OM_VARS = ["wind_speed_10m", "wind_gusts_10m", "wind_direction_10m",
-           "cloud_cover", "shortwave_radiation", "pressure_msl",
+           "temperature_2m", "cloud_cover", "precipitation", "weather_code", "shortwave_radiation", "pressure_msl",
            "wind_speed_925hPa", "wind_direction_925hPa",
            "wind_speed_850hPa", "wind_direction_850hPa"]
 
@@ -385,7 +385,7 @@ def apply_bias(bias, regime, hour, speed_kn, gust_kn, gust_ceiling_kn=None):
 # that log, NEVER from a live build_table, so a field missing here is a change that
 # silently never reaches the page. dir_variable and gust_flags were nearly lost exactly
 # that way: the row carried them, the hand-maintained payload in daily_run did not.
-LOGGED_ROW_FIELDS = ("hour", "regime", "calib_n", "raw_kn", "raw_gust_kn", "mean_kn", "gust_kn",
+LOGGED_ROW_FIELDS = ("hour", "regime", "calib_n", "raw_kn", "raw_gust_kn", "mean_kn", "gust_kn", "temp_c", "cloud_cover_pct", "precip_mm", "weather_code",
                      "dir", "dir_variable", "conf", "foehn_note", "spread_kn", "q_kn",
                      "dtheta", "foehn_grad", "lapse", "dp",
                      "gust_ceiling_kn", "gust_flags", "inputs")
@@ -471,7 +471,7 @@ def build_table(lake, target_date, run_stamp=None):
     except Exception:
         eh, smembers, gmembers = None, [], []
     try:  # ICON-EU as an independent second model in the blend
-        euh = wd.openmeteo_point(lat, lon, ["wind_speed_10m", "wind_gusts_10m"],
+        euh = wd.openmeteo_point(lat, lon, ["wind_speed_10m", "wind_gusts_10m", "temperature_2m", "cloud_cover", "precipitation", "weather_code"],
                                  models="icon_eu", forecast_days=5)["hourly"]
     except Exception:
         euh = None
@@ -568,6 +568,11 @@ def build_table(lake, target_date, run_stamp=None):
             if peiss is not None and not peiss["southerly"]:
                 foehn_note = f"unconfirmed @Peißenberg ({compass(peiss['dir'])} {peiss['kn']:.0f}kn)"
                 conf = "low"
+        # ICON-D2 is the preferred short-range weather source but does not cover every
+        # hour of a 96-hour window.  ICON-EU supplies the same weather fields beyond it.
+        wx = row
+        if row.get("temperature_2m") is None and euh:
+            wx = {k: (euh.get(k) or [None] * len(h["time"]))[i] for k in ("temperature_2m", "cloud_cover", "precipitation", "weather_code")}
         rows.append({
             "hour": hour, "dir": row["wind_direction_10m"],
             # decided ONCE here from the ensemble spread; every display path reads this
@@ -578,6 +583,8 @@ def build_table(lake, target_date, run_stamp=None):
             # and so a bounded value is never later mistaken for a learned one
             "gust_ceiling_kn": round(ceil_kn, 1), "gust_flags": list(gflags),
             "mean_kn": cs, "gust_kn": cg,
+            "temp_c": wx.get("temperature_2m"), "cloud_cover_pct": wx.get("cloud_cover"),
+            "precip_mm": wx.get("precipitation"), "weather_code": wx.get("weather_code"),
             "bft": beaufort(cs), "regime": regime, "learned": learned,
             "calib_n": ((bias.get("buckets", {}).get(_bucket_key(regime, hour)) or {}).get("n", 0)),
             "dp": None if dp is None else round(dp, 1),
