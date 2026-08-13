@@ -424,6 +424,25 @@ systemctl --user list-timers wind-agents-hourly.timer
 The timer runs `hourly_run.py` at `:55` Europe/Berlin. It issues the next valid hourly
 window locally; it does not dispatch or deploy GitHub Pages.
 
+### Isolated local testing state
+
+The local timer and local preview use `WIND_STATE_DIR=.local/state`. Their logs, learned
+models, cache, and rendered page therefore cannot alter the GitHub production state and
+are ignored by Git. Seed the local state once from the current repository snapshot before
+starting the local services:
+
+```bash
+WIND_STATE_DIR="$PWD/.local/state" .venv/bin/python hourly_run.py --seed-local-state
+cp systemd/wind-agents-preview.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now wind-agents-hourly.timer wind-agents-preview.service
+```
+
+To deliberately discard a local experiment and start again from the current production
+snapshot, use `--reset-local-state`. This is the only operation that copies production
+state into the local profile; normal local hourly runs never fetch, commit, or push Git
+state.
+
 Each hourly run first reconciles every elapsed forecast-of-record row for which the
 measurement source has reported a value. It records forecast-minus-measurement, makes at
 most one guarded RLS update per row, scores the hourly record, then issues the next

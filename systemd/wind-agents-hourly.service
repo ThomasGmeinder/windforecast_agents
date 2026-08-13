@@ -4,4 +4,5 @@ Description=Issue rolling hourly wind forecast
 [Service]
 Type=oneshot
 WorkingDirectory=/home/tgmeinde/wind-agents
+Environment=WIND_STATE_DIR=/home/tgmeinde/wind-agents/.local/state
 ExecStart=/home/tgmeinde/wind-agents/.venv/bin/python /home/tgmeinde/wind-agents/hourly_run.py

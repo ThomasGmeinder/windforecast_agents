@@ -10,7 +10,7 @@ Examples:
   .venv/bin/python hourly_run.py --dry-run
   .venv/bin/python hourly_run.py --at 2026-08-12T04:55+02:00
 """
-import argparse, datetime, json, os, sys, tempfile, time
+import argparse, datetime, json, os, shutil, sys, tempfile, time
 from urllib.parse import urlparse
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -253,6 +253,30 @@ def write_learning_update(lake, run_time, reconciled, learned):
         f.write(json.dumps(rec) + "\n")
 
 
+def seed_local_state(reset=False):
+    """Copy the current production snapshot into an isolated local state directory.
+
+    This is deliberately explicit.  A local run must never silently merge GitHub's
+    changing logs/models back into its own learning history.
+    """
+    if os.path.abspath(wd.STATE_ROOT) == os.path.abspath(wd.REPO_ROOT):
+        raise RuntimeError("--seed-local-state requires WIND_STATE_DIR outside the repository state")
+    for name in ("logs", "models"):
+        source = os.path.join(wd.REPO_ROOT, name)
+        target = os.path.join(wd.STATE_ROOT, name)
+        if os.path.exists(target) and not reset:
+            # Importing the modules creates empty state directories.  They are not state
+            # yet and may safely be replaced by the explicit initial snapshot.
+            if os.path.isdir(target) and not os.listdir(target):
+                os.rmdir(target)
+            else:
+                raise RuntimeError(f"{target} already exists; use --reset-local-state to replace it")
+        if os.path.exists(target):
+            shutil.rmtree(target)
+        shutil.copytree(source, target)
+    print(f"seeded isolated local state: {wd.STATE_ROOT}")
+
+
 def purge_test_history(before):
     """Remove explicitly identified pre-production hourly test records and rebuild bias.
 
@@ -354,6 +378,10 @@ def main():
     ap.add_argument("--selftest", action="store_true")
     ap.add_argument("--reconcile-only", action="store_true",
                     help="attach newly reported observations without issuing a new window")
+    ap.add_argument("--seed-local-state", action="store_true",
+                    help="copy the repository production snapshot into WIND_STATE_DIR")
+    ap.add_argument("--reset-local-state", action="store_true",
+                    help="replace the existing WIND_STATE_DIR snapshot")
     ap.add_argument("--purge-test-before", help="explicit aware issue-time cutoff for test-record purge")
     args = ap.parse_args()
     if args.selftest:
@@ -402,6 +430,9 @@ def main():
         return
     if args.purge_test_before:
         print(json.dumps(purge_test_history(args.purge_test_before), indent=2))
+        return
+    if args.seed_local_state or args.reset_local_state:
+        seed_local_state(reset=args.reset_local_state)
         return
     if args.reconcile_only:
         for lake in fc.LAKES:

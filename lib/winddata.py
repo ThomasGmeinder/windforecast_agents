@@ -31,9 +31,14 @@ CA = "/etc/ssl/certs/ca-certificates.crt"
 _CTX = ssl.create_default_context(cafile=CA) if os.path.exists(CA) else ssl.create_default_context()
 _UA = {"User-Agent": "bavaria-lake-wind-agent/1.0"}
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CACHE_DIR = os.path.join(ROOT, "cache")
-LOG_DIR = os.path.join(ROOT, "logs")
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Production leaves this unset and therefore uses the committed repository state.  Local
+# services set WIND_STATE_DIR to an ignored directory, which keeps their issued forecasts,
+# observations, learned models and cache entirely separate from GitHub's state.
+STATE_ROOT = os.path.abspath(os.environ.get("WIND_STATE_DIR", REPO_ROOT))
+ROOT = REPO_ROOT                       # compatibility: source/configuration root
+CACHE_DIR = os.path.join(STATE_ROOT, "cache")
+LOG_DIR = os.path.join(STATE_ROOT, "logs")
 for _d in (CACHE_DIR, LOG_DIR):
     os.makedirs(_d, exist_ok=True)
 

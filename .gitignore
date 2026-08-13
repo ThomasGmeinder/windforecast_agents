@@ -18,4 +18,7 @@ cache/
 # static site is rebuilt each run and published as the Pages artifact
 site/
 
+# isolated local forecast state (logs, learned models and cache; never production data)
+.local/
+
 .DS_Store

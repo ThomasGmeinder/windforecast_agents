@@ -1,0 +1,9 @@
+[Unit]
+Description=Local wind forecast preview (isolated state)
+
+[Service]
+Type=simple
+WorkingDirectory=/home/tgmeinde/wind-agents
+Environment=WIND_STATE_DIR=/home/tgmeinde/wind-agents/.local/state
+ExecStart=/home/tgmeinde/wind-agents/.venv/bin/python /home/tgmeinde/wind-agents/serve.py
+Restart=on-failure

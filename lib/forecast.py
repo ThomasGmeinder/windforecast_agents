@@ -15,7 +15,9 @@ import winddata as wd
 import postproc
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-MODELS_DIR = os.path.join(ROOT, "models")
+# Keep local learned state beside winddata's local logs.  Configuration stays in the
+# repository so local and production runs use the same verified forecasting rules.
+MODELS_DIR = os.path.join(wd.STATE_ROOT, "models")
 os.makedirs(MODELS_DIR, exist_ok=True)
 
 # lake -> (lat, lon, label, is_alpine_rim)
