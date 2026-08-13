@@ -109,7 +109,7 @@ def _latest_forecast(lake, target_date=None):
                 if not rows:
                     return None
                 return {"lake": lake, "label": fc.LAKES.get(lake, (0, 0, lake.title()))[2],
-                        "date": start[:10], "run_stamp": r.get("issue_time"),
+                        "date": day, "run_stamp": r.get("issue_time"),
                         "summary": f"rolling window {start[11:16]} → {end[11:16]} next day",
                         "hourly": rows, "rolling": True}
         except Exception:
