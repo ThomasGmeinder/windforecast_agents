@@ -374,21 +374,24 @@ def _forecast_card(rec):
         # Walchensee hours and left no trace anywhere, so a clamped value read as a forecast
         note += [fc.GUST_FLAG_NOTE[f] for f in (r.get("gust_flags") or [])
                  if f in fc.GUST_FLAG_NOTE]
-        obs = observed.get(r["hour"])
-        own_measured = r.get("measured_kn")
+        now = datetime.datetime.now(wd.BERLIN)
+        completed_cutoff = now.replace(minute=0, second=0, microsecond=0)
+        completed = bool(r.get("valid_time") and datetime.datetime.fromisoformat(r["valid_time"]) < completed_cutoff)
+        # A local preview is dynamic and can see an in-progress station value.  Do not
+        # show or score it: the hour must have ended before measured/FC−MEAS is meaningful.
+        obs = observed.get(r["hour"]) if completed else None
+        own_measured = r.get("measured_kn") if completed else None
         # Measurement feeds can publish a completed hour after the last :55 issuer ran.
         # Use the same live source for any elapsed display row, so H22 does not stay
         # blank until the next scheduled reconciliation. This is display-only; state is
         # still persisted/reconciled by hourly_run.py on the next issuance.
-        if own_measured is None:
+        if completed and own_measured is None:
             live = live_obs.get(r["hour"])
             if live is not None:
                 own_measured = live.get("mean_kn")
                 r = {**r, "_display_live_delta": round(r["mean_kn"] - own_measured, 1),
                      "_display_live_source": live_source}
-        now = datetime.datetime.now(wd.BERLIN)
-        completed_cutoff = now.replace(minute=0, second=0, microsecond=0)
-        past = bool(r.get("valid_time") and datetime.datetime.fromisoformat(r["valid_time"]) < completed_cutoff)
+        past = completed
         unavailable = past and rec.get("rolling") and r["hour"] not in live_obs and obs is None
         measured = (f'{own_measured:{fc.KN_FMT}}' if own_measured is not None else
                     (("NR" if unavailable else "—") if obs is None else f'{obs["actual_kn"]:{fc.KN_FMT}}'))
