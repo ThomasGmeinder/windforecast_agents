@@ -471,7 +471,7 @@ def build_table(lake, target_date, run_stamp=None):
     except Exception:
         eh, smembers, gmembers = None, [], []
     try:  # ICON-EU as an independent second model in the blend
-        euh = wd.openmeteo_point(lat, lon, ["wind_speed_10m", "wind_gusts_10m", "temperature_2m", "cloud_cover", "precipitation", "weather_code"],
+        euh = wd.openmeteo_point(lat, lon, ["wind_speed_10m", "wind_gusts_10m", "wind_direction_10m", "temperature_2m", "cloud_cover", "precipitation", "weather_code"],
                                  models="icon_eu", forecast_days=5)["hourly"]
     except Exception:
         euh = None
@@ -574,7 +574,7 @@ def build_table(lake, target_date, run_stamp=None):
         if row.get("temperature_2m") is None and euh:
             wx = {k: (euh.get(k) or [None] * len(h["time"]))[i] for k in ("temperature_2m", "cloud_cover", "precipitation", "weather_code")}
         rows.append({
-            "hour": hour, "dir": row["wind_direction_10m"],
+            "hour": hour, "dir": row.get("wind_direction_10m") if row.get("wind_direction_10m") is not None else (euh.get("wind_direction_10m", [None] * len(h["time"]))[i] if euh else None),
             # decided ONCE here from the ensemble spread; every display path reads this
             # flag via dir_label() rather than re-deriving a threshold of its own
             "dir_variable": dir_is_variable(spread),
