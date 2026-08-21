@@ -4,16 +4,14 @@
 
 **[Kochelsee & Walchensee](https://thomasgmeinder.github.io/windforecast_agents/kochel-walchensee.html)**
  · **[Ammersee](https://thomasgmeinder.github.io/windforecast_agents/ammersee.html)**
-— rebuilt and republished every morning at ~05:00 Berlin by the daily GitHub Actions run.
-Each page shows today's hourly forecast, yesterday's measured wind beside it, and the
-self-learning report that connects the two.
+— rebuilt and republished after every successful hourly production run. Each page shows a
+96-hour forecast window as calendar-day tables, completed station measurements beside the
+corresponding forecast, and the hourly learning result.
 
-> **Hourly-cadence migration status.** The committed production loop is still the daily
-> forecast/learn/verify cycle described below. The hourly issuer (`hourly_run.py`) now
-> writes timestamped 24-hour records, reconciles measurements, and can make a guarded
-> hourly RLS update. Its CRPS verification, lead-time scorecard, tuner input, and Pages
-> deployment are still transitioning from the daily path. Do not compare its short leads
-> with the legacy daily scorecard as though they measured the same forecast problem.
+> **Production cadence.** cron-job.org dispatches the GitHub hourly workflow at `:50`
+> Europe/Berlin. It reconciles completed measurements, learns from each finalized
+> forecast-minus-measurement pair once, issues 96 individual hourly forecasts for the next
+> four days, and deploys GitHub Pages. The retained daily workflow is audit-only.
 
 ---
 
@@ -446,7 +444,7 @@ state.
 Each hourly run first reconciles every elapsed forecast-of-record row for which the
 measurement source has reported a value. It records forecast-minus-measurement, makes at
 most one guarded RLS update per row, scores the hourly record, then issues the next
-24-hour window. GitHub Actions commits the resulting hourly logs/model state and deploys
+96-hour window containing 96 individual hourly rows. GitHub Actions commits the resulting hourly logs/model state and deploys
 the static Pages report.
 
 `daily_run.py` and `.github/workflows/daily.yml` are retained only as a legacy daily

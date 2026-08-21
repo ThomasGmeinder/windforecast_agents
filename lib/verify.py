@@ -42,7 +42,9 @@ _ND = NormalDist()
 _SQRT_PI = math.sqrt(math.pi)
 LOW_CONF_DAYS = 10               # below this many days, flag the scorecard as low-confidence
 LEAD_BINS = ((0, 60, "0–1h"), (60, 180, "1–3h"), (180, 360, "3–6h"),
-             (360, 720, "6–12h"), (720, 1441, "12–24h"))
+             (360, 720, "6–12h"), (720, 1441, "12–24h"),
+             (1440, 2881, "24–48h"), (2880, 4321, "48–72h"),
+             (4320, 5761, "72–96h"))
 
 
 # ---------------------------------------------------------------- CRPS estimators

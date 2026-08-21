@@ -122,7 +122,9 @@ def _latest_forecast(lake, target_date=None):
                     return None
                 return {"lake": lake, "label": fc.LAKES.get(lake, (0, 0, lake.title()))[2],
                         "date": day, "run_stamp": r.get("issue_time"),
-                        "summary": f"rolling window {start[11:16]} → {end[11:16]} next day",
+                        "summary": (f"calendar-day view · H00–H23 where covered · "
+                                    f"96-hour issuance {start[:10]} {start[11:16]} → "
+                                    f"{end[:10]} {end[11:16]}"),
                         "hourly": rows, "rolling": True}
         except Exception:
             pass
@@ -768,14 +770,16 @@ def _data_sources(group):
               "(DWD data © Deutscher Wetterdienst, CC BY 4.0).")
     if group == "kochel-walchensee":
         pred = [
-            ("ICON-D2", "forecast backbone (2.2 km, hourly, 48 h, 8 runs/day)",
+            ("ICON-D2", "wind-forecast backbone (mean wind, gust and direction; 2.2 km, hourly, 48 h, 8 runs/day)",
              "Open-Meteo point forecast "
              "<code>api.open-meteo.com/v1/forecast?…&amp;models=icon_d2</code> (incl. 850/925 hPa)"),
-            ("ICON-D2 ensemble", "confidence (20 members → P10/P50/P90); its gust members also "
+            ("ICON-D2 ensemble", "wind-forecast uncertainty (20 members → P10/P50/P90); its gust members also "
              "set the ceiling a corrected gust may not exceed",
              "Open-Meteo <code>ensemble-api.open-meteo.com/v1/ensemble?…&amp;models=icon_d2</code>"),
-            ("ICON-EU", "independent second model in the blend + horizon beyond 48 h",
+            ("ICON-EU", "wind-forecast blend member and fallback direction/weather source beyond ICON-D2's horizon",
              "Open-Meteo <code>api.open-meteo.com/v1/forecast?…&amp;models=icon_eu</code>"),
+            ("ICON-D2 → ICON-EU weather", "forecast temperature, sky icon and rain amount: ICON-D2 first, ICON-EU after its horizon",
+             "Open-Meteo <code>temperature_2m</code>, <code>cloud_cover</code>, <code>precipitation</code> and <code>weather_code</code>"),
             ("DWD MOSMIX", "föhn trigger — cross-Alpine Δp (Bozen − München)",
              "KML/KMZ from <code>opendata.dwd.de/…/MOSMIX_L/single_stations/{16020,10865}/kml/</code>, "
              "parsed for the <code>PPPP</code> pressure series"),
@@ -806,10 +810,12 @@ def _data_sources(group):
         ]
     else:
         pred = [
-            ("ICON-D2", "forecast backbone (2.2 km, hourly, 48 h)",
+            ("ICON-D2", "wind-forecast backbone (mean wind, gust and direction; 2.2 km, hourly, 48 h)",
              "Open-Meteo point <code>…?models=icon_d2</code>"),
-            ("ICON-EU", "independent cross-check + horizon beyond 48 h",
+            ("ICON-EU", "wind-forecast blend member and fallback direction/weather source beyond ICON-D2's horizon",
              "Open-Meteo <code>api.open-meteo.com/v1/forecast?…&amp;models=icon_eu</code>"),
+            ("ICON-D2 → ICON-EU weather", "forecast temperature, sky icon and rain amount: ICON-D2 first, ICON-EU after its horizon",
+             "Open-Meteo <code>temperature_2m</code>, <code>cloud_cover</code>, <code>precipitation</code> and <code>weather_code</code>"),
             ("ICON-D2 ensemble", "confidence (20 members)",
              "Open-Meteo <code>ensemble-api.open-meteo.com/v1/ensemble</code>"),
         ]
@@ -1042,7 +1048,10 @@ def report_html(group, static=False):
         cards = "".join(_forecast_card(r) for r in recs if r)
         if not cards:
             continue
+        partial = day == dates[-1] and any(len(r.get("hourly", [])) < 24 for r in recs if r)
         label = "Today" if day == today else datetime.date.fromisoformat(day).strftime("%a %d %b")
+        if partial and day != today:
+            label += " · partial"
         rows = [row for rec in recs if rec for row in rec.get("hourly", [])]
         sources = sorted({s for row in rows for s in (row.get("blend_kn") or {})})
         measured = sum(row.get("measured_kn") is not None for row in rows)
@@ -1053,13 +1062,13 @@ def report_html(group, static=False):
         panels.append(f'<div class="day-panel" data-day="{day}"><div class="sec"><span class="chip fc">forecast</span> {label} ({day})</div>{info}{cards}</div>')
     fcards = "".join(panels)
     hourly = any((_latest_forecast(l) or {}).get("rolling") for l in g["lakes"])
-    cadence = "updates hourly · timestamped 24-hour windows" if hourly else "updates ~05:00 daily"
+    cadence = "updates hourly · timestamped 96-hour windows" if hourly else "updates ~05:00 daily"
     # Pair each lake's big-miss table with ITS OWN "all measured hours" dropdown, wrapped
     # so the two read as one unit (tighter internal gap than between lakes). Previously
     # both diff tables came first and both dropdowns after, so the Walchensee dropdown sat
     # under the Kochelsee table.
     date = today
-    tabs = ''.join(f'<button class="day-tab" data-day="{d}">{("Today" if d == today else datetime.date.fromisoformat(d).strftime("%a %d"))}</button>' for d in dates)
+    tabs = ''.join(f'<button class="day-tab" data-day="{d}">{("Today" if d == today else datetime.date.fromisoformat(d).strftime("%a %d") + (" · partial" if d == dates[-1] else ""))}</button>' for d in dates)
     return f"""<!doctype html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{html.escape(g['title'])} wind — {date}</title><style>{_css()}
@@ -1070,7 +1079,7 @@ def report_html(group, static=False):
   {_legend()}
 </header>
 <main>
-  {('<div class="analyst"><b>How hourly forecasting works.</b> Shortly before each hour begins, the system issues a fresh 24-hour forecast and keeps today’s 00–23 table up to date. Its starting point is a blend of ICON-D2, ICON-EU and ensemble weather-model data, plus a local spot forecast where available; the “How it’s predicted” and input sections below explain the calculation and sources. Every run also reads the station. For each newly available completed hour it calculates <b>FC−MEAS</b>, the forecast’s mistake, and learns from it: repeated over- or under-prediction in similar conditions adjusts future forecasts. A station reading is used once, so it is never counted repeatedly.</div>' if hourly else '')}
+  {('<div class="analyst"><b>How hourly forecasting works.</b> Shortly before each hour begins, the system issues a fresh four-day forecast containing 96 individual hourly rows and presents them as calendar-day tables. Its starting point is a blend of ICON-D2, ICON-EU and ensemble weather-model data, plus a local spot forecast where available; the “How it’s predicted” and input sections below explain the calculation and sources. Every run also reads the station. For each newly available completed hour it calculates <b>FC−MEAS</b>, the forecast’s mistake, and learns from it: repeated over- or under-prediction in similar conditions adjusts future forecasts. A station reading is used once, so it is never counted repeatedly.</div>' if hourly else '')}
   <div class="day-tabs">{tabs}</div>
   {fcards or '<p class="muted">No hourly forecast logged yet — run hourly_run.py.</p>'}
   {_methodology(group, static)}
