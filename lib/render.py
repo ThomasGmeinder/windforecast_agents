@@ -440,7 +440,7 @@ def _forecast_card(rec):
         lead = r.get("lead_minutes")
         issued = "—" if not issue else (issue[11:16] + (f' · {lead // 60}h{lead % 60:02d}' if lead is not None else ''))
         if r.get("legacy_calendar_backfill"):
-            note.append("legacy daily row; display-only" + ("; current source" if r.get("_display_live_source") else ""))
+            note.append("historical display row; excluded from hourly learning" + ("; current source" if r.get("_display_live_source") else ""))
         rows.append(
             f'<tr><td class="hr">{r["hour"]:02d}</td><td class="note">{issued}</td>'
             # No arrow when the direction is flagged variable — a rotated arrow reads as a
@@ -661,7 +661,7 @@ def _methodology(group, static=False):
       </ol>
       <p class="muted"><b>Föhn caveat:</b> “föhn-favourable” means forecast pressure and upper-air thresholds were crossed. Hohenpeißenberg is a confidence cross-check, not a classification condition; measured S–SE flow alone cannot distinguish föhn from drainage or fall-wind.</p>
       <h3>How it learns</h3>
-      <p>In the legacy daily path, every eligible measured hour updates only that hour’s
+      <p>In the active hourly path, every completed, finalized station measurement updates only that hour’s
       <code>(lake, scenario, hour)</code> bucket. It fits <code>measuredₕ ≈ a + b·rₕ</code> with
       recursive least squares: <code>error = measuredₕ − (a + b·rₕ)</code>; the new <code>a</code>
       and <code>b</code> move toward that error with forgetting factor λ = {postproc.FORGET:g}. The
@@ -680,17 +680,18 @@ def _methodology(group, static=False):
       Measured direction is a flow-sector check,
       not physical-regime validation.</p>
       <h3>How it's checked, and how it tunes itself</h3>
-      <p>Every issued hour is scored out of sample with <b>CRPS</b> (knots, lower better) against two baselines,
-      <b>persistence</b> and <b>climatology</b>. On top of that an LLM tuner reviews
-      <i>its own</i> earlier proposals against the measured CRPS, confirms or retracts each, and may
-      propose small threshold changes — but a change is only written to the forecaster if replaying
-      past days under it measurably lowers mean absolute error on at least {nmin} replayable days. Until that
-      history exists, proposals are recorded and shown, and nothing is applied. For hourly ensemble
-      members <code>xᵢ</code>, measurement <code>y</code>, and <code>m</code> members,
-      <code>CRPS = (1/m)Σᵢ|xᵢ−y| − (1/2m²)ΣᵢΣⱼ|xᵢ−xⱼ|</code>, where <code>i</code> and <code>j</code>
-      each run over those members. It evaluates the published hourly
-      distribution—its centre and spread—not the RLS update; for a single-number forecast it equals
+      <p><b>Forecast checking.</b> After a forecast hour ends and receives a finalized measurement, it is scored out of sample with
+      <b>CRPS</b> (knots; lower is better) against <b>persistence</b> (forecast that hour as the latest station measurement available when the forecast was issued—normally the preceding completed hour) and <b>climatology</b> (the historical typical wind for this lake and hour). For
+      <code>m</code> ensemble wind forecasts <code>xᵢ</code> and measured wind <code>y</code>,
+      <code>CRPS = (1/m)Σᵢ|xᵢ−y| − (1/2m²)ΣᵢΣⱼ|xᵢ−xⱼ|</code>, with <code>i</code> and <code>j</code>
+      running from 1 to <code>m</code>. The first part penalizes forecasts far from the measurement;
+      the second accounts for the forecast spread. With one forecast value, CRPS is simply
       <code>|forecastₕ − measuredₕ|</code>.</p>
+      <p><b>Threshold tuning.</b> The LLM can inspect those scores and errors, then suggest a small
+      scenario-classification threshold change—for example the cloud limit for thermal wind or the
+      pressure/wind limit for föhn. CRPS informs that diagnosis; it does not change the forecast.
+      A separate replay must lower mean absolute error over at least {nmin} days before a change is applied.
+      The tuner does not change model-source weights or learning safeguards.</p>
     </section>"""
     return f"""
     <section class="card method">
@@ -727,16 +728,20 @@ def _methodology(group, static=False):
       </ol>
       <p class="muted">No Kesselberg Δθ / föhn drivers here (Alpine-rim only).</p>
       <h3>How it's checked, and how it tunes itself</h3>
-      <p>Every issued hour is scored out of sample with <b>CRPS</b> (knots, lower better) against
-      <b>persistence</b> and <b>climatology</b> baselines. For hourly ensemble members <code>xᵢ</code>
-      measurement <code>y</code>, and <code>m</code> members,
-      <code>CRPS = (1/m)Σᵢ|xᵢ−y| − (1/2m²)ΣᵢΣⱼ|xᵢ−xⱼ|</code>, where <code>i</code> and <code>j</code>
-      each run over those members. It evaluates the published hourly distribution—its centre and spread—not the RLS update; for
-      a single-number forecast it equals <code>|forecastₕ − measuredₕ|</code>. An
-      LLM tuner reviews its earlier proposals against subsequent forecast scores and may suggest small
-      threshold changes, but a change reaches the forecaster only if a backtest over at least {nmin} replayable days shows it lowers mean absolute error.</p>
+      <p><b>Forecast checking.</b> After a forecast hour ends and receives a finalized measurement, it is scored out of sample with
+      <b>CRPS</b> (knots; lower is better) against <b>persistence</b> (forecast that hour as the latest station measurement available when the forecast was issued—normally the preceding completed hour) and <b>climatology</b> (the historical typical wind for this lake and hour). For
+      <code>m</code> ensemble wind forecasts <code>xᵢ</code> and measured wind <code>y</code>,
+      <code>CRPS = (1/m)Σᵢ|xᵢ−y| − (1/2m²)ΣᵢΣⱼ|xᵢ−xⱼ|</code>, with <code>i</code> and <code>j</code>
+      running from 1 to <code>m</code>. The first part penalizes forecasts far from the measurement;
+      the second accounts for the forecast spread. With one forecast value, CRPS is simply
+      <code>|forecastₕ − measuredₕ|</code>.</p>
+      <p><b>Threshold tuning.</b> The LLM can inspect those scores and errors, then suggest a small
+      scenario-classification threshold change—for example the cloud limit for thermal wind or the
+      pressure/wind limit for föhn. CRPS informs that diagnosis; it does not change the forecast.
+      A separate replay must lower mean absolute error over at least {nmin} days before a change is applied.
+      The tuner does not change model-source weights or learning safeguards.</p>
       <h3>How it learns</h3>
-      <p>In the legacy daily path, every eligible measured hour updates only that hour’s
+      <p>In the active hourly path, every completed, finalized station measurement updates only that hour’s
       <code>(lake, scenario, hour)</code> bucket. It fits <code>measuredₕ ≈ a + b·rₕ</code> with
       recursive least squares: <code>error = measuredₕ − (a + b·rₕ)</code>; the new <code>a</code>
       and <code>b</code> move toward that error with forgetting factor λ = {postproc.FORGET:g}. The
@@ -763,11 +768,9 @@ def _methodology(group, static=False):
 
 
 def _data_sources(group):
-    common = ("All sources are fetched server-side with Python <code>urllib</code> and the system "
-              "CA bundle, which validates through the corporate Zscaler TLS-intercepting proxy. "
-              "The live forecast uses Open-Meteo point and ensemble APIs. A separate raw-GRIB "
-              "reader exists for diagnostics/backups but is not called by the daily pipeline "
-              "(DWD data © Deutscher Wetterdienst, CC BY 4.0).")
+    common = ("The forecast combines published numerical-weather-model data with lake-specific "
+              "spot forecasts and measured station data. Source rows below state exactly which "
+              "role each source has in the displayed forecast (DWD data © Deutscher Wetterdienst, CC BY 4.0).")
     if group == "kochel-walchensee":
         pred = [
             ("ICON-D2", "wind-forecast backbone (mean wind, gust and direction; 2.2 km, hourly, 48 h, 8 runs/day)",
@@ -820,13 +823,13 @@ def _data_sources(group):
              "Open-Meteo <code>ensemble-api.open-meteo.com/v1/ensemble</code>"),
         ]
         meas = [
-            ("GKD Ammerseeboje", "measured actual — official buoy ON the water (preferred; "
-             "wins automatically the moment it reports again)",
+            ("GKD Ammerseeboje", "measured actual — official buoy ON the water; the preferred, most representative lake measurement",
              "hourly means from <code>gkd.bayern.de/de/meteo/wind/isar/ammerseeboje-16601050"
              "/messwerte/tabelle</code> (© GKD Bayern, CC BY 4.0). Speed only — direction and "
-             "gust are taken from BSV for the same hours. <b>Offline since 15.06.2026</b> "
-             "(electronics defect; LfU says the repair will take weeks), so the blend below is "
-             "in use. It is re-probed every morning and the change is logged loudly"),
+             "gust are taken from BSV for the same hours. <b>Out of service since 15.06.2026</b> "
+             "(electronics defect), so the calibrated shore blend below is currently used. The hourly "
+             "forecast run checks for valid buoy data every hour; as soon as it returns, buoy speed "
+             "automatically takes priority because it is measured directly on the lake."),
             ("BSV Herrsching + DWD Wielenbach", "measured actual — <b>blend of both, each "
              "calibrated to lake-equivalent</b>, while the buoy is down",
              "Neither shore station is good enough alone: on 1273 held-out hours against the "
