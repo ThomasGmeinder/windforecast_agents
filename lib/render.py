@@ -376,8 +376,7 @@ def _forecast_card(rec):
     rows = []
     for r in forecast_rows:
         if r.get("missing"):
-            rows.append(f'<tr class="elapsed"><td class="hr">{r["hour"]:02d}</td><td class="note">—</td>'
-                        '<td class="dir">—</td><td class="wind">—</td><td class="measured">—</td>'
+            rows.append(f'<tr class="elapsed"><td class="hr">{r["hour"]:02d}</td><td class="dir">—</td><td class="wind">—</td><td class="measured">—</td>'
                         '<td class="delta">—</td><td class="gust">—</td><td class="measured">—</td><td class="delta">—</td><td class="weather">—</td><td class="weather">—</td><td class="weather">—</td><td class="scenario-code">—</td>'
                         '<td class="note">no prior hourly forecast</td><td class="conf">—</td>'
                         '<td class="note">hourly service bootstrap</td></tr>')
@@ -436,13 +435,10 @@ def _forecast_card(rec):
         temp = "—" if r.get("temp_c") is None else f'{r["temp_c"]:.0f}°'
         rain = "—" if not r.get("precip_mm") else f'🌦️ {r["precip_mm"]:.1f}'
         scenario = html.escape(_scenario_label(reg))
-        issue = r.get("issue_time") or rec.get("run_stamp")
-        lead = r.get("lead_minutes")
-        issued = "—" if not issue else (issue[11:16] + (f' · {lead // 60}h{lead % 60:02d}' if lead is not None else ''))
         if r.get("legacy_calendar_backfill"):
             note.append("historical display row; excluded from hourly learning" + ("; current source" if r.get("_display_live_source") else ""))
         rows.append(
-            f'<tr><td class="hr">{r["hour"]:02d}</td><td class="note">{issued}</td>'
+            f'<tr><td class="hr">{r["hour"]:02d}</td>'
             # No arrow when the direction is flagged variable — a rotated arrow reads as a
             # firm bearing even next to the word "VAR". fc.dir_label is the one authority.
             f'<td class="dir">{_dir_arrow(None if r.get("dir_variable") else r.get("dir"))} '
@@ -465,7 +461,7 @@ def _forecast_card(rec):
       <h2>{label} <span class="chip fc">forecast · {date}</span></h2>
       <p class="summary">{summ}</p>
       <table>
-        <thead><tr><th>h</th><th>issued / lead</th><th>dir</th><th>forecast kn (Bft)</th><th>measured</th><th>Δ fc−meas</th><th>Gust FC</th><th>Gust meas</th><th>Δ gust</th><th>Temp FC</th><th>Sky FC</th><th>Rain FC mm</th>
+        <thead><tr><th>h</th><th>dir</th><th>forecast kn (Bft)</th><th>measured</th><th>Δ fc−meas</th><th>Gust FC</th><th>Gust meas</th><th>Δ gust</th><th>Temp FC</th><th>Sky FC</th><th>Rain FC mm</th>
           <th>scenario</th><th>support</th><th>conf</th><th>note</th></tr></thead>
         <tbody>{''.join(rows)}</tbody>
       </table>
