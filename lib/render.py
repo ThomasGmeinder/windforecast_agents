@@ -636,7 +636,7 @@ def _methodology(group, static=False):
             If a source is unavailable, it averages the sources that are available. Ensemble spread
             becomes the uncertainty band.</li>
         <li><b>Read indicators.</b> Cross-Alpine Δp and 850 hPa wind actively select the föhn-favourable scenario. Cloud, 925 hPa wind and Δθ affect other scenarios. Föhn-gradient, lapse rate and radiation are displayed diagnostics, not regression predictors.</li>
-        <li><b>Assign a forecast scenario.</b> First matching rule: <b>föhn-favourable</b> (Δp ≥ {P['FOEHN_DP_RIM']} hPa plus southerly 850 hPa wind) → <b>strong-gradient</b> (925 hPa ≥ {P['GRADIENT_925_KN']} kn) → <b>thermal-favourable</b> (daytime, limited cloud and no capped cold pool) → <b>calm/capped</b>. The scenario chooses a separate local model for this lake and hour; it does not confirm the physical cause or alter forecast direction.</li>
+        <li><b>Assign a forecast scenario.</b> First matching rule: <b>föhn-favourable</b> (Δp ≥ {P['FOEHN_DP_RIM']} hPa plus southerly 850 hPa wind) → <b>strong-gradient</b> (925 hPa ≥ {P['GRADIENT_925_KN']} kn) → <b>thermal-favourable</b> (daytime, limited cloud and no capped cold pool) → <b>calm/capped</b>. The selected scenario chooses the matching <code>(lake, scenario, hour)</code> correction bucket; the next step applies that bucket’s learned correction to the raw model blend.</li>
         <li><b>Correct the hourly mean.</b> In the selected <code>(lake, scenario, hour)</code> bucket,
             the full correction is <code>ŷₕ = a + b·rₕ</code>, first bounded to within
             ±{fc.BIAS_CAP_KN:g} kn of the raw value. It is then ramped in as
@@ -686,6 +686,9 @@ def _methodology(group, static=False):
       <p><b>Threshold tuning.</b> The LLM can inspect those scores and errors, then suggest a small
       scenario-classification threshold change—for example the cloud limit for thermal wind or the
       pressure/wind limit for föhn. CRPS informs that diagnosis; it does not change the forecast.
+      A threshold changes the boundary between scenarios—for example, thermal versus gradient—so some
+      future hours select a different learned correction bucket. If approved, all bucket calibrations are
+      rebuilt under the new boundaries; the change does not directly add wind or alter raw model values.
       A separate replay must lower mean absolute error over at least {nmin} days before a change is applied.
       The tuner does not change model-source weights or learning safeguards.</p>
     </section>"""
@@ -704,7 +707,7 @@ def _methodology(group, static=False):
             <code>(ICON-D2 ensemble + ICON-D2 deterministic + ICON-EU) ÷ 3</code> at the Herrsching point.
             If a source is unavailable, it averages the sources that are available. Ensemble spread
             becomes the uncertainty band.</li>
-        <li><b>Assign a forecast scenario:</b> <b>föhn-favourable</b> (strong Δp plus southerly 850 hPa wind, rare) → <b>strong-gradient</b> (strong 925 hPa flow) → <b>thermal-favourable</b> (daytime with limited cloud) → <b>calm/capped</b>. The scenario selects a local correction; it is not a confirmed physical regime.</li>
+        <li><b>Assign a forecast scenario:</b> <b>föhn-favourable</b> (strong Δp plus southerly 850 hPa wind, rare) → <b>strong-gradient</b> (strong 925 hPa flow) → <b>thermal-favourable</b> (daytime with limited cloud) → <b>calm/capped</b>. The selected scenario chooses the matching <code>(lake, scenario, hour)</code> correction bucket; the next step applies that bucket’s learned correction to the raw model blend.</li>
         <li><b>Correct the hourly mean.</b> In the selected <code>(lake, scenario, hour)</code> bucket,
             the full correction is <code>ŷₕ = a + b·rₕ</code>, first bounded to within
             ±{fc.BIAS_CAP_KN:g} kn of the raw value. It is then ramped in as
@@ -734,6 +737,9 @@ def _methodology(group, static=False):
       <p><b>Threshold tuning.</b> The LLM can inspect those scores and errors, then suggest a small
       scenario-classification threshold change—for example the cloud limit for thermal wind or the
       pressure/wind limit for föhn. CRPS informs that diagnosis; it does not change the forecast.
+      A threshold changes the boundary between scenarios—for example, thermal versus gradient—so some
+      future hours select a different learned correction bucket. If approved, all bucket calibrations are
+      rebuilt under the new boundaries; the change does not directly add wind or alter raw model values.
       A separate replay must lower mean absolute error over at least {nmin} days before a change is applied.
       The tuner does not change model-source weights or learning safeguards.</p>
       <h3>How it learns</h3>
