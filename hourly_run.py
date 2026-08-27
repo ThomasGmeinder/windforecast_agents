@@ -84,7 +84,32 @@ def _rebuild_hourly_bias(lake, records, cutoff):
 
 
 FETCH_TIMEOUT_S = 18
+RUN_FETCH_TIMEOUT_S = 8
 HOURLY_HORIZON_HOURS = 96
+
+
+class RunFetchCache:
+    """Successful raw HTTP responses shared by reconciliation and all lake/date builds."""
+    def __init__(self, fetch):
+        self.fetch, self.responses, self.by_host = fetch, {}, {}
+
+    def get(self, url, nbytes=None, timeout=60):
+        key = (url, nbytes)
+        if key in self.responses:
+            return self.responses[key]
+        host = urlparse(url).netloc
+        started = time.monotonic()
+        try:
+            value = self.fetch(url, nbytes=nbytes, timeout=min(float(timeout), RUN_FETCH_TIMEOUT_S))
+        except Exception as exc:
+            # Never cache a failure: a later retry may succeed.
+            print(f"fetch {host}: failed after {time.monotonic()-started:.1f}s "
+                  f"(run limit {RUN_FETCH_TIMEOUT_S}s): {type(exc).__name__}: {exc}", file=sys.stderr, flush=True)
+            raise
+        self.responses[key] = value
+        self.by_host[host] = self.by_host.get(host, 0) + 1
+        print(f"fetch {host}: {time.monotonic()-started:.1f}s", file=sys.stderr, flush=True)
+        return value
 
 
 def build_window(lake, issued, cache=None):
@@ -155,7 +180,7 @@ def write(record):
         f.write("\n".join(old) + "\n")
 
 
-def reconcile_measurements(lake, now=None, actual_provider=wd.actual_hourly):
+def reconcile_measurements(lake, now=None, actual_provider=wd.actual_hourly, deadline=None):
     """Attach observations to the forecast-of-record for every elapsed valid hour."""
     path = os.path.join(wd.LOG_DIR, f"{lake}_hourly_forecast.jsonl")
     if not os.path.exists(path):
@@ -170,6 +195,9 @@ def reconcile_measurements(lake, now=None, actual_provider=wd.actual_hourly):
     repair_needed = False
     bias = fc.load_bias(lake)
     for vt in valid_times:
+        if deadline is not None and time.monotonic() >= deadline:
+            print(f"{lake}: reconciliation budget exhausted; remaining source gaps retry next run", file=sys.stderr)
+            break
         selected = select_forecast_of_record(records, vt)
         if selected is None:
             continue
@@ -545,21 +573,34 @@ def main():
     issued = (datetime.datetime.fromisoformat(args.at) if args.at else datetime.datetime.now(wd.BERLIN))
     if issued.tzinfo is None:
         issued = issued.replace(tzinfo=wd.BERLIN)
+    original_get = wd._get
+    run_fetch = RunFetchCache(original_get)
+    wd._get = run_fetch.get
+    run_started = time.monotonic()
     # Reconcile observations from the prior issued window first. This is the normal
     # production path; it never changes an issued forecast, only attaches a measurement
     # and its frozen forecast-minus-measurement delta once data exists.
     if not args.dry_run:
+        reconciliation_deadline = time.monotonic() + 35
         for lake in fc.LAKES:
-            n, learned = reconcile_measurements(lake)
+            phase = time.monotonic()
+            try:
+                n, learned = reconcile_measurements(lake, deadline=reconciliation_deadline)
+            except Exception as exc:
+                # A slow/failed measured source must not consume the issuance budget.
+                n, learned = 0, 0
+                print(f"{lake}: reconciliation warning: {type(exc).__name__}: {exc}", file=sys.stderr)
             sc = scorecard(lake)["overall"]
             write_scorecard(lake, issued)
             write_learning_update(lake, issued, n, learned)
             print(f"{lake}: reconciled {n} measured row(s); learned {learned}; "
-                  f"hourly score n={sc['n']} MAE={sc['mae']} CRPS={sc['crps']}")
+                  f"hourly score n={sc['n']} MAE={sc['mae']} CRPS={sc['crps']} "
+                  f"({time.monotonic()-phase:.1f}s)")
     # Build every lake before writing any of them: an API timeout must not leave a
     # half-issued cross-lake state. Short bounded retries handle transient TLS/API errors.
     built, shared_cache = {}, {}
     for lake in fc.LAKES:
+        phase = time.monotonic()
         last = None
         for attempt in range(3):
             try:
@@ -571,6 +612,7 @@ def main():
                     time.sleep(2 * (attempt + 1))
         if lake not in built:
             raise RuntimeError(f"{lake}: hourly issuance failed after 3 attempts: {last}")
+        print(f"{lake}: forecast build phase {time.monotonic()-phase:.1f}s")
     for lake, rec in built.items():
         if not args.dry_run:
             write(rec)
@@ -582,6 +624,8 @@ def main():
             print(f"{lake}: filled legacy gaps; attached {legacy_n} legacy measurement(s); reconciled {n} measured row(s); learned {learned}")
         print(f"{lake}: issued {rec['issue_time']} | {rec['valid_start']} → {rec['valid_end']} "
               f"| {len(rec['hourly'])} rows" + (" (dry run)" if args.dry_run else ""))
+    print(f"run timing: {time.monotonic()-run_started:.1f}s; successful HTTP requests by host: {run_fetch.by_host}")
+    wd._get = original_get
 
 
 if __name__ == "__main__":

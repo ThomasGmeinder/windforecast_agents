@@ -460,7 +460,15 @@ def _confidence(regime, spread_kn, learned):
 def build_table(lake, target_date, run_stamp=None):
     """target_date: 'YYYY-MM-DD'. Returns dict with 'rows' (hourly) and 'summary'."""
     lat, lon, label, alpine = LAKES[lake]
-    pt = wd.openmeteo_point(lat, lon, OM_VARS, models="icon_d2", forecast_days=5)
+    primary_model = "icon_d2"
+    try:
+        pt = wd.openmeteo_point(lat, lon, OM_VARS, models="icon_d2", forecast_days=5)
+    except Exception:
+        # A current compatible model is more useful than retaining a stale page when the
+        # preferred high-resolution feed has a transient outage. Provenance/confidence
+        # below make this degraded path visible rather than pretending ICON-D2 existed.
+        primary_model = "icon_eu"
+        pt = wd.openmeteo_point(lat, lon, OM_VARS, models="icon_eu", forecast_days=5)
     h = pt["hourly"]
     # multi-member / multi-model inputs so the VALUE is an average, not one run
     try:
@@ -471,6 +479,8 @@ def build_table(lake, target_date, run_stamp=None):
     except Exception:
         eh, smembers, gmembers = None, [], []
     try:  # ICON-EU as an independent second model in the blend
+        if primary_model == "icon_eu":
+            raise RuntimeError("ICON-EU already used as primary fallback")
         euh = wd.openmeteo_point(lat, lon, ["wind_speed_10m", "wind_gusts_10m", "wind_direction_10m", "temperature_2m", "cloud_cover", "precipitation", "weather_code"],
                                  models="icon_eu", forecast_days=5)["hourly"]
     except Exception:
@@ -522,7 +532,7 @@ def build_table(lake, target_date, run_stamp=None):
         if ens_s:
             blend["eps"] = sum(ens_s) / len(ens_s)    # ICON-D2 ensemble mean
         if row.get("wind_speed_10m") is not None:
-            blend["det"] = row["wind_speed_10m"]      # ICON-D2 deterministic point
+            blend["det" if primary_model == "icon_d2" else "eu_primary"] = row["wind_speed_10m"]
         if euh and euh["wind_speed_10m"][i] is not None:
             blend["eu"] = euh["wind_speed_10m"][i]    # ICON-EU
         if af.get("avg_kn") is not None:
