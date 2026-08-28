@@ -460,7 +460,7 @@ def _forecast_card(rec):
     <section class="card">
       <h2>{label} <span class="chip fc">forecast · {date}</span></h2>
       <p class="summary">{summ}</p>
-      <table>
+      <table class="forecast-table">
         <thead><tr><th>h</th><th>dir</th><th>forecast kn (Bft)</th><th>measured</th><th>Δ fc−meas</th><th>Gust FC</th><th>Gust meas</th><th>Δ gust</th><th>Temp FC</th><th>Sky FC</th><th>Rain FC mm</th>
           <th>scenario</th><th>support</th><th>conf</th><th>note</th></tr></thead>
         <tbody>{''.join(rows)}</tbody>
@@ -892,6 +892,8 @@ table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
 th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.04em;
  color:var(--muted);font-weight:600;padding:4px 8px;border-bottom:1px solid var(--grid)}
 td{padding:3px 8px;border-bottom:1px solid var(--grid);font-size:13.5px}
+.forecast-table td{white-space:nowrap;max-width:150px;overflow:hidden;text-overflow:ellipsis}
+.forecast-table td.final-note{max-width:none;overflow:visible;text-overflow:clip}
 .hr{color:var(--ink2);width:34px} .dir{white-space:nowrap;color:var(--ink2);width:74px}
 .arr{display:inline-block}
 .wind{font-weight:600;border-radius:4px;width:96px;text-align:left}
