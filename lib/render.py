@@ -379,7 +379,7 @@ def _forecast_card(rec):
             rows.append(f'<tr class="elapsed"><td class="hr">{r["hour"]:02d}</td><td class="dir">—</td><td class="wind">—</td><td class="measured">—</td>'
                         '<td class="delta">—</td><td class="gust">—</td><td class="measured">—</td><td class="delta">—</td><td class="weather">—</td><td class="weather">—</td><td class="weather">—</td><td class="scenario-code">—</td>'
                         '<td class="note">no prior hourly forecast</td><td class="conf">—</td>'
-                        '<td class="note">hourly service bootstrap</td></tr>')
+                        '<td class="note final-note">hourly service bootstrap</td></tr>')
             continue
         kn = r.get("mean_kn") or 0
         reg = r.get("regime", "gradient")
@@ -454,7 +454,7 @@ def _forecast_card(rec):
             f'aria-label="{scenario}"></i></td>'
             f'<td class="note">{"not recorded" if "calib_n" not in r else ("raw" if not r.get("calib_n") else "n=" + str(r.get("calib_n")))}</td>'
             f'<td class="conf c-{r.get("conf","med")}">{r.get("conf","")}</td>'
-            f'<td class="note">{html.escape(" ".join(note))}</td></tr>')
+            f'<td class="note final-note">{html.escape(" ".join(note))}</td></tr>')
     date = rec.get("date", "")
     return f"""
     <section class="card">
@@ -912,7 +912,7 @@ td{padding:3px 8px;border-bottom:1px solid var(--grid);font-size:13.5px}
 .sw.foehn{background:var(--f)}.sw.calm{background:var(--c)}
 .conf{width:44px;font-size:12px;color:var(--muted)}
 .conf.c-high{color:var(--ink)} .conf.c-low{opacity:.7}
-.note{color:var(--ink2);font-size:12px}
+.note{color:var(--ink2);font-size:12px}.final-note{white-space:nowrap}
 .method p,.method li{color:var(--ink2);font-size:13.5px} .method b{color:var(--ink)}
 .method ul,.method ol{margin:4px 0 4px 20px;padding:0}
 .method ol li{margin:3px 0}
