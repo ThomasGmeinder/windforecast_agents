@@ -447,6 +447,19 @@ most one guarded RLS update per row, scores the hourly record, then issues the n
 96-hour window containing 96 individual hourly rows. GitHub Actions commits the resulting hourly logs/model state and deploys
 the static Pages report.
 
+### Ammersee short-lead experiments
+
+The hourly issuer also records two optional, deliberately non-operational inputs for
+Ammersee: a DWD RADVOR RE 0–120 minute radar shower advisory and the latest completed
+DWD Memmingen (03244) 10-minute wind observation. Radar is displayed separately as a
+nowcast advisory and never changes `Rain FC mm` or the weather icon. Memmingen is stored
+on issued rows only as a 0–3 hour shadow feature; it is never selected as measured truth,
+included in the wind blend, or passed to RLS learning. Inspect its read-only comparison
+with `python lib/shortlead_shadow.py`; use `--radar-agreement` for radar-agreement
+verification (explicitly not ground-truth rainfall verification). A correction remains prohibited until at least ten
+replayable days, 60 paired rows, and a day-block-bootstrap-significant incremental skill
+signal are available.
+
 `daily_run.py` and `.github/workflows/daily.yml` are retained only as a legacy daily
 verification audit. They do not own the production forecast, hourly learner, model state,
 or Pages deployment, and their old reports are not displayed on the public forecast pages.

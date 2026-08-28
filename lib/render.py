@@ -125,7 +125,7 @@ def _latest_forecast(lake, target_date=None):
                         "summary": (f"calendar-day view · H00–H23 where covered · "
                                     f"96-hour issuance {start[:10]} {start[11:16]} → "
                                     f"{end[:10]} {end[11:16]}"),
-                        "hourly": rows, "rolling": True}
+                        "hourly": rows, "rolling": True, "radar_advisory": r.get("radar_advisory")}
         except Exception:
             pass
     if target_date:
@@ -466,6 +466,26 @@ def _forecast_card(rec):
         <tbody>{''.join(rows)}</tbody>
       </table>
     </section>"""
+
+
+def _radar_advisory_card(rec):
+    """A separate nowcast advisory: never substitute it into Rain FC or its icon."""
+    if rec.get("lake") != "ammersee":
+        return ""
+    advisory = rec.get("radar_advisory")
+    if not advisory:
+        return ""
+    if not advisory.get("available"):
+        text = "radar advisory unavailable"
+    else:
+        signals = [x.get("radius20km_max") or 0 for x in advisory.get("leads", [])]
+        text = ("showers approaching / possible near Ammersee" if max(signals, default=0) > 0
+                else "no radar precipitation signal")
+    cycle = advisory.get("radar_cycle_time") or "source time unavailable"
+    return (f'<section class="card radar-advisory"><h2>Radar shower advisory, next 2h</h2>'
+            f'<p class="summary"><b>{html.escape(text)}</b> · DWD RADVOR RE cycle '
+            f'{html.escape(cycle)}. Radar nowcast advisory; not an official warning. '
+            'Rain FC mm remains the numerical-model forecast.</p></section>')
 
 
 def _analyst_block(lake):
@@ -823,6 +843,10 @@ def _data_sources(group):
              "Open-Meteo <code>temperature_2m</code>, <code>cloud_cover</code>, <code>precipitation</code> and <code>weather_code</code>"),
             ("ICON-D2 ensemble", "confidence (20 members)",
              "Open-Meteo <code>ensemble-api.open-meteo.com/v1/ensemble</code>"),
+            ("DWD RADVOR RE", "short-lead experimental radar shower advisory (0–2 h); separate from Rain FC mm and not an official warning",
+             "DWD Open Data <code>opendata.dwd.de/weather/radar/radvor/re/</code>; optional, cycle timestamp retained"),
+            ("DWD Memmingen 03244", "short-lead experimental upstream wind shadow feature (0–3 h; WSW–NW test only); never an Ammersee measurement or forecast input",
+             "DWD 10-minute wind observations from <code>opendata.dwd.de/.../wind/now/</code>; persisted read-only for later replay"),
         ]
         meas = [
             ("GKD Ammerseeboje", "measured actual — official buoy ON the water; the preferred, most representative lake measurement",
@@ -1052,7 +1076,8 @@ def report_html(group, static=False):
     panels = []
     for day in dates:
         recs = [_latest_forecast(l, day) for l in g["lakes"]]
-        cards = "".join(_forecast_card(r) for r in recs if r)
+        cards = "".join((_radar_advisory_card(r) if day == today else "") + _forecast_card(r)
+                        for r in recs if r)
         if not cards:
             continue
         partial = day == dates[-1] and any(len(r.get("hourly", [])) < 24 for r in recs if r)

@@ -19,6 +19,7 @@ import forecast as fc
 import winddata as wd
 import postproc
 import verify
+import shortlead
 
 
 def next_hour(now):
@@ -148,6 +149,7 @@ def build_window(lake, issued, cache=None):
         print(f"fetch {host}: {time.monotonic() - started:.1f}s", file=sys.stderr, flush=True)
         return value
     wd._get = bounded_get
+    radar = None
     try:
         days = {start.date() + datetime.timedelta(days=i)
                 for i in range((end.date() - start.date()).days + 1)}
@@ -160,12 +162,24 @@ def build_window(lake, issued, cache=None):
                                  "lead_minutes": int((valid - issued).total_seconds() // 60),
                                  "blend_kn": row.get("blend_kn"),
                                  "blend_range_kn": row.get("blend_range_kn")})
+        # These optional inputs are attached only after forecast.build_table has finished.
+        # They therefore cannot affect the model blend, Rain FC, reconciliation, or RLS.
+        if lake == "ammersee":
+            feature = shortlead.memmingen_feature(issued)
+            for row in rows:
+                row.update({k: feature.get(k) for k in ("memmingen_mean_kn", "memmingen_gust_kn",
+                            "memmingen_direction", "memmingen_observed_at", "memmingen_age_minutes",
+                            "memmingen_west_flow", "available", "failure_reason")})
+                row["memmingen_available"] = row.pop("available")
+                row["memmingen_failure_reason"] = row.pop("failure_reason")
+            radar = shortlead.radar_advisory(issued)
     finally:
         wd.openmeteo_point, wd.openmeteo_ensemble, wd.foehn_delta_p, wd._get = old_point, old_ens, old_dp, old_get
     rows.sort(key=lambda r: r["valid_time"])
     assert len(rows) == HOURLY_HORIZON_HOURS, f"{lake}: expected {HOURLY_HORIZON_HOURS} rows, got {len(rows)}"
     return {"lake": lake, "kind": "hourly_forecast", "issue_time": issued.isoformat(timespec="minutes"),
-            "valid_start": start.isoformat(), "valid_end": end.isoformat(), "hourly": rows}
+            "valid_start": start.isoformat(), "valid_end": end.isoformat(), "hourly": rows,
+            "radar_advisory": radar}
 
 
 def write(record):
@@ -178,6 +192,19 @@ def write(record):
     old.append(json.dumps(record))
     with open(path, "w") as f:
         f.write("\n".join(old) + "\n")
+    # Advisory records are append-only: re-running an issue time must not overwrite the
+    # original radar evidence used for its displayed advisory.
+    if record["lake"] == "ammersee" and record.get("radar_advisory") is not None:
+        ap = os.path.join(wd.LOG_DIR, "ammersee_radar_advisory.jsonl")
+        seen = set()
+        if os.path.exists(ap):
+            for line in open(ap):
+                try: seen.add(json.loads(line).get("issue_time"))
+                except Exception: pass
+        advisory = record["radar_advisory"]
+        if advisory.get("issue_time") not in seen:
+            with open(ap, "a") as f:
+                f.write(json.dumps(advisory) + "\n")
 
 
 def reconcile_measurements(lake, now=None, actual_provider=wd.actual_hourly, deadline=None):
@@ -509,6 +536,7 @@ def main():
     ap.add_argument("--purge-test-before", help="explicit aware issue-time cutoff for test-record purge")
     args = ap.parse_args()
     if args.selftest:
+        shortlead.selftest()
         a = datetime.datetime.fromisoformat("2026-08-12T04:55+02:00")
         b = datetime.datetime.fromisoformat("2026-08-12T05:00+02:00")
         assert next_hour(a).isoformat() == "2026-08-12T05:00:00+02:00"
@@ -534,6 +562,9 @@ def main():
         r0["hourly"][0].update({"measured_kn": 5.0, "fc_minus_measured_kn": -1.0})
         # Inline equivalent of verification extraction: one eligible 00:00 row, no rewrite.
         assert select_forecast_of_record([r0, r1], "2026-08-12T00:00:00+02:00")[1]["fc_minus_measured_kn"] == -1.0
+        # Experimental fields may be persisted, but are never a measurement/learning input.
+        r0["hourly"][0]["memmingen_mean_kn"] = 99.0
+        assert r0["hourly"][0]["raw_kn"] == 4.0 and r0["hourly"][0]["mean_kn"] == 4.0
         # End-to-end reconciliation: only the selected record receives the observation,
         # and rerunning it does not learn or mutate the same row twice.
         tmp = tempfile.mkdtemp(); old_log, old_models = wd.LOG_DIR, fc.MODELS_DIR
