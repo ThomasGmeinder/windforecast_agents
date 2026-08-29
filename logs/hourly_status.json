@@ -1,1 +1,1 @@
-{"ok": false, "time": "2026-08-29T13:34:42.151646+00:00", "trigger": "repository_dispatch", "source": "cron-job.org", "hour": 14, "message": "Hourly forecast issuance failed; displaying last valid records."}
+{"ok": false, "time": "2026-08-29T14:34:44.007224+00:00", "trigger": "repository_dispatch", "source": "cron-job.org", "hour": 15, "message": "Hourly forecast issuance failed; displaying last valid records."}
