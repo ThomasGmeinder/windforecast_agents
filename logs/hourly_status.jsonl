@@ -411,3 +411,4 @@
 {"ok": false, "time": "2026-08-29T12:34:42.985583+00:00", "trigger": "repository_dispatch", "source": "cron-job.org", "hour": 13, "message": "Hourly forecast issuance failed; displaying last valid records."}
 {"ok": false, "time": "2026-08-29T13:34:42.151646+00:00", "trigger": "repository_dispatch", "source": "cron-job.org", "hour": 14, "message": "Hourly forecast issuance failed; displaying last valid records."}
 {"ok": false, "time": "2026-08-29T14:34:44.007224+00:00", "trigger": "repository_dispatch", "source": "cron-job.org", "hour": 15, "message": "Hourly forecast issuance failed; displaying last valid records."}
+{"ok": true, "time": "2026-08-29T15:34:12.960865+00:00", "trigger": "repository_dispatch", "source": "cron-job.org", "valid_start": "2026-08-29T18:00:00+02:00", "hour": 18, "message": "Hourly forecast issued successfully."}
