@@ -183,7 +183,8 @@ def _hourly_status_section():
         return '<section class="card"><h2>Hourly update status</h2><p class="muted">No hourly update has been recorded yet.</p></section>'
     last = rows[-1]
     state = 'success' if last.get('ok') else 'failure'
-    label = 'last update succeeded' if last.get('ok') else 'last update failed — showing last valid forecast'
+    label = ('last update succeeded' if last.get('ok') else
+             f'last update failed — {last.get("message") or "reason was not recorded"}')
     def hour(x):
         # Older workflow failures wrote a UTC-based fallback hour.  A status card must
         # identify the Berlin calendar row that was being issued, so derive failures

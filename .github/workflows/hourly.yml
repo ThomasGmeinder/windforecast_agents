@@ -21,7 +21,9 @@ concurrency:
 jobs:
   issue:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # The dispatch has ample time before the next valid hour. Keep this above the
+    # command budget so GitHub does not hide the actionable timeout result.
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v3
@@ -31,8 +33,20 @@ jobs:
       - name: Issue next 24-hour rolling windows
         id: issue
         # Must finish before the valid hour. A timeout is a failed issuance, not a
-        # reason to block Pages or overlap the next scheduled :55 run.
-        run: timeout --foreground --kill-after=15s 240s .venv/bin/python hourly_run.py
+        # reason to block Pages or overlap the next scheduled run.
+        run: |
+          set +e
+          timeout --foreground --kill-after=15s 480s .venv/bin/python hourly_run.py
+          status=$?
+          echo "exit_code=$status" >> "$GITHUB_OUTPUT"
+          if [ "$status" -eq 124 ]; then
+            echo "failure_kind=timeout" >> "$GITHUB_OUTPUT"
+            echo "failure_reason=Hourly forecast issuance exceeded its 8-minute time limit (timeout exit code 124)." >> "$GITHUB_OUTPUT"
+          else
+            echo "failure_kind=command_error" >> "$GITHUB_OUTPUT"
+            echo "failure_reason=Hourly forecast issuance exited with code $status." >> "$GITHUB_OUTPUT"
+          fi
+          exit "$status"
         # A transient upstream API/TLS failure must not prevent deployment of the
         # already-committed renderer and last valid hourly records. The failed issuance
         # remains red in this step; the next hourly run retries it.
@@ -43,13 +57,19 @@ jobs:
         env:
           TRIGGER_EVENT: ${{ github.event_name }}
           TRIGGER_SOURCE: ${{ github.event.client_payload.source || github.event_name }}
+          ISSUE_EXIT_CODE: ${{ steps.issue.outputs.exit_code }}
+          ISSUE_FAILURE_KIND: ${{ steps.issue.outputs.failure_kind }}
+          ISSUE_FAILURE_REASON: ${{ steps.issue.outputs.failure_reason }}
         run: |
           mkdir -p logs
           python - <<'PY'
-          import datetime, json
+          import datetime, json, os
           now = datetime.datetime.now(datetime.timezone.utc)
-          row = {'ok': False, 'time': now.isoformat(), 'trigger': __import__('os').environ['TRIGGER_EVENT'], 'source': __import__('os').environ['TRIGGER_SOURCE'], 'hour': (now + datetime.timedelta(hours=1)).hour,
-                 'message': 'Hourly forecast issuance failed; displaying last valid records.'}
+          exit_code = os.environ.get('ISSUE_EXIT_CODE')
+          row = {'ok': False, 'time': now.isoformat(), 'trigger': os.environ['TRIGGER_EVENT'], 'source': os.environ['TRIGGER_SOURCE'], 'hour': (now + datetime.timedelta(hours=1)).hour,
+                 'failure_kind': os.environ.get('ISSUE_FAILURE_KIND') or 'unknown',
+                 'exit_code': int(exit_code) if exit_code and exit_code.isdigit() else None,
+                 'message': os.environ.get('ISSUE_FAILURE_REASON') or 'Hourly forecast issuance failed before it could complete.'}
           with open('logs/hourly_status.json', 'w') as f: json.dump(row, f)
           with open('logs/hourly_status.jsonl', 'a') as f: f.write(json.dumps(row) + '\n')
           PY
