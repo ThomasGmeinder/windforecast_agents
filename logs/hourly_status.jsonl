@@ -532,3 +532,4 @@
 {"ok": true, "time": "2026-09-03T15:35:14.192556+00:00", "trigger": "repository_dispatch", "source": "cron-job.org", "valid_start": "2026-09-03T18:00:00+02:00", "hour": 18, "message": "Hourly forecast issued successfully."}
 {"ok": true, "time": "2026-09-03T16:36:14.153922+00:00", "trigger": "repository_dispatch", "source": "cron-job.org", "valid_start": "2026-09-03T19:00:00+02:00", "hour": 19, "message": "Hourly forecast issued successfully."}
 {"ok": true, "time": "2026-09-03T17:36:16.251452+00:00", "trigger": "repository_dispatch", "source": "cron-job.org", "valid_start": "2026-09-03T20:00:00+02:00", "hour": 20, "message": "Hourly forecast issued successfully."}
+{"ok": true, "time": "2026-09-03T18:36:04.930351+00:00", "trigger": "repository_dispatch", "source": "cron-job.org", "valid_start": "2026-09-03T21:00:00+02:00", "hour": 21, "message": "Hourly forecast issued successfully."}
