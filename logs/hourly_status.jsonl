@@ -626,3 +626,4 @@
 {"ok": true, "time": "2026-09-07T13:36:50.155641+00:00", "trigger": "repository_dispatch", "source": "cron-job.org", "valid_start": "2026-09-07T16:00:00+02:00", "hour": 16, "message": "Hourly forecast issued successfully."}
 {"ok": true, "time": "2026-09-07T14:37:36.780571+00:00", "trigger": "repository_dispatch", "source": "cron-job.org", "valid_start": "2026-09-07T17:00:00+02:00", "hour": 17, "message": "Hourly forecast issued successfully."}
 {"ok": false, "time": "2026-09-07T15:38:45.636529+00:00", "trigger": "repository_dispatch", "source": "cron-job.org", "hour": 16, "failure_kind": "timeout", "exit_code": 124, "message": "Hourly forecast issuance exceeded its 8-minute time limit (timeout exit code 124)."}
+{"ok": false, "time": "2026-09-07T16:35:31.316855+00:00", "trigger": "repository_dispatch", "source": "cron-job.org", "hour": 17, "failure_kind": "command_error", "exit_code": 1, "message": "Hourly forecast issuance exited with code 1."}
