@@ -1,1 +1,1 @@
-{"ok": true, "time": "2026-09-08T00:37:01.914740+00:00", "trigger": "repository_dispatch", "source": "cron-job.org", "valid_start": "2026-09-08T03:00:00+02:00", "hour": 3, "message": "Hourly forecast issued successfully."}
+{"ok": true, "time": "2026-09-08T01:37:54.702024+00:00", "trigger": "repository_dispatch", "source": "cron-job.org", "valid_start": "2026-09-08T04:00:00+02:00", "hour": 4, "message": "Hourly forecast issued successfully."}
