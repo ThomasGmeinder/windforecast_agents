@@ -1,1 +1,1 @@
-{"ok": true, "time": "2026-09-16T18:37:48.764167+00:00", "trigger": "repository_dispatch", "source": "cron-job.org", "valid_start": "2026-09-16T21:00:00+02:00", "hour": 21, "message": "Hourly forecast issued successfully."}
+{"ok": false, "time": "2026-09-16T19:38:47.022323+00:00", "trigger": "repository_dispatch", "source": "cron-job.org", "hour": 20, "failure_kind": "timeout", "exit_code": 124, "message": "Hourly forecast issuance exceeded its 8-minute time limit (timeout exit code 124)."}
