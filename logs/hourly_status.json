@@ -1,1 +1,1 @@
-{"ok": false, "time": "2026-09-17T10:35:11.699911+00:00", "trigger": "repository_dispatch", "source": "cron-job.org", "hour": 11, "failure_kind": "command_error", "exit_code": 1, "message": "Hourly forecast issuance exited with code 1."}
+{"ok": false, "time": "2026-09-17T11:38:48.123092+00:00", "trigger": "repository_dispatch", "source": "cron-job.org", "hour": 12, "failure_kind": "timeout", "exit_code": 124, "message": "Hourly forecast issuance exceeded its 8-minute time limit (timeout exit code 124)."}
