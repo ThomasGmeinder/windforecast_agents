@@ -33,21 +33,39 @@ def next_hour(now):
     return rounded.astimezone(wd.BERLIN)
 
 
-def select_forecast_of_record(records, valid_time):
-    """The latest issued record strictly before ``valid_time`` that contains it.
+def forecast_of_record_index(records):
+    """Return the frozen forecast row for each valid hour in one pass.
 
-    This is the hourly equivalent of the daily forecast-of-record rule: a later refresh
-    must never revise the forecast used to score an elapsed hour.
+    The hourly history contains overlapping 96-hour windows.  Repeatedly searching the
+    whole history for every valid hour made reconciliation and scorecards quadratic in
+    the number of issued windows.  Keep the original forecast-of-record rule, but apply
+    it once while building an index that callers can reuse.
     """
-    if isinstance(valid_time, str):
-        valid_time = datetime.datetime.fromisoformat(valid_time)
-    candidates = []
+    selected = {}
     for rec in records:
         issued = datetime.datetime.fromisoformat(rec["issue_time"])
         for row in rec.get("hourly", []):
-            if row.get("valid_time") == valid_time.isoformat() and issued < valid_time:
-                candidates.append((issued, row, rec))
-    return max(candidates, key=lambda x: x[0]) if candidates else None
+            valid_time = row.get("valid_time")
+            if not valid_time:
+                continue
+            valid = datetime.datetime.fromisoformat(valid_time)
+            if issued >= valid:
+                continue
+            previous = selected.get(valid_time)
+            if previous is None or issued > previous[0]:
+                selected[valid_time] = (issued, row, rec)
+    return selected
+
+
+def select_forecast_of_record(records, valid_time):
+    """The latest issued record strictly before ``valid_time`` that contains it.
+
+    This convenience API remains for small callers and tests.  Bulk callers must build
+    ``forecast_of_record_index`` once and reuse it.
+    """
+    if isinstance(valid_time, datetime.datetime):
+        valid_time = valid_time.isoformat()
+    return forecast_of_record_index(records).get(valid_time)
 
 
 def completed_hour_cutoff(now):
@@ -58,15 +76,10 @@ def completed_hour_cutoff(now):
 def _rebuild_hourly_bias(lake, records, cutoff):
     """Replay finalized hourly observations once after a provisional-value repair."""
     bias = verify.rebuild_bias(lake, fc.params_for(lake))
-    selected = {}
-    for rec in records:
-        for row in rec.get("hourly", []):
-            vt = row.get("valid_time")
-            if vt and datetime.datetime.fromisoformat(vt) < cutoff:
-                got = select_forecast_of_record(records, vt)
-                if got and got[1] is row:
-                    selected[vt] = row
-    for row in selected.values():
+    selected = forecast_of_record_index(records)
+    for vt, (_issued, row, _rec) in selected.items():
+        if datetime.datetime.fromisoformat(vt) >= cutoff:
+            continue
         row.pop("learned_hourly", None)
         if row.get("legacy_calendar_backfill") or row.get("measured_kn") is None:
             continue
@@ -216,8 +229,8 @@ def reconcile_measurements(lake, now=None, actual_provider=wd.actual_hourly, dea
     by_date, sources = {}, {}
     now = (now or datetime.datetime.now(wd.BERLIN)).astimezone(wd.BERLIN)
     cutoff = completed_hour_cutoff(now)
-    valid_times = sorted({r["valid_time"] for rec in records for r in rec.get("hourly", [])
-                          if datetime.datetime.fromisoformat(r["valid_time"]) < cutoff})
+    selected = forecast_of_record_index(records)
+    valid_times = sorted(vt for vt in selected if datetime.datetime.fromisoformat(vt) < cutoff)
     changed = learned = 0
     repair_needed = False
     bias = fc.load_bias(lake)
@@ -225,10 +238,7 @@ def reconcile_measurements(lake, now=None, actual_provider=wd.actual_hourly, dea
         if deadline is not None and time.monotonic() >= deadline:
             print(f"{lake}: reconciliation budget exhausted; remaining source gaps retry next run", file=sys.stderr)
             break
-        selected = select_forecast_of_record(records, vt)
-        if selected is None:
-            continue
-        _issued, row, _rec = selected
+        _issued, row, _rec = selected[vt]
         if row.get("measurement_finalized"):
             continue
         d = vt[:10]
@@ -262,8 +272,7 @@ def reconcile_measurements(lake, now=None, actual_provider=wd.actual_hourly, dea
         changed += old_measured != obs["mean_kn"]
     if repair_needed:
         _rebuild_hourly_bias(lake, records, cutoff)
-        learned = sum(1 for r in (select_forecast_of_record(records, vt) or (None, {}, None))[1:2]
-                      if r.get("learned_hourly"))
+        learned = sum(1 for _issued, row, _rec in selected.values() if row.get("learned_hourly"))
     with open(path, "w") as f:
         f.write("\n".join(json.dumps(x) for x in records) + "\n")
     if learned:
@@ -360,18 +369,11 @@ def verification_rows(lake):
         return []
     records = [json.loads(x) for x in open(path) if x.strip()]
     out = []
-    seen = set()
-    for rec in records:
-        for row in rec.get("hourly", []):
-            vt = row.get("valid_time")
-            if not vt or vt in seen or row.get("measured_kn") is None:
-                continue
-            got = select_forecast_of_record(records, vt)
-            if got and got[1] is row:
-                seen.add(vt)
-                out.append({"valid_time": vt, "lead_minutes": row.get("lead_minutes"),
-                            "forecast_kn": row["mean_kn"], "measured_kn": row["measured_kn"],
-                            "delta_kn": row["fc_minus_measured_kn"]})
+    for vt, (_issued, row, _rec) in forecast_of_record_index(records).items():
+        if row.get("measured_kn") is not None:
+            out.append({"valid_time": vt, "lead_minutes": row.get("lead_minutes"),
+                        "forecast_kn": row["mean_kn"], "measured_kn": row["measured_kn"],
+                        "delta_kn": row["fc_minus_measured_kn"]})
     return sorted(out, key=lambda r: r["valid_time"])
 
 
@@ -386,9 +388,9 @@ def scorecard(lake):
     return {"overall": summary(rows), "by_lead": {name: summary([r for r in rows if lo <= (r.get("lead_minutes") or 0) < hi]) for lo,hi,name in bins}}
 
 
-def write_scorecard(lake, issued):
+def write_scorecard(lake, issued, score=None):
     path = os.path.join(wd.LOG_DIR, f"{lake}_hourly_verification.jsonl")
-    rec = {"issued_time": issued.isoformat(timespec="minutes"), **scorecard(lake)}
+    rec = {"issued_time": issued.isoformat(timespec="minutes"), **(score if score is not None else scorecard(lake))}
     with open(path, "a") as f:
         f.write(json.dumps(rec) + "\n")
 
@@ -621,8 +623,9 @@ def main():
                 # A slow/failed measured source must not consume the issuance budget.
                 n, learned = 0, 0
                 print(f"{lake}: reconciliation warning: {type(exc).__name__}: {exc}", file=sys.stderr)
-            sc = scorecard(lake)["overall"]
-            write_scorecard(lake, issued)
+            score = scorecard(lake)
+            sc = score["overall"]
+            write_scorecard(lake, issued, score)
             write_learning_update(lake, issued, n, learned)
             print(f"{lake}: reconciled {n} measured row(s); learned {learned}; "
                   f"hourly score n={sc['n']} MAE={sc['mae']} CRPS={sc['crps']} "
