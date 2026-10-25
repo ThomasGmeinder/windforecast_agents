@@ -10,7 +10,7 @@ Groups: 'kochel-walchensee' (the coupled Alpine-rim pair) and 'ammersee'.
 Colors follow the dataviz method (scenario = CVD-checked colour-code column,
 mean wind = validated blue sequential ramp, confidence = text ink).
 """
-import os, sys, json, glob, html, datetime
+import os, sys, json, glob, html, datetime, tempfile
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import winddata as wd
 import forecast as fc
@@ -96,23 +96,27 @@ def _latest_forecast(lake, target_date=None):
                 rows = []
                 legacy = legacy_rows(day)
                 for hour in range(24):
-                    vt = f"{day}T{hour:02d}:00:00+02:00"
-                    valid = datetime.datetime.fromisoformat(vt)
                     candidates = []
                     for rec in records:
                         issued = datetime.datetime.fromisoformat(rec["issue_time"])
                         for row in rec.get("hourly", []):
-                            if row.get("valid_time") == vt and issued <= now:
-                                candidates.append((issued, row))
+                            valid_time = row.get("valid_time", "")
+                            if (valid_time[:10] == day and valid_time[11:13] == f"{hour:02d}"
+                                    and issued <= now):
+                                valid = datetime.datetime.fromisoformat(valid_time)
+                                candidates.append((issued, valid, row))
                     # Past: last forecast available before the valid hour. Future: newest
                     # currently issued update for that hour.
-                    allowed = [x for x in candidates if x[0] < valid] if valid < now else candidates
-                    if not allowed and valid < now:
+                    allowed = [x for x in candidates if x[0] < x[1]]
+                    future = [x for x in candidates if x[1] >= now]
+                    if future:
+                        allowed = future
+                    if not allowed and candidates and all(x[1] < now for x in candidates):
                         # Prefer the reconciled legacy copy persisted by hourly_run.py.
                         # It carries measured/delta values; the daily log alone does not.
-                        allowed = [x for x in candidates if x[1].get("legacy_calendar_backfill")]
+                        allowed = [x for x in candidates if x[2].get("legacy_calendar_backfill")]
                     if allowed:
-                        issued, row = max(allowed, key=lambda x: x[0])
+                        issued, _valid, row = max(allowed, key=lambda x: x[0])
                         rows.append({**row, "issue_time": issued.isoformat(timespec="minutes")})
                     elif hour in legacy:
                         # Display-only transition bridge. The row receives the persisted
@@ -1280,6 +1284,28 @@ refreshHourlyData();
 
 def _selftest():
     """The overview heading must describe the records it sits above, never the clock."""
+    # Berlin changes from UTC+2 to UTC+1 on the final Sunday in October. Calendar-day
+    # rendering must use the offsets recorded by the hourly issuer, not invent +02:00
+    # keys that make every post-transition row disappear.
+    original_log_dir = wd.LOG_DIR
+    with tempfile.TemporaryDirectory() as log_dir:
+        wd.LOG_DIR = log_dir
+        try:
+            rows = [{"hour": hour, "valid_time": f"2025-10-26T{hour:02d}:00:00+01:00",
+                     "mean_kn": 5.0, "gust_kn": 8.0}
+                    for hour in range(3, 24)]
+            record = {"issue_time": "2025-10-25T12:00:00+02:00",
+                      "valid_start": rows[0]["valid_time"],
+                      "valid_end": rows[-1]["valid_time"], "hourly": rows}
+            with open(os.path.join(log_dir, "ammersee_hourly_forecast.jsonl"), "w") as f:
+                f.write(json.dumps(record) + "\n")
+            rendered = _latest_forecast("ammersee", "2025-10-26")
+            assert [r["hour"] for r in rendered["hourly"]] == list(range(3, 24)), \
+                "winter-time forecast rows disappeared after the daylight-saving transition"
+        finally:
+            wd.LOG_DIR = original_log_dir
+    print("  PASS daylight-saving transition: post-transition UTC+1 rows remain visible")
+
     assert _overview_date([{"date": "2026-08-05"}, {"date": "2026-08-05"}]) == "2026-08-05"
     # a stale record must drag the heading back with it, not be papered over
     assert _overview_date([{"date": "2026-08-05"}, {"date": "2026-08-04"}]) == "2026-08-04 – 2026-08-05"
