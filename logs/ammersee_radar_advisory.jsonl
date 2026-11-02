@@ -1559,3 +1559,4 @@
 {"issue_time": "2026-11-02T17:31+01:00", "source": "DWD RADVOR RE", "available": false, "radar_cycle_time": null, "failure_reason": "URLError: <urlopen error _ssl.c:1063: The handshake operation timed out>", "leads": []}
 {"issue_time": "2026-11-02T18:31+01:00", "source": "DWD RADVOR RE", "available": false, "radar_cycle_time": null, "failure_reason": "FileNotFoundError: no complete 0\u2013120 min RE cycle", "leads": []}
 {"issue_time": "2026-11-02T19:31+01:00", "source": "DWD RADVOR RE", "available": false, "radar_cycle_time": null, "failure_reason": "FileNotFoundError: no complete 0\u2013120 min RE cycle", "leads": []}
+{"issue_time": "2026-11-02T20:31+01:00", "source": "DWD RADVOR RE", "available": false, "radar_cycle_time": null, "failure_reason": "FileNotFoundError: no complete 0\u2013120 min RE cycle", "leads": []}
