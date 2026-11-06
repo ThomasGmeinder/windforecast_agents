@@ -1642,3 +1642,4 @@
 {"issue_time": "2026-11-06T05:30+01:00", "source": "DWD RADVOR RE", "available": false, "radar_cycle_time": null, "failure_reason": "FileNotFoundError: no complete 0\u2013120 min RE cycle", "leads": []}
 {"issue_time": "2026-11-06T06:31+01:00", "source": "DWD RADVOR RE", "available": false, "radar_cycle_time": null, "failure_reason": "FileNotFoundError: no complete 0\u2013120 min RE cycle", "leads": []}
 {"issue_time": "2026-11-06T07:30+01:00", "source": "DWD RADVOR RE", "available": false, "radar_cycle_time": null, "failure_reason": "FileNotFoundError: no complete 0\u2013120 min RE cycle", "leads": []}
+{"issue_time": "2026-11-06T08:31+01:00", "source": "DWD RADVOR RE", "available": false, "radar_cycle_time": null, "failure_reason": "FileNotFoundError: no complete 0\u2013120 min RE cycle", "leads": []}
