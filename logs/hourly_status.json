@@ -1,1 +1,1 @@
-{"ok": false, "time": "2026-11-13T13:32:21.523887+00:00", "trigger": "repository_dispatch", "source": "cron-job.org", "hour": 14, "failure_kind": "command_error", "exit_code": 1, "message": "Hourly forecast issuance exited with code 1."}
+{"ok": true, "time": "2026-11-13T14:32:18.169217+00:00", "trigger": "repository_dispatch", "source": "cron-job.org", "valid_start": "2026-11-13T16:00:00+01:00", "hour": 16, "message": "Hourly forecast issued successfully."}
