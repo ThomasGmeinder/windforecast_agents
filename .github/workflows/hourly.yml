@@ -96,6 +96,9 @@ jobs:
           with open('logs/hourly_status.jsonl', 'a') as f: f.write(json.dumps(row) + '\n')
           PY
 
+      - name: Guard bounded hourly storage
+        run: .venv/bin/python hourly_run.py --check-hourly-storage
+
       - name: Build static report
         run: .venv/bin/python build_site.py
 

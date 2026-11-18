@@ -43,3 +43,24 @@ row has not been learned before
 
 Hourly skill must be reported separately by lead bin: 0–1 h, 1–3 h, 3–6 h, 6–12 h,
 and 12–24 h. A bin with insufficient rows or source-consistent coverage must say so.
+
+## Operational storage boundary
+
+`logs/<lake>_hourly_forecast.jsonl` is the single operational authority. Although each
+issuance initially contains a 96-hour window, adjacent windows overlap by 95 hours. After
+every issuance the file retains exactly the rows selected by
+`hourly_run.forecast_of_record_index`: the latest issuance strictly before each valid
+hour. Rows remain grouped under their original issuance record, so issue-level metadata,
+as-issued model/source values, measurement provenance, and learning markers survive.
+
+The one-time migration preserves the pre-compaction full-vintage bytes under
+`logs/archive/*_hourly_forecast_full_through_*.jsonl.gz`. Those immutable gzip files are
+audit evidence only. Production learning, verification, rendering, and reconciliation
+must never read them or combine them with the operational history.
+
+The hourly workflow fails closed if an operational history contains a superseded
+non-legacy row or exceeds 25 MiB. Run the migration explicitly with:
+
+```bash
+.venv/bin/python hourly_run.py --compact-hourly-history
+```

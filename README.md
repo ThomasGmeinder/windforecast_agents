@@ -447,6 +447,13 @@ most one guarded RLS update per row, scores the hourly record, then issues the n
 96-hour window containing 96 individual hourly rows. GitHub Actions commits the resulting hourly logs/model state and deploys
 the static Pages report.
 
+The operational hourly JSONL remains bounded: after issuance it retains one authoritative
+row per valid hour, selected by the same `forecast_of_record_index()` used by learning and
+verification. Superseded rows from overlapping 96-hour windows are discarded. The full
+pre-compaction vintage history is retained once as immutable gzip audit evidence under
+`logs/archive/`; production code never reads that archive. The workflow rejects an
+uncompacted history or any operational hourly file above 25 MiB.
+
 ### Ammersee short-lead experiments
 
 The hourly issuer also records two optional, deliberately non-operational inputs for
@@ -539,6 +546,8 @@ wind-agents/
 │   └── ammersee_climatology.json     12 years of buoy readings, per month × hour
 ├── config/params[_<lake>].json   tunable regime thresholds (written only by the gated tuner)
 ├── logs/
+│   ├── <lake>_hourly_forecast.jsonl  bounded forecast-of-record history + current window
+│   ├── archive/                      immutable compressed pre-compaction vintage history
 │   ├── <lake>_forecast.jsonl     issued forecasts (1/day, with raw + features + guards)
 │   ├── <lake>_diffs.jsonl        per-hour prediction-vs-measured diffs — the measured archive
 │   ├── events.jsonl              notable events: truth_source, param_change, verification, …

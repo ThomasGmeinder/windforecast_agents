@@ -10,7 +10,7 @@ Examples:
   .venv/bin/python hourly_run.py --dry-run
   .venv/bin/python hourly_run.py --at 2026-08-12T04:55+02:00
 """
-import argparse, datetime, json, os, shutil, sys, tempfile, time
+import argparse, datetime, gzip, json, os, shutil, sys, tempfile, time
 from urllib.parse import urlparse
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -66,6 +66,134 @@ def select_forecast_of_record(records, valid_time):
     if isinstance(valid_time, datetime.datetime):
         valid_time = valid_time.isoformat()
     return forecast_of_record_index(records).get(valid_time)
+
+
+MAX_HOURLY_HISTORY_BYTES = 25 * 1024 * 1024
+
+
+def compact_forecast_records(records):
+    """Keep exactly the authoritative row for each valid hour.
+
+    Hourly issuances overlap by 95 of 96 rows.  The forecast-of-record index already
+    owns the rule for choosing the latest issuance strictly before each valid hour, so
+    storage compaction must use that result rather than duplicate the decision.  Keep
+    the selected rows grouped under their original issuance record so existing readers
+    retain issue-level metadata and the JSONL schema remains unchanged.
+    """
+    keep = {}
+    for _valid_time, (_issued, row, record) in forecast_of_record_index(records).items():
+        keep.setdefault(id(record), set()).add(id(row))
+    compacted = []
+    for record in records:
+        selected_rows = [row for row in record.get("hourly", [])
+                         if id(row) in keep.get(id(record), set())]
+        if not selected_rows:
+            continue
+        stored = dict(record)
+        stored["hourly"] = selected_rows
+        compacted.append(stored)
+    return compacted
+
+
+def _forecast_signature(records):
+    """Stable semantic signature for migration and regression checks."""
+    return {valid_time: (issued.isoformat(), row)
+            for valid_time, (issued, row, _record) in forecast_of_record_index(records).items()}
+
+
+def _read_hourly_records(path):
+    return [json.loads(line) for line in open(path) if line.strip()] if os.path.exists(path) else []
+
+
+def _write_hourly_records(path, records):
+    """Atomically write compact JSONL without changing the record schema."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix=os.path.basename(path) + ".", suffix=".tmp",
+                                     dir=os.path.dirname(path))
+    try:
+        with os.fdopen(fd, "w") as stream:
+            for record in records:
+                stream.write(json.dumps(record, separators=(",", ":")) + "\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    except Exception:
+        try:
+            os.unlink(temporary)
+        except FileNotFoundError:
+            pass
+        raise
+
+
+def compact_hourly_history(archive=True):
+    """Backport hourly histories to bounded forecast-of-record storage.
+
+    Before replacing an operational history, preserve its exact raw bytes in one
+    immutable gzip archive and verify the archive round-trip.  The archive is evidence,
+    not production state; all operational readers continue to use the compact JSONL.
+    """
+    results = {}
+    for lake in fc.LAKES:
+        path = os.path.join(wd.LOG_DIR, f"{lake}_hourly_forecast.jsonl")
+        if not os.path.exists(path):
+            continue
+        raw = open(path, "rb").read()
+        records = [json.loads(line) for line in raw.splitlines() if line.strip()]
+        before = _forecast_signature(records)
+        if not records:
+            continue
+        archive_path = None
+        if archive:
+            through = records[-1]["issue_time"][:10]
+            archive_dir = os.path.join(wd.LOG_DIR, "archive")
+            os.makedirs(archive_dir, exist_ok=True)
+            archive_path = os.path.join(
+                archive_dir, f"{lake}_hourly_forecast_full_through_{through}.jsonl.gz")
+            compressed = gzip.compress(raw, compresslevel=9, mtime=0)
+            if os.path.exists(archive_path):
+                archived_raw = gzip.decompress(open(archive_path, "rb").read())
+                if archived_raw != raw:
+                    archived_records = [json.loads(line) for line in archived_raw.splitlines()
+                                        if line.strip()]
+                    if _forecast_signature(archived_records) != before:
+                        raise RuntimeError(
+                            f"existing archive does not match forecast history: {archive_path}")
+            else:
+                temporary = archive_path + ".tmp"
+                with open(temporary, "wb") as stream:
+                    stream.write(compressed); stream.flush(); os.fsync(stream.fileno())
+                os.replace(temporary, archive_path)
+            if not os.path.exists(archive_path):
+                raise RuntimeError(f"archive verification failed: {archive_path}")
+        compacted = compact_forecast_records(records)
+        after = _forecast_signature(compacted)
+        if before != after:
+            raise RuntimeError(f"{lake}: compaction changed forecast-of-record history")
+        _write_hourly_records(path, compacted)
+        results[lake] = {"before_bytes": len(raw), "after_bytes": os.path.getsize(path),
+                         "before_records": len(records), "after_records": len(compacted),
+                         "valid_hours": len(after), "archive": archive_path}
+    return results
+
+
+def check_hourly_storage(max_bytes=MAX_HOURLY_HISTORY_BYTES):
+    """Fail closed when operational histories are unbounded or too large."""
+    results = {}
+    for lake in fc.LAKES:
+        path = os.path.join(wd.LOG_DIR, f"{lake}_hourly_forecast.jsonl")
+        records = _read_hourly_records(path)
+        selected = forecast_of_record_index(records)
+        selected_ids = {id(row) for _issued, row, _record in selected.values()}
+        extra = [row for record in records for row in record.get("hourly", [])
+                 if id(row) not in selected_ids and not row.get("legacy_calendar_backfill")]
+        size = os.path.getsize(path) if os.path.exists(path) else 0
+        if extra:
+            raise RuntimeError(f"{lake}: {len(extra)} superseded hourly row(s) remain in production history")
+        if size > max_bytes:
+            raise RuntimeError(f"{lake}: hourly history is {size} bytes; limit is {max_bytes}")
+        results[lake] = {"bytes": size, "records": len(records),
+                         "selected_rows": len(selected)}
+    return results
 
 
 def completed_hour_cutoff(now):
@@ -197,14 +325,11 @@ def build_window(lake, issued, cache=None):
 
 def write(record):
     path = os.path.join(wd.LOG_DIR, f"{record['lake']}_hourly_forecast.jsonl")
-    old = []
-    if os.path.exists(path):
-        old = [x.rstrip("\n") for x in open(path) if x.strip()]
+    old = _read_hourly_records(path)
     key = record["issue_time"]
-    old = [x for x in old if json.loads(x).get("issue_time") != key]
-    old.append(json.dumps(record))
-    with open(path, "w") as f:
-        f.write("\n".join(old) + "\n")
+    old = [existing for existing in old if existing.get("issue_time") != key]
+    old.append(record)
+    _write_hourly_records(path, compact_forecast_records(old))
     # Advisory records are append-only: re-running an issue time must not overwrite the
     # original radar evidence used for its displayed advisory.
     if record["lake"] == "ammersee" and record.get("radar_advisory") is not None:
@@ -536,6 +661,10 @@ def main():
     ap.add_argument("--backfill-source-measurements", metavar="YYYY-MM-DD",
                     help="archive source readings without adding forecast/learning rows")
     ap.add_argument("--purge-test-before", help="explicit aware issue-time cutoff for test-record purge")
+    ap.add_argument("--compact-hourly-history", action="store_true",
+                    help="archive full vintages and retain only forecast-of-record rows")
+    ap.add_argument("--check-hourly-storage", action="store_true",
+                    help="fail if hourly histories contain superseded rows or exceed 25 MiB")
     args = ap.parse_args()
     if args.selftest:
         shortlead.selftest()
@@ -560,6 +689,33 @@ def main():
         got1 = select_forecast_of_record([r0, r1], "2026-08-12T01:00:00+02:00")
         assert got0 and got0[1]["mean_kn"] == 4.0
         assert got1 and got1[1]["mean_kn"] == 6.0
+        compacted = compact_forecast_records([r0, r1])
+        assert _forecast_signature(compacted) == _forecast_signature([r0, r1])
+        assert [row["mean_kn"] for row in compacted[0]["hourly"]] == [4.0]
+        assert [row["mean_kn"] for row in compacted[1]["hourly"]] == [6.0]
+        migration_tmp = tempfile.mkdtemp(); old_log = wd.LOG_DIR
+        wd.LOG_DIR = migration_tmp
+        try:
+            migration_path = os.path.join(migration_tmp, "walchensee_hourly_forecast.jsonl")
+            original = json.loads(json.dumps([r0, r1]))
+            _write_hourly_records(migration_path, original)
+            original_raw = open(migration_path, "rb").read()
+            first = compact_hourly_history()
+            compacted_raw = open(migration_path, "rb").read()
+            second = compact_hourly_history()
+            assert open(migration_path, "rb").read() == compacted_raw
+            archive_path = first["walchensee"]["archive"]
+            assert gzip.decompress(open(archive_path, "rb").read()) == original_raw
+            assert second["walchensee"]["valid_hours"] == first["walchensee"]["valid_hours"]
+            check_hourly_storage()
+            _write_hourly_records(migration_path, original)
+            try:
+                check_hourly_storage()
+                raise AssertionError("storage guard accepted superseded rows")
+            except RuntimeError as exc:
+                assert "superseded hourly row" in str(exc)
+        finally:
+            wd.LOG_DIR = old_log
         # A frozen measured row remains tied to the 23:55 record even after refreshes.
         r0["hourly"][0].update({"measured_kn": 5.0, "fc_minus_measured_kn": -1.0})
         # Inline equivalent of verification extraction: one eligible 00:00 row, no rewrite.
@@ -584,6 +740,12 @@ def main():
         finally:
             wd.LOG_DIR, fc.MODELS_DIR = old_log, old_models
         print("hourly_run self-test: PASS anchor 04:55→05:00, 05:00→05:00, 06:46→07:00")
+        return
+    if args.compact_hourly_history:
+        print(json.dumps(compact_hourly_history(), indent=2))
+        return
+    if args.check_hourly_storage:
+        print(json.dumps(check_hourly_storage(), indent=2))
         return
     if args.purge_test_before:
         print(json.dumps(purge_test_history(args.purge_test_before), indent=2))
