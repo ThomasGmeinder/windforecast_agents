@@ -873,10 +873,10 @@ def _data_sources(group):
              "DWD 10-minute wind observations from <code>opendata.dwd.de/.../wind/now/</code>; persisted read-only for later replay"),
         ]
         meas = [
-            ("GKD Ammerseeboje", "measured actual — official buoy ON the water; the preferred, most representative lake measurement",
+            ("GKD Ammerseeboje", "measured actual — " + ("official buoy ON the water (online)" if _amr_online() else "calibrated shore blend (fallback)"),
              "hourly means from <code>gkd.bayern.de/de/meteo/wind/isar/ammerseeboje-16601050"
              "/messwerte/tabelle</code> (© GKD Bayern, CC BY 4.0). Speed only — direction and "
-             "gust are taken from BSV for the same hours. <b>Out of service since 15.06.2026</b> "
+             "gust are taken from BSV for the same hours. "
              "(electronics defect), so the calibrated shore blend below is currently used. The hourly "
              "forecast run checks for valid buoy data every hour; as soon as it returns, buoy speed "
              "automatically takes priority because it is measured directly on the lake."),
