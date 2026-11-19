@@ -794,6 +794,25 @@ def _methodology(group, static=False):
     </section>"""
 
 
+def _amr_online():
+    """Return True if the Ammerseeboje buoy is currently online.
+    Checks the latest entry in logs/measurement_source.jsonl; if the most recent
+    source string contains 'Ammerseeboje' we consider it online.
+    """
+    log_path = os.path.join(wd.LOG_DIR, "measurement_source.jsonl")
+    if not os.path.exists(log_path):
+        return False
+    try:
+        with open(log_path) as f:
+            lines = f.read().strip().split('\n')
+            if not lines:
+                return False
+            last = json.loads(lines[-1])
+            src = last.get('source', '')
+            return 'Ammerseeboje' in src
+    except Exception:
+        return False
+
 def _data_sources(group):
     common = ("The forecast combines published numerical-weather-model data with lake-specific "
               "spot forecasts and measured station data. Source rows below state exactly which "
