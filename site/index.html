@@ -1,0 +1,97 @@
+<!doctype html><html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bavarian lake wind</title><style>
+:root{--surface:#fcfcfb;--plane:#f9f9f7;--ink:#0b0b0b;--ink2:#52514e;--muted:#898781;
+ --grid:#e1e0d9;--ring:rgba(11,11,11,.10);--link:#2a78d6;
+ --g:#2a78d6;--t:#008300;--f:#7c3aed;--c:#898781;}
+@media(prefers-color-scheme:dark){:root{--surface:#1a1a19;--plane:#0d0d0d;--ink:#fff;
+ --ink2:#c3c2b7;--muted:#898781;--grid:#2c2c2a;--ring:rgba(255,255,255,.10);--link:#3987e5;
+ --g:#3987e5;--t:#008300;--f:#8b5cf6;}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--plane);color:var(--ink);
+ font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+a{color:var(--link);text-decoration:none} a:hover{text-decoration:underline}
+header{padding:20px 24px;border-bottom:1px solid var(--grid)}
+h1{margin:0 0 4px;font-size:20px}
+.sub{color:var(--ink2);font-size:13px}
+.nav{font-size:13px;margin-bottom:8px}
+main{display:grid;gap:18px;padding:20px 24px;max-width:1200px;margin:0 auto}
+.card{background:var(--surface);border:1px solid var(--ring);border-radius:12px;padding:16px 18px}
+h2{margin:0 0 6px;font-size:17px} h3{margin:14px 0 4px;font-size:14px}
+.summary{margin:0 0 12px;color:var(--ink2);font-size:13.5px}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.04em;
+ color:var(--muted);font-weight:600;padding:4px 8px;border-bottom:1px solid var(--grid)}
+td{padding:3px 8px;border-bottom:1px solid var(--grid);font-size:13.5px}
+.forecast-table td{white-space:nowrap;max-width:150px;overflow:hidden;text-overflow:ellipsis}
+.forecast-table td.final-note{max-width:none;overflow:visible;text-overflow:clip}
+.hr{color:var(--ink2);width:34px} .dir{white-space:nowrap;color:var(--ink2);width:74px}
+.arr{display:inline-block}
+.wind{font-weight:600;border-radius:4px;width:96px;text-align:left}
+.wind .bft{opacity:.8;font-weight:400;font-size:11px;margin-left:6px}
+.gust{width:48px;border-radius:4px;text-align:center;font-weight:500}
+.badge{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:600;color:#fff}
+.badge.gradient{background:var(--g)}.badge.thermal{background:var(--t)}
+.badge.foehn{background:var(--f)}.badge.calm{background:var(--c)}
+/* Observed flow is a diagnostic derived from measured direction, not the forecast
+   scenario. Keeping it neutral prevents S–SE flow from looking like the violet
+   föhn-favourable forecast scenario. */
+.badge.flow{background:transparent;border:1px solid var(--muted);color:var(--ink2)}
+.elapsed td{opacity:.48}
+.hourly-status.success{border-left:3px solid var(--t)} .hourly-status.failure{border-left:3px solid var(--f)}
+.ok{color:var(--t);font-weight:600}.bad{color:var(--f);font-weight:600}
+.scenario-code{width:38px;text-align:center}
+.sw.gradient{background:var(--g)}.sw.thermal{background:var(--t)}
+.sw.foehn{background:var(--f)}.sw.calm{background:var(--c)}
+.conf{width:44px;font-size:12px;color:var(--muted)}
+.conf.c-high{color:var(--ink)} .conf.c-low{opacity:.7}
+.note{color:var(--ink2);font-size:12px}.final-note{white-space:nowrap}
+.method p,.method li{color:var(--ink2);font-size:13.5px} .method b{color:var(--ink)}
+.method ul,.method ol{margin:4px 0 4px 20px;padding:0}
+.method ol li{margin:3px 0}
+.srctbl{margin-top:8px} .srctbl th{width:auto}
+.srctbl td{vertical-align:top;width:auto;color:var(--ink2);font-size:13px}
+.srctbl td:first-child{white-space:nowrap;font-weight:600;color:var(--ink)}
+code{font:11.5px/1.4 ui-monospace,Menlo,Consolas,monospace;background:var(--plane);
+ padding:1px 5px;border-radius:4px;word-break:break-word;color:var(--ink)}
+details{margin:8px 0} summary{cursor:pointer;font-weight:600;font-size:13.5px}
+pre{white-space:pre-wrap;font:12px/1.4 ui-monospace,Menlo,Consolas,monospace;
+ background:var(--plane);padding:12px;border-radius:8px;overflow-x:auto}
+.muted{color:var(--muted)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
+.tile{display:block;background:var(--surface);border:1px solid var(--ring);border-radius:12px;
+ padding:20px;color:inherit}
+.tile:hover{border-color:var(--link);text-decoration:none}
+.tile h2{margin:0 0 4px} .tile .blurb{color:var(--ink2);font-size:13.5px;margin:0 0 10px}
+.tile .teaser{font-size:12.5px;color:var(--muted)} .tile .teaser div{margin:2px 0}
+.sec{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;
+ color:var(--ink2);margin:6px 0 -6px;display:flex;align-items:center;gap:8px}
+.chip{font-size:11px;font-weight:600;padding:1px 8px;border-radius:999px;
+ border:1px solid var(--ring);vertical-align:middle;text-transform:none;letter-spacing:0}
+.chip.fc{color:#fff;background:var(--g);border-color:transparent}
+.chip.meas{color:var(--ink2);background:var(--plane)}
+.card.measured{border-left:3px solid var(--muted)}
+/* one lake's big-miss table + its measured dropdown read as a single unit: tighter gap
+   inside the pair (8px) than between lakes (the 18px main grid gap) */
+.lakegroup{display:grid;gap:8px}
+.lakegroup .card.measured{margin:0}
+.lakegroup>.card.measured>details>summary{color:var(--ink2)}
+.analyst{margin:8px 0;padding:10px 12px;border-left:3px solid var(--g);background:var(--plane);
+ border-radius:8px;font-size:13px;color:var(--ink2)} .analyst b{color:var(--ink)}
+.analyst ul{margin:6px 0 0 18px;padding:0}
+.legendrow{display:flex;gap:24px;flex-wrap:wrap;align-items:center;margin-top:6px}
+.legend{display:flex;gap:14px;flex-wrap:wrap}
+.legend span{display:inline-flex;align-items:center;gap:5px}
+.sw{width:11px;height:11px;border-radius:3px;display:inline-block}
+.tscale{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--muted)}
+.tsbar{width:120px;height:11px;border-radius:3px;border:1px solid var(--ring)}
+.tsend{font-size:11px;color:var(--muted)}
+.reghint{margin-top:8px;font-size:12px;line-height:1.5;color:var(--ink2);max-width:1000px}
+.reghint b{color:var(--ink)}
+footer{padding:16px 24px;color:var(--muted);font-size:12px;max-width:1200px;margin:0 auto}
+</style></head><body>
+<header><h1>Bavarian lake wind forecasts</h1>
+<div class="sub">generated 2026-11-19 16:31 CET · updates hourly · hourly learning</div></header>
+<main><h2>Forecast overview for 2026-11-19</h2><div class="tiles"><a class="tile" href="kochel-walchensee.html"><h2>Walchensee &amp; Kochelsee →</h2><p class="blurb">Alpine-rim lakes — föhn vs thermal, coupled through the Kesselberg</p><div class="teaser"><div><b>Walchensee:</b> calendar-day view · H00–H23 where covered · 96-hour issuance 2026-11-19 17:00 → 2026-11-23 17:00</div><div><b>Kochelsee:</b> calendar-day view · H00–H23 where covered · 96-hour issuance 2026-11-19 17:00 → 2026-11-23 17:00</div></div></a><a class="tile" href="ammersee.html"><h2>Ammersee →</h2><p class="blurb">Pre-Alpine foreland lake — gradient flow + summer thermal</p><div class="teaser"><div><b>Ammersee:</b> calendar-day view · H00–H23 where covered · 96-hour issuance 2026-11-19 17:00 → 2026-11-23 17:00</div></div></a></div></main>
+<footer>Choose a report. Each has its own hourly forecast, self-learning history, and the
+prediction methodology for those lakes.</footer></body></html>
