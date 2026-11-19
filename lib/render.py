@@ -450,7 +450,7 @@ def _forecast_card(rec):
             f'{fc.dir_label(r)}</td>'
             f'<td class="wind" style="{_wind_cell_style(kn)}">{kn:{fc.KN_FMT}}'
             f'<span class="bft">{fc.beaufort(kn)}</span></td>'
-            f'<td class="measured">{measured}</td><td class="delta">{delta}</td>'
+            f'<td class="measured" title="{html.escape(r.get("measured_source", ""))}">{measured}</td><td class="delta">{delta}</td>'
             f'<td class="gust" style="{_wind_cell_style(r.get("gust_kn") or 0)}">'
             f'{(r.get("gust_kn") or 0):{fc.KN_FMT}}</td>'
             f'<td class="measured">{gust_measured}</td><td class="delta">{gust_delta}</td>'

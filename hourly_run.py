@@ -377,6 +377,20 @@ def reconcile_measurements(lake, now=None, actual_provider=wd.actual_hourly, dea
         row["measured_kn"] = obs["mean_kn"]
         row["measured_gust_kn"] = obs.get("gust_kn")
         row["measured_source"] = sources[d]
+        # Log measurement source for audit (buoy vs fallback) – minimal entry
+        _log_path = os.path.join(wd.LOG_DIR, "measurement_source.jsonl")
+        try:
+            # Rotate if file exceeds 5 MiB to keep history small
+            if os.path.exists(_log_path) and os.path.getsize(_log_path) > 5 * 1024 * 1024:
+                # Keep only the most recent 10 k lines
+                with open(_log_path) as f:
+                    lines = f.readlines()[-10000:]
+                with open(_log_path, "w") as f:
+                    f.writelines(lines)
+            with open(_log_path, "a") as _log_f:
+                _log_f.write(json.dumps({"lake": lake, "valid_time": row.get("valid_time"), "source": row["measured_source"]}) + "\n")
+        except Exception:
+            pass
         row["fc_minus_measured_kn"] = round(row["mean_kn"] - obs["mean_kn"], 1)
         row["gust_fc_minus_measured_kn"] = (round((row.get("gust_kn") or 0) - obs["gust_kn"], 1)
                                              if obs.get("gust_kn") is not None else None)
