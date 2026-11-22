@@ -203,3 +203,5 @@
 {"lake": "walchensee", "valid_time": "2026-11-21T22:00:00+01:00", "source": "DWD station 01550 (valley proxy)"}
 {"lake": "walchensee", "valid_time": "2026-11-21T23:00:00+01:00", "source": "DWD station 01550 (valley proxy)"}
 {"lake": "walchensee", "valid_time": "2026-11-22T00:00:00+01:00", "source": "DWD station 01550 (valley proxy)"}
+{"lake": "ammersee", "valid_time": "2026-11-22T01:00:00+01:00", "source": "GKD Ammerseeboje (on-lake) + BSV Herrsching for dir/gust"}
+{"lake": "ammersee", "valid_time": "2026-11-22T02:00:00+01:00", "source": "GKD Ammerseeboje (on-lake) + BSV Herrsching for dir/gust"}
