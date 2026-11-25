@@ -2474,3 +2474,4 @@
 {"ok": true, "time": "2026-11-25T12:31:49.955131+00:00", "trigger": "repository_dispatch", "source": "cron-job.org", "valid_start": "2026-11-25T14:00:00+01:00", "hour": 14, "message": "Hourly forecast issued successfully."}
 {"ok": true, "time": "2026-11-25T13:31:18.226697+00:00", "trigger": "repository_dispatch", "source": "cron-job.org", "valid_start": "2026-11-25T15:00:00+01:00", "hour": 15, "message": "Hourly forecast issued successfully."}
 {"ok": true, "time": "2026-11-25T14:31:30.760726+00:00", "trigger": "repository_dispatch", "source": "cron-job.org", "valid_start": "2026-11-25T16:00:00+01:00", "hour": 16, "message": "Hourly forecast issued successfully."}
+{"ok": false, "time": "2026-11-25T15:32:04.944026+00:00", "trigger": "repository_dispatch", "source": "cron-job.org", "hour": 16, "failure_kind": "command_error", "exit_code": 1, "message": "Hourly forecast issuance exited with code 1."}
