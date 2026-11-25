@@ -598,14 +598,37 @@ def _hourly_learning_section(lakes):
                       f'the {present} reported reading(s) had already been incorporated.')
         else:
             latest = 'The next hourly run will record its learning result here.'
-        blocks.append(f'<div class="analyst"><b>⏱ {_lake_label(lake)} — latest hourly learning result.</b> '
+        # original MAE block
+        blocks.append(f'<div class="analyst no-border"><b>⏱ {_lake_label(lake)} — latest hourly learning result.</b> '
                       f'{latest} {present} completed hour(s) currently have a station measurement; '
                       f'{nr} hour(s) were not reported. '
-                      f'<div class="muted" style="margin-top:4px">'
+                      f'<div class="ok" style="margin-top:4px">'
                       f'Current hourly MAE: {("n/a" if sc.get("mae") is None else f"{sc["mae"]:.2f} kn")} '
                       f'over {sc.get("n_pairs", 0)} measured hour(s). Gust MAE: '
                       f'{("n/a" if gust_mae is None else f"{gust_mae:.2f} kn")} over {len(gust_errors)} measured gust hour(s).</div></div>')
-    return '<section class="card"><h2>Hourly reconciliation &amp; learning</h2>' + ''.join(blocks) + '</section>'
+        # measurement source breakdown
+        source_path = os.path.join(wd.LOG_DIR, "measurement_source.jsonl")
+        primary = fallback = total = 0
+        if os.path.exists(source_path):
+            for line in open(source_path):
+                try:
+                    rec = json.loads(line)
+                except Exception:
+                    continue
+                if rec.get("lake") != lake:
+                    continue
+                total += 1
+                src = rec.get("source", "")
+                if src == "GKD Ammerseeboje":
+                    primary += 1
+                elif "GKD Ammerseeboje" in src and "+ BSV" in src:
+                    fallback += 1
+        if lake == "ammersee":
+            src_note = f"<strong>Measurement source breakdown:</strong><ul><li>{primary} primary GKD Ammerseeboje buoy measurement (valid when buoy online)</li><li>{fallback} fallback blended (GKD Ammerseeboje + BSV Herrsching) measurements (used when buoy offline)</li></ul>"
+        else:
+            src_note = f"Measurement source: {total} DWD station measurements."
+        blocks.append(f'<div class="ok" style="margin-top:4px">{src_note}</div>')
+    return '<section class="card" style="border-left:3px solid var(--g)"><h2>Hourly reconciliation &amp; learning</h2>' + ''.join(blocks) + '</section>'
 
 
 def _learning_section(lakes):
@@ -956,7 +979,7 @@ td{padding:3px 8px;border-bottom:1px solid var(--grid);font-size:13.5px}
 .badge.flow{background:transparent;border:1px solid var(--muted);color:var(--ink2)}
 .elapsed td{opacity:.48}
 .hourly-status.success{border-left:3px solid var(--t)} .hourly-status.failure{border-left:3px solid var(--f)}
-.ok{color:var(--t);font-weight:600}.bad{color:var(--f);font-weight:600}
+.ok{color:var(--ink);font-weight:600}.bad{color:var(--f);font-weight:600}
 .scenario-code{width:38px;text-align:center}
 .sw.gradient{background:var(--g)}.sw.thermal{background:var(--t)}
 .sw.foehn{background:var(--f)}.sw.calm{background:var(--c)}
@@ -987,7 +1010,7 @@ pre{white-space:pre-wrap;font:12px/1.4 ui-monospace,Menlo,Consolas,monospace;
  border:1px solid var(--ring);vertical-align:middle;text-transform:none;letter-spacing:0}
 .chip.fc{color:#fff;background:var(--g);border-color:transparent}
 .chip.meas{color:var(--ink2);background:var(--plane)}
-.card.measured{border-left:3px solid var(--muted)}
+.card.measured{border-left:none}
 /* one lake's big-miss table + its measured dropdown read as a single unit: tighter gap
    inside the pair (8px) than between lakes (the 18px main grid gap) */
 .lakegroup{display:grid;gap:8px}
