@@ -584,3 +584,4 @@
 {"lake": "ammersee", "valid_time": "2026-11-27T19:00:00+01:00", "source": "GKD Ammerseeboje (on-lake) + BSV Herrsching for dir/gust"}
 {"lake": "ammersee", "valid_time": "2026-11-27T20:00:00+01:00", "source": "GKD Ammerseeboje (on-lake) + BSV Herrsching for dir/gust"}
 {"lake": "ammersee", "valid_time": "2026-11-27T21:00:00+01:00", "source": "blend of BSV Herrsching + DWD Wielenbach, both calibrated to on-lake (1/22 h blended; measured 2.64 kn MAE vs 2.79 best single source)"}
+{"lake": "ammersee", "valid_time": "2026-11-27T22:00:00+01:00", "source": "GKD Ammerseeboje (on-lake) + BSV Herrsching for dir/gust"}
