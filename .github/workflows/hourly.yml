@@ -12,6 +12,7 @@ permissions:
   contents: write
   pages: write
   id-token: write
+  actions: read
 
 concurrency:
   # Serialize with the daily learner: both write logs/models and publish Pages.
@@ -115,6 +116,31 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
+      - name: Wait for the Pages artifact to be listed
+        # upload-pages-artifact finalizes the artifact before this step starts, but
+        # the artifact *index* that deploy-pages reads (ListArtifacts) catches up
+        # with a short, variable lag. deploy-pages@v4 queries the index exactly once
+        # and hard-fails with "No artifacts named ..." on a miss, so a fast
+        # finalization loses the race and fails the whole run even though both the
+        # forecast issuance and the upload succeeded. Wait, bounded, for the index
+        # to catch up. If the artifact is still not listed after the budget, exit 0
+        # anyway: deploy-pages then runs and reports the real error, so a genuine
+        # GitHub-side failure is never masked.
+        run: |
+          for i in $(seq 1 30); do
+            count="$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
+                -H "Accept: application/vnd.github+json" \
+                "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?per_page=100" \
+                | jq '[.artifacts[]? | select(.name=="github-pages")] | length' 2>/dev/null)" || count=0
+            case "$count" in (*[!0-9]*|"") count=0 ;; esac
+            if [ "$count" -ge 1 ]; then
+              echo "Pages artifact listed after check ${i}; proceeding to deploy"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Pages artifact not listed after 60 s; deploy-pages will report the actual state"
+          exit 0
       - id: deploy
         uses: actions/deploy-pages@v4
 
