@@ -122,12 +122,13 @@ jobs:
         # with a short, variable lag. deploy-pages@v4 queries the index exactly once
         # and hard-fails with "No artifacts named ..." on a miss, so a fast
         # finalization loses the race and fails the whole run even though both the
-        # forecast issuance and the upload succeeded. Wait, bounded, for the index
-        # to catch up. If the artifact is still not listed after the budget, exit 0
-        # anyway: deploy-pages then runs and reports the real error, so a genuine
-        # GitHub-side failure is never masked.
+        # forecast issuance and the upload succeeded. Observed lags range from
+        # sub-second to ~63 s (run 46145012801), hence the 4-minute budget. If the
+        # artifact is still not listed after the budget, print a diagnostic probe and
+        # exit 0 anyway: deploy-pages then runs and reports the real error, so a
+        # genuine GitHub-side failure is never masked.
         run: |
-          for i in $(seq 1 30); do
+          for i in $(seq 1 120); do
             count="$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
                 -H "Accept: application/vnd.github+json" \
                 "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?per_page=100" \
@@ -139,7 +140,13 @@ jobs:
             fi
             sleep 2
           done
-          echo "Pages artifact not listed after 60 s; deploy-pages will report the actual state"
+          echo "Diagnostic probe — last artifacts API response (truncated):"
+          curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?per_page=100" \
+              | head -c 2000 || true
+          echo
+          echo "Pages artifact not listed after 240 s; deploy-pages will report the actual state"
           exit 0
       - id: deploy
         uses: actions/deploy-pages@v4
