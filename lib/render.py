@@ -602,7 +602,7 @@ def _hourly_learning_section(lakes):
         blocks.append(f'<div class="analyst no-border"><b>⏱ {_lake_label(lake)} — latest hourly learning result.</b> '
                       f'{latest} {present} completed hour(s) currently have a station measurement; '
                       f'{nr} hour(s) were not reported. '
-                      f'<div class="ok" style="margin-top:4px">'
+                      f'<div class="ink-strong" style="margin-top:4px">'
                       f'Current hourly MAE: {("n/a" if sc.get("mae") is None else f"{sc["mae"]:.2f} kn")} '
                       f'over {sc.get("n_pairs", 0)} measured hour(s). Gust MAE: '
                       f'{("n/a" if gust_mae is None else f"{gust_mae:.2f} kn")} over {len(gust_errors)} measured gust hour(s).</div></div>')
@@ -627,7 +627,7 @@ def _hourly_learning_section(lakes):
             src_note = f"<strong>Measurement source breakdown:</strong><ul><li>{primary} primary GKD Ammerseeboje buoy measurement (valid when buoy online)</li><li>{fallback} fallback blended (GKD Ammerseeboje + BSV Herrsching) measurements (used when buoy offline)</li></ul>"
         else:
             src_note = f"Measurement source: {total} DWD station measurements."
-        blocks.append(f'<div class="ok" style="margin-top:4px">{src_note}</div>')
+        blocks.append(f'<div class="ink-strong" style="margin-top:4px">{src_note}</div>')
     return '<section class="card" style="border-left:3px solid var(--g)"><h2>Hourly reconciliation &amp; learning</h2>' + ''.join(blocks) + '</section>'
 
 
@@ -943,10 +943,10 @@ def _css():
     return """
 :root{--surface:#fcfcfb;--plane:#f9f9f7;--ink:#0b0b0b;--ink2:#52514e;--muted:#898781;
  --grid:#e1e0d9;--ring:rgba(11,11,11,.10);--link:#2a78d6;
- --g:#2a78d6;--t:#008300;--f:#7c3aed;--c:#898781;}
+ --g:#2a78d6;--t:#008300;--f:#7c3aed;--c:#898781;--danger:#c81e1e;}
 @media(prefers-color-scheme:dark){:root{--surface:#1a1a19;--plane:#0d0d0d;--ink:#fff;
  --ink2:#c3c2b7;--muted:#898781;--grid:#2c2c2a;--ring:rgba(255,255,255,.10);--link:#3987e5;
- --g:#3987e5;--t:#008300;--f:#8b5cf6;}}
+ --g:#3987e5;--t:#008300;--f:#8b5cf6;--danger:#ff5c5c;}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--plane);color:var(--ink);
  font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
@@ -978,8 +978,9 @@ td{padding:3px 8px;border-bottom:1px solid var(--grid);font-size:13.5px}
    föhn-favourable forecast scenario. */
 .badge.flow{background:transparent;border:1px solid var(--muted);color:var(--ink2)}
 .elapsed td{opacity:.48}
-.hourly-status.success{border-left:3px solid var(--t)} .hourly-status.failure{border-left:3px solid var(--f)}
-.ok{color:var(--ink);font-weight:600}.bad{color:var(--f);font-weight:600}
+.hourly-status.success{border-left:3px solid var(--t)} .hourly-status.failure{border-left:3px solid var(--danger)}
+.ok{color:var(--t);font-weight:600}.bad{color:var(--danger);font-weight:600}
+.ink-strong{color:var(--ink);font-weight:600}
 .scenario-code{width:38px;text-align:center}
 .sw.gradient{background:var(--g)}.sw.thermal{background:var(--t)}
 .sw.foehn{background:var(--f)}.sw.calm{background:var(--c)}
