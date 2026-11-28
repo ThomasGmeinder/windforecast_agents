@@ -12,7 +12,6 @@ permissions:
   contents: write
   pages: write
   id-token: write
-  actions: read
 
 concurrency:
   # Serialize with the daily learner: both write logs/models and publish Pages.
@@ -116,39 +115,49 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
-      - name: Wait for the Pages artifact to be listed
-        # upload-pages-artifact finalizes the artifact before this step starts, but
-        # the artifact *index* that deploy-pages reads (ListArtifacts) catches up
-        # with a short, variable lag. deploy-pages@v4 queries the index exactly once
-        # and hard-fails with "No artifacts named ..." on a miss, so a fast
-        # finalization loses the race and fails the whole run even though both the
-        # forecast issuance and the upload succeeded. Observed lags range from
-        # sub-second to ~63 s (run 46145012801), hence the 4-minute budget. If the
-        # artifact is still not listed after the budget, print a diagnostic probe and
-        # exit 0 anyway: deploy-pages then runs and reports the real error, so a
-        # genuine GitHub-side failure is never masked.
-        run: |
-          for i in $(seq 1 120); do
-            count="$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
-                -H "Accept: application/vnd.github+json" \
-                "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?per_page=100" \
-                | jq '[.artifacts[]? | select(.name=="github-pages")] | length' 2>/dev/null)" || count=0
-            case "$count" in (*[!0-9]*|"") count=0 ;; esac
-            if [ "$count" -ge 1 ]; then
-              echo "Pages artifact listed after check ${i}; proceeding to deploy"
-              exit 0
-            fi
-            sleep 2
-          done
-          echo "Diagnostic probe — last artifacts API response (truncated):"
-          curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
-              -H "Accept: application/vnd.github+json" \
-              "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?per_page=100" \
-              | head -c 2000 || true
-          echo
-          echo "Pages artifact not listed after 240 s; deploy-pages will report the actual state"
-          exit 0
-      - id: deploy
+      # Per actions/deploy-pages#451, a just-finalized Pages artifact can be briefly
+      # absent from the index deploy-pages reads, so its single lookup can miss and
+      # the step fails with "No artifacts named github-pages" even though the upload
+      # succeeded. The upstream fix (actions/deploy-pages#455) is not released yet,
+      # and polling the public REST artifacts endpoint does NOT track that index
+      # (run 46149960502: empty for 240 s while deploy-pages found the artifact 0.5 s
+      # after the poll gave up). So retry only the deploy - never the upload, which
+      # would create a second artifact and fail the lookup with "Multiple artifacts
+      # named" - with backoff covering the observed visibility tail (up to ~60 s).
+      # The final attempt has no continue-on-error, so a genuine deploy failure still
+      # fails the run and is never masked.
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4
+        continue-on-error: true
+
+      - name: Wait before Pages deploy retry 1
+        if: steps.deploy.outcome == 'failure'
+        run: sleep 5
+
+      - name: Deploy to GitHub Pages (retry 1)
+        id: deploy-retry-1
+        if: steps.deploy.outcome == 'failure'
+        uses: actions/deploy-pages@v4
+        continue-on-error: true
+
+      - name: Wait before Pages deploy retry 2
+        if: steps.deploy-retry-1.outcome == 'failure'
+        run: sleep 20
+
+      - name: Deploy to GitHub Pages (retry 2)
+        id: deploy-retry-2
+        if: steps.deploy-retry-1.outcome == 'failure'
+        uses: actions/deploy-pages@v4
+        continue-on-error: true
+
+      - name: Wait before Pages deploy retry 3
+        if: steps.deploy-retry-2.outcome == 'failure'
+        run: sleep 60
+
+      - name: Deploy to GitHub Pages (retry 3)
+        id: deploy-retry-3
+        if: steps.deploy-retry-2.outcome == 'failure'
         uses: actions/deploy-pages@v4
 
       - name: Surface issuance failure after deployment
